@@ -1,5 +1,10 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/foundation/foundation_bridge_exception.dart';
+import '../../core/services/foundation_runtime_service.dart';
+import '../../core/services/foundation_runtime_state.dart';
 import '../../core/theme/studio_colors.dart';
 import '../../shared/widgets/dashboard_card.dart';
 import '../../shared/widgets/responsive_card_grid.dart';
@@ -7,9 +12,11 @@ import 'widgets/getting_started_strip.dart';
 
 /// The Dashboard (SDD-007), the engineer's landing page.
 ///
-/// Matches the approved 001-OEP-STUDIO-DASHBOARD-v1.0.png mockup. All
-/// data shown is placeholder — no Foundation Bridge call is made in
-/// this work package, per STUDIO-TASK-000002.
+/// Matches the approved 001-OEP-STUDIO-DASHBOARD-v1.0.png mockup.
+/// Repository Status, Foundation Version, and Installed Packages reflect
+/// live Foundation state via [foundationRuntimeServiceProvider]
+/// (STUDIO-TASK-000004); Recent Repositories remains placeholder — no
+/// persistence layer exists yet.
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
@@ -34,7 +41,7 @@ class DashboardPage extends StatelessWidget {
             style: TextStyle(color: StudioColors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 24),
-          ResponsiveCardGrid(
+          const ResponsiveCardGrid(
             children: [
               _OpenRepositoryCard(),
               _CreateRepositoryCard(),
@@ -42,7 +49,7 @@ class DashboardPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          ResponsiveCardGrid(
+          const ResponsiveCardGrid(
             children: [
               _RecentRepositoriesCard(),
               _FoundationVersionCard(),
@@ -57,11 +64,28 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-class _OpenRepositoryCard extends StatelessWidget {
+class _OpenRepositoryCard extends ConsumerWidget {
   const _OpenRepositoryCard();
 
+  Future<void> _openRepository(BuildContext context, WidgetRef ref) async {
+    final directoryPath = await getDirectoryPath(confirmButtonText: 'Open Repository');
+    if (directoryPath == null) return;
+    if (!context.mounted) return;
+
+    try {
+      ref.read(foundationRuntimeServiceProvider.notifier).openRepository(directoryPath);
+    } on FoundationBridgeException catch (error) {
+      if (!context.mounted) return;
+      await showFoundationErrorDialog(context, title: 'Couldn\'t Open Repository', error: error);
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connected = ref.watch(
+      foundationRuntimeServiceProvider.select((state) => state.phase == FoundationConnectionPhase.connected),
+    );
+
     return DashboardCard(
       title: 'Open Repository',
       icon: Icons.folder_open_outlined,
@@ -78,7 +102,7 @@ class _OpenRepositoryCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: null,
+              onPressed: connected ? () => _openRepository(context, ref) : null,
               child: const Text('Open Repository'),
             ),
           ),
@@ -86,6 +110,28 @@ class _OpenRepositoryCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shows a professional error dialog for a Foundation failure. Only
+/// [FoundationBridgeException.message] (the curated, translated text) is
+/// ever displayed — never [FoundationBridgeException.technicalDetail],
+/// which may reference internal Foundation implementation details.
+Future<void> showFoundationErrorDialog(
+  BuildContext context, {
+  required String title,
+  required FoundationBridgeException error,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: StudioColors.surfaceRaised,
+      title: Text(title),
+      content: Text(error.message),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+      ],
+    ),
+  );
 }
 
 class _CreateRepositoryCard extends StatelessWidget {
@@ -109,6 +155,8 @@ class _CreateRepositoryCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
+              // The Public C API does not yet expose repository creation
+              // (only open/close) — this stays a placeholder until it does.
               onPressed: null,
               style: ElevatedButton.styleFrom(backgroundColor: StudioColors.success),
               child: const Text('Create Repository'),
@@ -120,27 +168,54 @@ class _CreateRepositoryCard extends StatelessWidget {
   }
 }
 
-class _RepositoryStatusCard extends StatelessWidget {
+class _RepositoryStatusCard extends ConsumerWidget {
   const _RepositoryStatusCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final status = foundation.repositoryStatus;
+    final connected = foundation.phase == FoundationConnectionPhase.connected;
+
     return DashboardCard(
       title: 'Repository Status',
       icon: Icons.dns_outlined,
       iconColor: const Color(0xFFB794F6),
       iconBackground: const Color(0xFFB794F6).withValues(alpha: 0.14),
-      child: const Column(
+      child: Column(
         children: [
-          _StatusRow(icon: Icons.check_circle_outline, label: 'Active Repository', value: 'None'),
-          _StatusRow(icon: Icons.dns_outlined, label: 'Runtime State', value: 'Not Connected', valueColor: StudioColors.warning),
-          _StatusRow(icon: Icons.insert_drive_file_outlined, label: 'Repository Path', value: '—'),
-          _StatusRow(icon: Icons.schedule_outlined, label: 'Last Modified', value: '—'),
-          _StatusRow(icon: Icons.category_outlined, label: 'Objects', value: '—'),
-          _StatusRow(icon: Icons.hub_outlined, label: 'Relationships', value: '—', showDivider: false),
+          _StatusRow(
+            icon: Icons.check_circle_outline,
+            label: 'Active Repository',
+            value: status?.repositoryName ?? 'None',
+          ),
+          _StatusRow(
+            icon: Icons.dns_outlined,
+            label: 'Runtime State',
+            value: _runtimeStateLabel(foundation),
+            valueColor: connected ? StudioColors.success : StudioColors.warning,
+          ),
+          _StatusRow(icon: Icons.fingerprint, label: 'Repository ID', value: status?.repositoryId ?? '—'),
+          _StatusRow(
+            icon: Icons.new_releases_outlined,
+            label: 'Repository Version',
+            value: status?.repositoryVersion ?? '—',
+          ),
+          _StatusRow(
+            icon: Icons.inventory_2_outlined,
+            label: 'Loaded Packages',
+            value: status != null ? '${status.loadedPackageCount}' : '—',
+            showDivider: false,
+          ),
         ],
       ),
     );
+  }
+
+  String _runtimeStateLabel(FoundationServiceState foundation) {
+    if (foundation.phase == FoundationConnectionPhase.error) return 'Error';
+    if (foundation.phase == FoundationConnectionPhase.connecting) return 'Connecting…';
+    return foundation.runtimeState.displayLabel;
   }
 }
 
@@ -210,29 +285,34 @@ class _RecentRepositoriesCard extends StatelessWidget {
   }
 }
 
-class _FoundationVersionCard extends StatelessWidget {
+class _FoundationVersionCard extends ConsumerWidget {
   const _FoundationVersionCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final connected = foundation.phase == FoundationConnectionPhase.connected;
+
     return DashboardCard(
       title: 'Foundation Version',
       icon: Icons.verified_outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Not Connected',
+          Text(
+            connected ? 'Connected' : 'Not Connected',
             style: TextStyle(
-              color: StudioColors.warning,
+              color: connected ? StudioColors.success : StudioColors.warning,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Connect to a repository to see Foundation version information.',
-            style: TextStyle(color: StudioColors.textSecondary, fontSize: 12, height: 1.4),
+          Text(
+            connected
+                ? 'OEP Foundation Runtime is initialized and ready.'
+                : 'Connect to a repository to see Foundation version information.',
+            style: const TextStyle(color: StudioColors.textSecondary, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 16),
           Container(
@@ -242,13 +322,22 @@ class _FoundationVersionCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: StudioColors.border),
             ),
-            child: const Row(
+            child: Row(
               children: [
                 Expanded(
-                  child: _LabeledValue(label: 'Foundation Version', value: '—'),
+                  child: _LabeledValue(label: 'Foundation Version', value: foundation.foundationVersion ?? '—'),
                 ),
                 Expanded(
-                  child: _LabeledValue(label: 'API Version', value: '—'),
+                  child: _LabeledValue(
+                    label: 'API Version',
+                    value: foundation.apiVersion != null ? '${foundation.apiVersion}' : '—',
+                  ),
+                ),
+                Expanded(
+                  child: _LabeledValue(
+                    label: 'ABI Version',
+                    value: foundation.abiVersion != null ? '${foundation.abiVersion}' : '—',
+                  ),
                 ),
               ],
             ),
@@ -278,20 +367,52 @@ class _LabeledValue extends StatelessWidget {
   }
 }
 
-class _InstalledPackagesCard extends StatelessWidget {
+class _InstalledPackagesCard extends ConsumerWidget {
   const _InstalledPackagesCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(foundationRuntimeServiceProvider.select((state) => state.repositoryStatus));
+
+    if (status == null) {
+      return const DashboardCard(
+        title: 'Installed Packages',
+        icon: Icons.inventory_2_outlined,
+        trailing: ViewAllLink(),
+        child: _EmptyState(
+          icon: Icons.inventory_2_outlined,
+          title: 'No packages installed',
+          description: 'Installed packages will appear here.',
+        ),
+      );
+    }
+
     return DashboardCard(
       title: 'Installed Packages',
       icon: Icons.inventory_2_outlined,
       trailing: const ViewAllLink(),
-      child: const _EmptyState(
-        icon: Icons.inventory_2_outlined,
-        title: 'No packages installed',
-        description: 'Installed packages will appear here.',
-      ),
+      child: status.loadedPackageCount == 0
+          ? const _EmptyState(
+              icon: Icons.inventory_2_outlined,
+              title: 'No packages installed',
+              description: 'This repository has no packages loaded.',
+            )
+          : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  Text(
+                    '${status.loadedPackageCount}',
+                    style: const TextStyle(color: StudioColors.textPrimary, fontSize: 28, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'packages loaded',
+                    style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

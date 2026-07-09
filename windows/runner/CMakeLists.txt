@@ -38,3 +38,16 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Foundation Bridge (Work Package 002): copy oep_foundation_bridge.dll
+# next to the executable so dart:ffi's DynamicLibrary.open can find it
+# at runtime. oep_foundation_bridge is defined in
+# native/foundation_bridge/CMakeLists.txt, added by the parent
+# CMakeLists.txt before this subdirectory.
+add_dependencies(${BINARY_NAME} oep_foundation_bridge)
+add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+    "$<TARGET_FILE:oep_foundation_bridge>"
+    "$<TARGET_FILE_DIR:${BINARY_NAME}>"
+  COMMENT "Copying oep_foundation_bridge.dll next to ${BINARY_NAME}"
+)

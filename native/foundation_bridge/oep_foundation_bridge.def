@@ -1,0 +1,30 @@
+; Explicit export list for oep_foundation_bridge.dll.
+;
+; Every entry here is a name pulled from the linked oep_api static
+; library (see oep_foundation/platform/api/include/oep/api/oep_api.h);
+; none are defined in this repository. A .def EXPORTS entry tells the
+; linker "export whatever ends up at this symbol after linking" — it
+; does not require the symbol to be defined in this DLL's own source,
+; which is why bridge_stub.cpp can stay empty. Keeping this list
+; explicit (rather than relying on CMake's WINDOWS_EXPORT_ALL_SYMBOLS,
+; which only scans a target's own object files and does not reach into
+; linked static libraries) also documents exactly which C API surface
+; this DLL exposes, matching the rule that Studio may consume nothing
+; beyond oep_api.h.
+;
+; Keep this list in sync with oep_api.h.
+EXPORTS
+    oep_foundation_version
+    oep_api_version
+    oep_abi_version
+    oep_runtime_state_to_string
+    oep_error_code_to_string
+    oep_error_category_to_string
+    oep_runtime_create
+    oep_runtime_destroy
+    oep_runtime_initialize
+    oep_runtime_open_repository
+    oep_runtime_close_repository
+    oep_runtime_shutdown
+    oep_runtime_get_state
+    oep_runtime_get_repository_status

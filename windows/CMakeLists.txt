@@ -49,6 +49,13 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
+# Foundation Bridge (Work Package 002): wraps OEP Foundation's Public C
+# API in a DLL so dart:ffi has a dynamic library to open. Added before
+# runner/ so the oep_foundation_bridge target it defines already exists
+# when runner/CMakeLists.txt references it. See
+# native/foundation_bridge/CMakeLists.txt for details.
+add_subdirectory("${CMAKE_SOURCE_DIR}/../native/foundation_bridge" "native/foundation_bridge")
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 

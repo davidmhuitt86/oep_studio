@@ -9,7 +9,10 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Package 001 (Application Shell + Dashboard) is implemented. See
+Work Package 001 (Application Shell + Dashboard) and Work Package 002
+(Foundation Bridge + Open Repository Workflow) are implemented. Studio
+now has a real, live connection to OEP Foundation via
+`oep_foundation_bridge.dll` and `oep_api.h`. See
 `docs/IMPLEMENTATION_STATUS.md` for what exists today and what is
 still a placeholder.
 
@@ -17,6 +20,11 @@ still a placeholder.
 
 Requires the Flutter stable channel and, for Windows builds, Visual
 Studio Build Tools with the "Desktop development with C++" workload.
+
+Studio expects `oep_foundation` to be checked out as a sibling
+directory (`../oep_foundation` relative to this repository) — see
+`native/foundation_bridge/CMakeLists.txt` (`OEP_FOUNDATION_SOURCE_DIR`)
+if your checkout is laid out differently.
 
 ```
 flutter pub get

@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/foundation_runtime_service.dart';
+import '../../core/services/foundation_runtime_state.dart';
 import '../../core/theme/studio_colors.dart';
 
-/// The bottom Status Bar (SDD-003 Status Bar / SDD-004 Workspace Layout).
-///
-/// Displays placeholder Repository, Runtime State, Validation Status, and
-/// Foundation Version — no Foundation Bridge call is made in this work
-/// package, per STUDIO-TASK-000001.
-class StudioStatusBar extends StatelessWidget {
+/// The bottom Status Bar (SDD-003/SDD-004, overridden by Work Package 002:
+/// displays Runtime, Repository, Theme, and Studio Version — Foundation
+/// Version moved to the Dashboard).
+class StudioStatusBar extends ConsumerWidget {
   const StudioStatusBar({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final connected = foundation.phase == FoundationConnectionPhase.connected;
+    final repositoryLabel = foundation.isRepositoryOpen
+        ? 'Repository: ${foundation.repositoryStatus?.repositoryName ?? "Open"}'
+        : 'Repository: None Open';
+
     return Container(
       height: 28,
       decoration: const BoxDecoration(
@@ -21,18 +28,21 @@ class StudioStatusBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
-          const _StatusDot(color: StudioColors.success),
+          _StatusDot(color: connected ? StudioColors.success : StudioColors.warning),
           const SizedBox(width: 6),
           Flexible(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: const [
-                  _StatusText('Ready'),
-                  _StatusSeparator(),
-                  _StatusText('Repository: None Open'),
-                  _StatusSeparator(),
-                  _StatusText('Runtime: Not Connected'),
+                children: [
+                  const _StatusText('Ready'),
+                  const _StatusSeparator(),
+                  _StatusText(repositoryLabel),
+                  const _StatusSeparator(),
+                  _StatusText(
+                    connected ? 'Runtime: Connected' : 'Runtime: Disconnected',
+                    color: connected ? StudioColors.success : StudioColors.warning,
+                  ),
                 ],
               ),
             ),
@@ -42,10 +52,8 @@ class StudioStatusBar extends StatelessWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               reverse: true,
-              child: Row(
-                children: const [
-                  _StatusText('Foundation: 0.0.0 (disconnected)'),
-                  _StatusSeparator(),
+              child: const Row(
+                children: [
                   _StatusText('Theme: Dark'),
                   _StatusSeparator(),
                   _StatusText('OEP Studio 0.1.0-alpha'),
@@ -75,15 +83,16 @@ class _StatusDot extends StatelessWidget {
 }
 
 class _StatusText extends StatelessWidget {
-  const _StatusText(this.text);
+  const _StatusText(this.text, {this.color});
 
   final String text;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+      style: TextStyle(color: color ?? StudioColors.textSecondary, fontSize: 11),
     );
   }
 }
