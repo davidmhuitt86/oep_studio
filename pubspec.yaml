@@ -1,0 +1,36 @@
+name: oep_studio
+description: "OEP Studio — the graphical desktop application for the Open Engineering Platform."
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Routing (SDD-003 Navigation Framework, SDD-004 Workspace Framework)
+  go_router: ^14.6.2
+
+  # State management (Studio Services layer)
+  flutter_riverpod: ^2.6.1
+
+  # Reserved for the Foundation Bridge (SDD-006). Not used in this work
+  # package — no FFI calls are made yet.
+  ffi: ^2.1.3
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  # assets:
+  #   - assets/icons/
+  #   - assets/images/
+  #   - assets/themes/
