@@ -5,12 +5,14 @@ import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
 import '../models/object_category.dart';
+import '../models/relationship_summary.dart';
 import 'foundation_runtime_state.dart';
 
-/// The Studio Connection Manager (Work Package 002/003). Owns Runtime
-/// State, Repository State, Current Repository, and Current Selection
-/// — see `docs/CONNECTION_MANAGER.md`. This is the only place in Studio
-/// that holds a [FoundationBridge] instance; every feature reaches
+/// The Studio Connection Manager (Work Packages 002-005). Owns Current
+/// Runtime, Current Repository, Repository Statistics, Current Object
+/// List, Current Search Query/Results, and Current Selection — see
+/// `docs/CONNECTION_MANAGER.md`. This is the only place in Studio that
+/// holds a [FoundationBridge] instance; every feature reaches
 /// Foundation through this provider, never through the Bridge directly.
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   FoundationBridge? _bridge;
@@ -84,8 +86,11 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearError: true,
         clearSelectedCategory: true,
         clearSelectedObject: true,
+        clearSelectedRelationship: true,
         clearRepositoryStatistics: true,
         clearObjectList: true,
+        searchQuery: '',
+        clearSearchResults: true,
       );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
@@ -125,8 +130,11 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearError: true,
         clearSelectedCategory: true,
         clearSelectedObject: true,
+        clearSelectedRelationship: true,
         clearRepositoryStatistics: true,
         clearObjectList: true,
+        searchQuery: '',
+        clearSearchResults: true,
       );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
@@ -141,15 +149,44 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(selectedCategory: category, clearSelectedObject: true);
   }
 
-  /// Selects an Object Explorer row, populating the Property Inspector.
+  /// Selects an Object Explorer row, switching the Property Inspector to
+  /// Object mode. Clears any Relationship selection — the two are
+  /// mutually exclusive (Work Package 005: "The Property Inspector shall
+  /// automatically switch between Object mode and Relationship mode").
   void selectObject(EngineeringObjectSummary object) {
-    state = state.copyWith(selectedObject: object);
+    state = state.copyWith(selectedObject: object, clearSelectedRelationship: true);
   }
 
   /// Clears the current object selection (Property Inspector reverts to
-  /// "No Object Selected").
+  /// "No Object Selected", unless a relationship is selected).
   void clearObjectSelection() {
     state = state.copyWith(clearSelectedObject: true);
+  }
+
+  /// Selects a Relationship Explorer row, switching the Property
+  /// Inspector to Relationship mode. Clears any Object selection.
+  void selectRelationship(RelationshipSummary relationship) {
+    state = state.copyWith(selectedRelationship: relationship, clearSelectedObject: true);
+  }
+
+  /// Clears the current relationship selection.
+  void clearRelationshipSelection() {
+    state = state.copyWith(clearSelectedRelationship: true);
+  }
+
+  /// Records the Search Workspace's Current Search Query and Results
+  /// (Work Package 005). As of this work package the Public C API
+  /// exposes no search function (see `docs/SEARCH_WORKSPACE.md`), so
+  /// this only ever records [query] with `null` results — Studio does
+  /// not perform searching independently, and there is nothing yet to
+  /// call through the Foundation Bridge.
+  void search(String query) {
+    state = state.copyWith(searchQuery: query, clearSearchResults: true);
+  }
+
+  /// Clears the Current Search Query and Results.
+  void clearSearch() {
+    state = state.copyWith(searchQuery: '', clearSearchResults: true);
   }
 
   void _disposeBridge() {

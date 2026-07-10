@@ -649,3 +649,185 @@ No new files — this work package extended existing Work Package
   `SetForegroundWindow`, a standard bypass for that lock. Not an
   application bug — included here only because it's a recurring cost
   in this verification workflow and the fix is non-obvious.
+
+---
+
+## Work Package 005 — Relationship Explorer, Search Workspace
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000009 — Relationship Explorer — Complete
+* STUDIO-TASK-000010 — Search Workspace — Complete
+
+### What Exists
+
+The Public C API exposes no relationship enumeration or search
+function (confirmed by grepping `oep_api.h` before starting — see
+`docs/CONNECTION_MANAGER.md` § Missing Public API), so per this work
+package's explicit rule ("document the requirement, do not implement
+it") no Foundation changes were made:
+
+* `lib/core/models/relationship_type.dart`,
+  `relationship_summary.dart`, `search_result.dart` — plain Dart
+  models mirroring Foundation's C++ `RelationshipType`/`Relationship`/
+  `MatchLocation`/`ObjectSearchResult`/`RelationshipSearchResult`
+  shapes (read directly from Foundation's headers, not guessed), with
+  no `fromNative` constructor — there is no native struct yet for
+  either to decode, unlike `EngineeringObjectSummary` (Work Package
+  004).
+* `lib/features/relationships/relationships_page.dart` +
+  `relationship_list_query.dart` — Relationship Explorer: sortable
+  (Type/Source/Target/Author), filterable (type/source/target/author)
+  table, a "No Repository Open" state, and an honest "No Relationships
+  Found" empty state with the required guidance text — always shown,
+  since the list is always empty, confirmed even against a real
+  repository with real relationships (see § Verification). Sort/filter
+  logic is fully implemented and unit-tested against synthetic data
+  (`test/relationship_list_query_test.dart`, 10 cases).
+* `lib/features/search/search_page.dart` — Search Workspace: search
+  box/button/clear button, an idle state, and — since every search is
+  unavailable — a professional "Couldn't search for '\<query\>'" /
+  "Live repository search isn't available in this version of Studio
+  yet." message rather than a misleading "no results" claim. In-memory
+  Search History (Previous Searches, Clear History) implemented as
+  local widget state, not Connection Manager state — see
+  `docs/SEARCH_WORKSPACE.md` for why.
+* Connection Manager — `selectedRelationship`, `searchQuery`,
+  `searchResults` added to `FoundationServiceState`;
+  `selectObject`/`selectRelationship` now clear each other
+  (mutual exclusivity); `search`/`clearSearch`/`selectRelationship`/
+  `clearRelationshipSelection` added to `FoundationRuntimeNotifier`,
+  all pure local state mutations (no Foundation call exists to make).
+* Property Inspector — now switches between Object mode and
+  Relationship mode based on which of `selectedObject`/
+  `selectedRelationship` is non-null (`switch` on a record pattern
+  `(selectedObject, selectedRelationship)`), showing Relationship
+  ID/Type/Source/Target/Author/Description/Created Date in
+  Relationship mode.
+* `foundation_bridge_exception.dart` — unchanged this work package
+  (its Work Package 004 generalization already covers a relationship
+  "not found" case, should one ever be surfaced).
+
+### What Is Explicitly Not Implemented
+
+See `docs/CONNECTION_MANAGER.md` § Missing Public API for full detail
+— relationship enumeration, repository search, and (as in every prior
+work package) repository/object/relationship creation, editing, and
+deletion.
+
+### Repository Structure Additions
+
+```
+lib/
+  core/
+    models/
+      relationship_type.dart
+      relationship_summary.dart
+      search_result.dart
+  features/
+    relationships/
+      relationship_list_query.dart   Pure sort/filter logic (mirrors object_list_query.dart)
+    search/
+      (search_page.dart rewritten in place; no new files)
+test/
+  relationship_list_query_test.dart
+docs/
+  SEARCH_WORKSPACE.md                New
+```
+
+### Verification
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 24/24 passing: all prior tests unchanged, plus 10
+  new `RelationshipListQuery` unit tests (sort by type/source/target/
+  author, filter by type/source/target/author, non-mutation, empty
+  input) and 2 new widget tests (Relationship Explorer's "No
+  Repository Open" state; Search Workspace running a search and
+  reaching the unavailable state, then clearing back to idle).
+* `flutter build windows` — succeeded, no native changes to rebuild
+  beyond the standard Dart/Flutter recompile (the DLL itself is
+  byte-for-byte the same as Work Package 004's, since no new exports
+  were needed).
+* Manual verification against the built exe with a real repository
+  (`wp004_test_repo`) that has 2 real relationships created via
+  Foundation's CLI (`oep relationship create`, confirmed via
+  `oep relationship list` before testing): Relationship Explorer
+  correctly shows "No Relationships Found" despite the repository
+  genuinely having relationships — the honest-unavailability behavior
+  working exactly as designed, not a bug. Search Workspace: typing
+  "generator" and clicking Search produced "Couldn't search for
+  'generator'" / the unavailable message, "generator" appeared in
+  Previous Searches, and Clear correctly reset both the query field
+  and the result area back to the idle state. Resize-checked the
+  Relationship Explorer specifically (it has the most filter controls
+  of any page added so far) at the enforced 1000×700 minimum — filter
+  fields shrink with ellipsis, no overflow.
+
+### Architectural Observations
+
+* **Windows' folder-picker breadcrumb bar is not reliably
+  keyboard-driven under sustained background focus contention.**
+  Manual verification this work package hit a much more severe version
+  of the Work Package 004 focus-stealing issue: `Ctrl+L` (the
+  documented shortcut to enter address-bar edit mode) intermittently
+  failed even with the Alt-tap foreground fix applied, because a
+  background window was stealing focus *between* individual
+  `SendKeys` calls (confirmed by checking `GetForegroundWindow()`
+  immediately before and after typing, not just around the whole
+  sequence). The reliable fix ended up being different from Work
+  Package 004's: (1) click the breadcrumb's blank trailing area once
+  (a single fast mouse event, verified via an immediate screenshot to
+  show edit mode actually activated with the current segment
+  pre-selected) rather than relying on `Ctrl+L`, then (2) type the
+  full replacement path and press Enter in the very next call with no
+  intervening delay, so there's the smallest possible window for focus
+  to be stolen mid-input. This is a verification-tooling problem, not
+  a Studio defect — flagged here in detail because the Work Package
+  004 note undersold how much retry cost this can impose, and the
+  concrete two-step fix above is the thing worth reusing next time
+  rather than reproducing the trial-and-error.
+* **`RelationshipSummary`/`SearchResult` reference Foundation's actual
+  C++ struct shapes (`Relationship`, `ObjectSearchResult`,
+  `RelationshipSearchResult`, `MatchLocation`), read directly from
+  `platform/repository/include/oep/repository/relationship.hpp` and
+  `platform/search/include/oep/search/search_engine.hpp`, rather than
+  invented from the work package's prose requirements alone.** This
+  matters because it makes the "Missing Public API" documentation
+  (`docs/CONNECTION_MANAGER.md`) a much more concrete, actionable
+  request — e.g. specifying that `RelationshipType` already has 6
+  values in a specific order Foundation chose, rather than leaving a
+  future implementer to reverse-engineer that from Studio's UI.
+* **Mutual exclusivity between `selectedObject` and
+  `selectedRelationship` was implemented at the point of selection
+  (`selectObject`/`selectRelationship` each clear the other), not as a
+  derived/validated invariant on `FoundationServiceState` itself.**
+  This means it's possible in principle for a future `copyWith` call
+  elsewhere to set both non-null simultaneously without any compiler
+  or runtime error — the Property Inspector's `switch` pattern
+  `(selectedObject, selectedRelationship)` resolves such a case
+  silently (Object mode wins, since it's matched first), rather than
+  asserting. Acceptable for now since exactly two call sites ever set
+  either field, but worth revisiting with an explicit sum-type
+  (`Selection = ObjectSelection | RelationshipSelection | NoSelection`)
+  if a third selection kind is ever added.
+
+### Flutter-Specific Recommendations
+
+* Dart 3's record-pattern `switch` (`switch ((a, b)) { (final x?, _) =>
+  ..., (_, final y?) => ..., _ => ... }`) is a clean way to express "at
+  most one of these is set, branch on whichever" without a nested
+  if/else chain — used in `PropertyInspectorPanel.build()` for the
+  Object/Relationship mode switch. Worth reaching for again if a third
+  mutually-exclusive selection kind is ever added, rather than
+  converting to a chain of `if (x != null) ... else if (y != null)`.
+* The `RelationshipListQuery`/`relationship_list_query_test.dart` pair
+  is a direct copy of `ObjectListQuery`'s Work Package 003 pattern —
+  by the third repetition (Object, then Relationship, and Search
+  Results' future sort — Foundation search results are pre-sorted by
+  Foundation and Studio must not re-sort them, so no third copy is
+  actually needed there), this is a stable enough shape that a shared
+  generic `ListQuery<T>` could reduce duplication if a fourth
+  sortable/filterable list ever appears in Studio. Not done here to
+  avoid a premature abstraction over just two instances.

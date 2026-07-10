@@ -1,5 +1,4 @@
-import 'dart:ui';
-
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -78,5 +77,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No Repository Open'), findsOneWidget);
+  });
+
+  testWidgets('Relationship Explorer shows No Repository Open when disconnected', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: StudioApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Relationships').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No Repository Open'), findsOneWidget);
+  });
+
+  testWidgets('Search Workspace runs a search and reports it as unavailable', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: StudioApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Search').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Search this repository'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField).first, 'generator');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Search'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Couldn\'t search for "generator"'), findsOneWidget);
+    expect(find.text('generator'), findsWidgets); // appears in the Previous Searches panel too
+
+    // Disambiguate from the "Clear" text link in the Previous Searches panel.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Clear'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Search this repository'), findsOneWidget);
   });
 }

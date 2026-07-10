@@ -9,17 +9,19 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–004 are implemented: Application Shell + Dashboard,
+Work Packages 001–005 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
-/ Object Explorer / Property Inspector / Connection Manager, and — as
-of Work Package 004 — all of it backed by **live** Foundation data:
-real repository statistics, real Engineering Object enumeration, and a
-live Property Inspector, all sourced from `oep_api.h` via
-`oep_foundation_bridge.dll`. `docs/IMPLEMENTATION_STATUS.md` has the
-full picture of what exists today and what is still a placeholder
-(repository/object creation and editing, and relationship browsing,
-remain unimplemented — see `docs/CONNECTION_MANAGER.md` § Missing
-Public API).
+/ Object Explorer / Property Inspector / Connection Manager (all
+backed by **live** Foundation data since Work Package 004 — real
+repository statistics and Engineering Object enumeration via
+`oep_api.h`), and — as of Work Package 005 — the Relationship Explorer
+and Search Workspace. The Public C API doesn't yet expose relationship
+enumeration or repository search, so both of those honestly report
+themselves as unavailable rather than showing placeholder or
+misleading data — see `docs/CONNECTION_MANAGER.md` § Missing Public
+API and `docs/SEARCH_WORKSPACE.md`. `docs/IMPLEMENTATION_STATUS.md`
+has the full picture of what exists today and what is still a
+placeholder.
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -52,5 +54,6 @@ Studio Design Documents live under `docs/`:
 * `FOUNDATION_BRIDGE.md` (SDD-006) — Studio/Foundation integration boundary
 * `DASHBOARD.md` (SDD-007) — Dashboard requirements
 * `CONNECTION_MANAGER.md` — Runtime/Repository/Selection state ownership
+* `SEARCH_WORKSPACE.md` — search workflow, relationship workflow, search history
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

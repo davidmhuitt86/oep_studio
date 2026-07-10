@@ -284,3 +284,20 @@ data themselves. A single `openRepository` call updates
 `repositoryStatus`/`repositoryStatistics`/`objectList` together, and
 every watcher rebuilds from that one state change — there is no
 separate "refresh objects" action in this work package.
+
+---
+
+# Work Package 005: No Bridge Changes
+
+Work Package 005 (Relationship Explorer, Search Workspace) made **no**
+changes to `native/foundation_bridge/`, `oep_api_bindings.dart`,
+`oep_api_native_types.dart`, or `foundation_bridge.dart` — the Public C
+API exposes no relationship enumeration or search function yet (see
+`docs/CONNECTION_MANAGER.md` § Missing Public API for the exact
+functions this work package identified as needed and did not
+implement, per its "document it, do not implement it" rule).
+`RelationshipSummary` and `SearchResult`
+(`lib/core/models/relationship_summary.dart`,
+`lib/core/models/search_result.dart`) are plain Dart models with no
+`fromNative` constructor, unlike `EngineeringObjectSummary`'s — there
+is no native struct yet for either to decode.
