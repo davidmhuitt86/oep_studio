@@ -175,7 +175,15 @@ class _RepositoryStatusCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
     final status = foundation.repositoryStatus;
+    final statistics = foundation.repositoryStatistics;
     final connected = foundation.phase == FoundationConnectionPhase.connected;
+
+    // Repository Statistics (Work Package 004) is the live, Foundation-
+    // computed source for identity fields too — fall back to Repository
+    // Status (Work Package 002) only if statistics haven't loaded yet.
+    final repositoryName = statistics?.repositoryName ?? status?.repositoryName;
+    final repositoryVersion = statistics?.repositoryVersion ?? status?.repositoryVersion;
+    final repositoryId = statistics?.repositoryId ?? status?.repositoryId;
 
     return DashboardCard(
       title: 'Repository Status',
@@ -186,8 +194,8 @@ class _RepositoryStatusCard extends ConsumerWidget {
         children: [
           _StatusRow(
             icon: Icons.check_circle_outline,
-            label: 'Active Repository',
-            value: status?.repositoryName ?? 'None',
+            label: 'Repository Name',
+            value: repositoryName ?? 'None',
           ),
           _StatusRow(
             icon: Icons.dns_outlined,
@@ -195,16 +203,22 @@ class _RepositoryStatusCard extends ConsumerWidget {
             value: _runtimeStateLabel(foundation),
             valueColor: connected ? StudioColors.success : StudioColors.warning,
           ),
-          _StatusRow(icon: Icons.fingerprint, label: 'Repository ID', value: status?.repositoryId ?? '—'),
+          _StatusRow(icon: Icons.new_releases_outlined, label: 'Repository Version', value: repositoryVersion ?? '—'),
+          _StatusRow(icon: Icons.fingerprint, label: 'Repository ID', value: repositoryId ?? '—'),
           _StatusRow(
-            icon: Icons.new_releases_outlined,
-            label: 'Repository Version',
-            value: status?.repositoryVersion ?? '—',
+            icon: Icons.category_outlined,
+            label: 'Total Objects',
+            value: statistics != null ? '${statistics.totalObjectCount}' : '—',
+          ),
+          _StatusRow(
+            icon: Icons.hub_outlined,
+            label: 'Relationship Count',
+            value: statistics != null ? '${statistics.relationshipCount}' : '—',
           ),
           _StatusRow(
             icon: Icons.inventory_2_outlined,
-            label: 'Loaded Packages',
-            value: status != null ? '${status.loadedPackageCount}' : '—',
+            label: 'Package Count',
+            value: statistics != null ? '${statistics.packageCount}' : '—',
             showDivider: false,
           ),
         ],

@@ -14,6 +14,15 @@ const int oepRepositoryIdSize = 64;
 const int oepRepositoryNameSize = 256;
 const int oepRepositoryVersionSize = 32;
 
+const int oepObjectTypeCount = 6;
+const int oepMaxObjectId = 64;
+const int oepMaxObjectName = 256;
+const int oepMaxObjectAuthor = 128;
+const int oepMaxObjectVersion = 32;
+const int oepMaxObjectDescription = 1024;
+const int oepMaxObjectTags = 16;
+const int oepMaxTagLength = 64;
+
 /// Mirrors `oep_result_t`. Every OEP Foundation API call that can fail
 /// returns this by value.
 final class OepResultNative extends Struct {
@@ -48,6 +57,67 @@ final class OepRepositoryStatusNative extends Struct {
   external int loadedPackageCount;
 }
 
+/// Mirrors `oep_object_info_t`. A fixed-layout, pointer-free snapshot
+/// of one Engineering Object's metadata.
+final class OepObjectInfoNative extends Struct {
+  @Array(oepMaxObjectId)
+  external Array<Uint8> objectId;
+
+  @Int32()
+  external int objectType;
+
+  @Array(oepMaxObjectName)
+  external Array<Uint8> name;
+
+  @Array(oepMaxObjectAuthor)
+  external Array<Uint8> author;
+
+  @Array(oepMaxObjectVersion)
+  external Array<Uint8> version;
+
+  @Array(oepMaxObjectDescription)
+  external Array<Uint8> description;
+
+  @Int32()
+  external int tagCount;
+
+  @Array(oepMaxObjectTags, oepMaxTagLength)
+  external Array<Array<Uint8>> tags;
+}
+
+/// Mirrors `oep_object_list_t`. `items` is a Foundation-owned heap
+/// array — always released via `oep_object_list_release`, never `free`.
+final class OepObjectListNative extends Struct {
+  external Pointer<OepObjectInfoNative> items;
+
+  @Int32()
+  external int count;
+}
+
+/// Mirrors `oep_repository_statistics_t`.
+final class OepRepositoryStatisticsNative extends Struct {
+  @Array(oepRepositoryIdSize)
+  external Array<Uint8> repositoryId;
+
+  @Array(oepRepositoryNameSize)
+  external Array<Uint8> repositoryName;
+
+  @Array(oepRepositoryVersionSize)
+  external Array<Uint8> repositoryVersion;
+
+  @Int32()
+  external int totalObjectCount;
+
+  @Array(oepObjectTypeCount)
+  external Array<Int32> objectCountByType;
+
+  @Int32()
+  external int relationshipCount;
+
+  @Int32()
+  external int packageCount;
+}
+
 // --- Native function signatures (oep_api.h, declaration order) ---
 
 typedef OepFoundationVersionNative = Pointer<Utf8> Function();
@@ -71,6 +141,26 @@ typedef OepRuntimeGetStateNative = Int32 Function(Pointer<Void> runtime);
 typedef OepRuntimeGetRepositoryStatusNative = OepResultNative Function(
   Pointer<Void> runtime,
   Pointer<OepRepositoryStatusNative> outStatus,
+);
+
+typedef OepObjectTypeToStringNative = Pointer<Utf8> Function(Int32 type);
+typedef OepObjectStoreGetCountNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Int32> outCount,
+);
+typedef OepObjectStoreGetByIdNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> objectId,
+  Pointer<OepObjectInfoNative> outObject,
+);
+typedef OepObjectStoreListNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<OepObjectListNative> outList,
+);
+typedef OepObjectListReleaseNative = Void Function(Pointer<OepObjectListNative> list);
+typedef OepRuntimeGetRepositoryStatisticsNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<OepRepositoryStatisticsNative> outStatistics,
 );
 
 // dart:ffi requires a separate Dart-side typedef alongside each Native
@@ -98,4 +188,24 @@ typedef OepRuntimeGetStateDart = int Function(Pointer<Void> runtime);
 typedef OepRuntimeGetRepositoryStatusDart = OepResultNative Function(
   Pointer<Void> runtime,
   Pointer<OepRepositoryStatusNative> outStatus,
+);
+
+typedef OepObjectTypeToStringDart = Pointer<Utf8> Function(int type);
+typedef OepObjectStoreGetCountDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Int32> outCount,
+);
+typedef OepObjectStoreGetByIdDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> objectId,
+  Pointer<OepObjectInfoNative> outObject,
+);
+typedef OepObjectStoreListDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<OepObjectListNative> outList,
+);
+typedef OepObjectListReleaseDart = void Function(Pointer<OepObjectListNative> list);
+typedef OepRuntimeGetRepositoryStatisticsDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<OepRepositoryStatisticsNative> outStatistics,
 );

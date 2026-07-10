@@ -61,6 +61,25 @@ class OepApiBindings {
       runtimeGetRepositoryStatus = _library
           .lookupFunction<OepRuntimeGetRepositoryStatusNative, OepRuntimeGetRepositoryStatusDart>(
             'oep_runtime_get_repository_status',
+          ),
+      objectTypeToString = _library.lookupFunction<OepObjectTypeToStringNative, OepObjectTypeToStringDart>(
+        'oep_object_type_to_string',
+      ),
+      objectStoreGetCount = _library.lookupFunction<OepObjectStoreGetCountNative, OepObjectStoreGetCountDart>(
+        'oep_object_store_get_count',
+      ),
+      objectStoreGetById = _library.lookupFunction<OepObjectStoreGetByIdNative, OepObjectStoreGetByIdDart>(
+        'oep_object_store_get_by_id',
+      ),
+      objectStoreList = _library.lookupFunction<OepObjectStoreListNative, OepObjectStoreListDart>(
+        'oep_object_store_list',
+      ),
+      objectListRelease = _library.lookupFunction<OepObjectListReleaseNative, OepObjectListReleaseDart>(
+        'oep_object_list_release',
+      ),
+      runtimeGetRepositoryStatistics = _library
+          .lookupFunction<OepRuntimeGetRepositoryStatisticsNative, OepRuntimeGetRepositoryStatisticsDart>(
+            'oep_runtime_get_repository_statistics',
           );
 
   // ignore: unused_field
@@ -80,4 +99,10 @@ class OepApiBindings {
   final OepRuntimeShutdownDart runtimeShutdown;
   final OepRuntimeGetStateDart runtimeGetState;
   final OepRuntimeGetRepositoryStatusDart runtimeGetRepositoryStatus;
+  final OepObjectTypeToStringDart objectTypeToString;
+  final OepObjectStoreGetCountDart objectStoreGetCount;
+  final OepObjectStoreGetByIdDart objectStoreGetById;
+  final OepObjectStoreListDart objectStoreList;
+  final OepObjectListReleaseDart objectListRelease;
+  final OepRuntimeGetRepositoryStatisticsDart runtimeGetRepositoryStatistics;
 }

@@ -7,16 +7,17 @@ import '../../core/routing/studio_destination.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
 
-/// The Repository Explorer (STUDIO-TASK-000005): structural navigation
-/// of the currently open repository, similar to an IDE's Solution
-/// Explorer. Consumes only the Connection Manager
+/// The Repository Explorer (STUDIO-TASK-000005/007): structural
+/// navigation of the currently open repository, similar to an IDE's
+/// Solution Explorer. Consumes only the Connection Manager
 /// (`foundationRuntimeServiceProvider`) — never the Foundation Bridge
-/// directly, per Work Package 003's architecture rules.
+/// directly, per Work Package 003/004's architecture rules.
 ///
-/// Category object counts always read "—": the Public C API does not
-/// yet expose object enumeration (see `docs/CONNECTION_MANAGER.md` §
-/// Missing Public API), so no count can be honestly reported yet.
-/// Repository contents are never modified from this page.
+/// Category counts come from `RepositoryStatistics.objectCountByCategory`
+/// (Work Package 004, `oep_runtime_get_repository_statistics`) — Studio
+/// never recomputes them by enumerating objects itself. If statistics
+/// couldn't be fetched, counts read "—" rather than a wrong or stale
+/// number. Repository contents are never modified from this page.
 class RepositoryPage extends ConsumerStatefulWidget {
   const RepositoryPage({super.key});
 
@@ -97,9 +98,16 @@ class _RepositoryPageState extends ConsumerState<RepositoryPage> {
             itemBuilder: (context, index) {
               final category = visibleCategories[index];
               final expanded = _expanded.contains(category);
+              final count = foundation.repositoryStatistics?.objectCountByCategory[category];
+              final objectNames = foundation.objectList
+                  ?.where((object) => object.category == category)
+                  .map((object) => object.name)
+                  .toList();
               return _CategoryTile(
                 category: category,
+                count: count,
                 expanded: expanded,
+                objectNames: objectNames,
                 onToggleExpanded: () => setState(() {
                   if (expanded) {
                     _expanded.remove(category);
@@ -158,13 +166,21 @@ class _NoRepositoryOpen extends StatelessWidget {
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
     required this.category,
+    required this.count,
     required this.expanded,
+    required this.objectNames,
     required this.onToggleExpanded,
     required this.onSelect,
   });
 
   final ObjectCategory category;
+
+  /// `null` when Repository Statistics couldn't be fetched.
+  final int? count;
   final bool expanded;
+
+  /// `null` when the Current Object List couldn't be fetched.
+  final List<String>? objectNames;
   final VoidCallback onToggleExpanded;
   final VoidCallback onSelect;
 
@@ -198,24 +214,62 @@ class _CategoryTile extends StatelessWidget {
                       style: const TextStyle(color: StudioColors.textPrimary, fontSize: 13),
                     ),
                   ),
-                  const Text(
-                    '—',
-                    style: TextStyle(color: StudioColors.textDisabled, fontSize: 12),
+                  Text(
+                    count?.toString() ?? '—',
+                    style: const TextStyle(color: StudioColors.textDisabled, fontSize: 12),
                   ),
                 ],
               ),
             ),
           ),
         ),
-        if (expanded)
-          Padding(
-            padding: const EdgeInsets.only(left: 56, bottom: 8),
-            child: Text(
-              'No objects loaded yet.',
-              style: const TextStyle(color: StudioColors.textDisabled, fontSize: 11.5),
-            ),
-          ),
+        if (expanded) _CategoryPreview(objectNames: objectNames),
       ],
+    );
+  }
+}
+
+class _CategoryPreview extends StatelessWidget {
+  const _CategoryPreview({required this.objectNames});
+
+  final List<String>? objectNames;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = objectNames;
+    if (names == null) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 56, bottom: 8),
+        child: Text(
+          'Couldn\'t load objects.',
+          style: TextStyle(color: StudioColors.textDisabled, fontSize: 11.5),
+        ),
+      );
+    }
+    if (names.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 56, bottom: 8),
+        child: Text(
+          'No objects in this category.',
+          style: TextStyle(color: StudioColors.textDisabled, fontSize: 11.5),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 56, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final name in names)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                name,
+                style: const TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -44,8 +44,12 @@ class FoundationBridgeException implements Exception {
         return 'Studio isn\'t ready to do that right now.';
       case FoundationErrorCategory.io:
         return switch (code) {
-          FoundationErrorCode.notFound =>
-            'The selected folder doesn\'t contain a valid OEP repository.',
+          // Generic on purpose — this fires for both "not a valid
+          // repository folder" (Dashboard) and "no object with that ID"
+          // (Object Explorer) failures. Call sites supply the specific
+          // context via their dialog title (e.g. "Couldn't Open
+          // Repository"); this message stays accurate for either.
+          FoundationErrorCode.notFound => 'The requested item couldn\'t be found.',
           _ => 'The repository couldn\'t be accessed. It may be missing, moved, or in use by another program.',
         };
       case FoundationErrorCategory.internalError:

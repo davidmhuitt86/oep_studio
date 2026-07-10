@@ -1,25 +1,27 @@
 # Connection Manager
 
 Introduced in Work Package 002 (as the Studio Service owning Runtime
-State and Repository State), formalized and extended in Work Package
-003 to also own Current Selection.
+State and Repository State), formalized in Work Package 003 (Current
+Selection), extended in Work Package 004 (Repository Statistics,
+Current Object List).
 
 Implemented by `lib/core/services/foundation_runtime_service.dart`
 (`FoundationRuntimeNotifier` / `foundationRuntimeServiceProvider`) and
 `lib/core/services/foundation_runtime_state.dart`
-(`FoundationServiceState`). No rename occurred between work packages —
+(`FoundationServiceState`). No rename occurred across work packages —
 this document describes the same class under the architectural name
-Work Package 003 introduces for it.
+Work Package 003 introduced for it.
 
 ---
 
 ## Responsibilities
 
-Per Work Package 003:
+Per Work Package 004:
 
-* Runtime State
-* Repository State
+* Current Runtime
 * Current Repository
+* Repository Statistics
+* Current Object List
 * Current Selection
 
 The Connection Manager is the **only** place in Studio that holds a
@@ -56,31 +58,37 @@ never call an `oep_api.h` function directly — verified by grep: only
 | `runtimeState` | WP002 | Mirrors `oep_runtime_state_t` exactly (Uninitialized → Shutdown) |
 | `foundationVersion` / `apiVersion` / `abiVersion` | WP002 | From `oep_foundation_version()` / `oep_api_version()` / `oep_abi_version()` |
 | `repositoryStatus` | WP002 | Mirrors `oep_repository_status_t` (Current Repository) |
+| `repositoryStatistics` | WP004 | Mirrors `oep_repository_statistics_t`; `null` if never fetched or the last fetch failed |
+| `objectList` | WP004 | Every object in the repository (Current Object List); `null` if never fetched or the last fetch failed — distinct from an empty (non-null) list, which means "fetched successfully, repository has zero objects" |
 | `lastError` | WP002 | Most recent translated `FoundationBridgeException`, if any |
 | `selectedCategory` | WP003 | The Repository Explorer category currently selected (Current Selection) |
 | `selectedObject` | WP003 | The Object Explorer row currently selected (Current Selection) |
 
-Selection is cleared automatically whenever the underlying data it
-refers to becomes stale:
+`objectsInSelectedCategory` (a getter, not a stored field) derives the
+Object Explorer's visible list from `objectList` filtered by
+`selectedCategory`, propagating `null` (not-yet-loaded/failed)
+through rather than treating it as empty.
 
-* Opening a (possibly different) repository clears both
-  `selectedCategory` and `selectedObject`.
-* Closing the repository clears both.
+Selection and repository-scoped data are cleared automatically
+whenever what they refer to becomes stale:
+
+* Opening a (possibly different) repository clears `selectedCategory`,
+  `selectedObject`, `repositoryStatistics`, and `objectList`, then
+  immediately re-fetches the latter two for the newly opened
+  repository.
+* Closing the repository clears all four.
 * Selecting a new category clears `selectedObject` (it belonged to the
   previous category's list).
 
 ## Foundation Interaction
 
-The Connection Manager calls exactly the same `FoundationBridge`
-surface introduced in Work Package 002
-(`initialize`/`openRepository`/`closeRepository`/`shutdown`/
-`getRepositoryStatus`, plus the version getters). Work Package 003
-adds **no** new Foundation interaction — `selectCategory`/
-`selectObject`/`clearObjectSelection` are pure local state mutations;
-they exist because Repository Explorer/Object Explorer need somewhere
-to record a selection, not because Foundation was called. See ·
-Missing Public API below for what real category counts and object
-lists would require.
+`openRepository` calls, in order: `bridge.openRepository`,
+`bridge.getRepositoryStatus` (both must succeed or the whole call
+throws), then `bridge.getRepositoryStatistics` and `bridge.listObjects`
+(each independently non-fatal — see Enumeration Workflow in
+`FOUNDATION_BRIDGE.md`). `selectCategory`/`selectObject`/
+`clearObjectSelection` remain pure local state mutations — no
+Foundation call, since `objectList` already carries full object detail.
 
 ## Lifecycle
 
@@ -93,12 +101,14 @@ lists would require.
    `Notifier.build()`" pitfall documented in
    `IMPLEMENTATION_STATUS.md` — this is *why* `build()` must return
    the outcome rather than assign `state` and return separately).
-2. **Steady state** — `openRepository`/`closeRepository`/
-   `selectCategory`/`selectObject`/`clearObjectSelection` all mutate
-   `state` via `copyWith` and (for the Foundation-calling methods)
-   rethrow `FoundationBridgeException` so the calling workflow can
-   show a dialog immediately, in addition to `lastError` being
-   available to any other observer.
+2. **Steady state** — `openRepository` additionally fetches Repository
+   Statistics and the Current Object List (Work Package 004) after the
+   open itself succeeds; `closeRepository`/`selectCategory`/
+   `selectObject`/`clearObjectSelection` mutate `state` via `copyWith`.
+   Foundation-calling methods rethrow `FoundationBridgeException` for
+   their primary action so the calling workflow can show a dialog
+   immediately, in addition to `lastError` being available to any
+   other observer.
 3. **Teardown** — `ref.onDispose(_disposeBridge)` shuts the Runtime
    down (best-effort — a `FoundationBridgeException` during shutdown
    is swallowed, since the process is tearing down regardless) and
@@ -106,28 +116,25 @@ lists would require.
 
 ## Missing Public API
 
-Per Work Package 003: *"If additional Public API functionality is
-required: Document it. Do not implement it."* The following are
-needed for Repository Explorer / Object Explorer to show real data,
-and do not exist in `oep_api.h` as of this work package:
+Per Work Package 004: *"If additional functionality is required:
+Document it. Do not implement it."* As of this work package, all
+Engineering Object Enumeration and Repository Statistics functionality
+Repository Explorer/Object Explorer/Property Inspector/Dashboard need
+now exists in `oep_api.h` (Foundation's own Work Package 012). Nothing
+is currently known to be missing for the features implemented so far.
 
-* **Enumerate objects in the open repository**, ideally filterable by
-  `oep::repository::ObjectType` (ordoing so client-side against a full
-  list would also work) — needed for Object Explorer's list and for
-  Repository Explorer's per-category counts. Foundation's own
-  `ObjectStore::list_all` (`platform/repository`) already provides
-  this internally; nothing analogous is exposed through the C API.
-* **Fetch a single object's full detail** (description, tags,
-  timestamps) — needed for the Property Inspector.
-  `oep_repository_status_t`'s pattern (a fixed-layout, pointer-free
-  struct) is a reasonable model to extend from, but `tags` is a
-  variable-length list, which needs a design decision (fixed-capacity
-  array with a max tag count, a separate paged call, or a
-  caller-supplied buffer + required-size pattern) that this work
-  package intentionally leaves to Foundation, not Studio, to make.
+Noted for future work packages:
 
-Until these exist, `RepositoryPage` always shows "—" for category
-counts, `ObjectsPage` always shows an empty object list (though its
-sort/filter logic is fully implemented and unit-tested against
-synthetic data — see `test/object_list_query_test.dart`), and the
-Property Inspector always shows "No Object Selected" in real usage.
+* No Public C API exists yet for **Relationships** (create/list/
+  enumerate) — Repository Explorer's nav rail item and Dashboard's
+  `Relationship Count` display Foundation's count, but nothing lets
+  Studio browse individual relationships yet.
+* `oep_object_store_get_by_id` is exposed and bindable but unused —
+  `objectList` already carries full detail for every object, so no
+  code path needs a single-object lookup yet. It's expected to matter
+  once something resolves a Relationship's target object by ID rather
+  than by list membership.
+* Repository/object **creation, editing, and deletion** remain entirely
+  unexposed — every Work Package through 004 has been read-only by
+  design (Dashboard's "Create Repository" button is still a
+  placeholder for the same reason it was in Work Package 002).

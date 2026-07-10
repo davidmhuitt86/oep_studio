@@ -1,17 +1,14 @@
+import 'dart:ffi';
+
+import '../foundation/oep_api_native_types.dart';
+import '../foundation/oep_api_types.dart';
 import 'object_category.dart';
 
 /// A read-only summary of an Engineering Object, as the Object Explorer
 /// (STUDIO-TASK-000006) and Property Inspector display it.
 ///
-/// Mirrors the display-relevant fields of Foundation's
-/// `oep::repository::EngineeringObject` (id, type, name, author,
-/// version, description, tags). The Public C API does not yet expose a
-/// way to fetch these (see `docs/CONNECTION_MANAGER.md` § Missing
-/// Public API), so no code path currently constructs a real one from
-/// Foundation data — this model exists so the Object Explorer's list
-/// rendering, sorting, and filtering logic has a concrete type to
-/// operate on and can be unit-tested with synthetic data ahead of that
-/// API existing.
+/// Mirrors `oep_object_info_t` (`oep_api.h`, Work Package 012/Work
+/// Package 004) field-for-field.
 class EngineeringObjectSummary {
   const EngineeringObjectSummary({
     required this.objectId,
@@ -22,6 +19,27 @@ class EngineeringObjectSummary {
     this.description = '',
     this.tags = const [],
   });
+
+  /// Decodes an `oep_object_info_t` (via [OepObjectInfoNative]) into a
+  /// plain Dart model. The only place in Studio that reads this
+  /// struct's fields — everything above the Foundation Bridge works
+  /// with the resulting [EngineeringObjectSummary] instead.
+  factory EngineeringObjectSummary.fromNative(OepObjectInfoNative native) {
+    final tagCount = native.tagCount.clamp(0, oepMaxObjectTags);
+    final tags = <String>[
+      for (var i = 0; i < tagCount; i++) decodeFixedCString(native.tags[i], oepMaxTagLength),
+    ];
+
+    return EngineeringObjectSummary(
+      objectId: decodeFixedCString(native.objectId, oepMaxObjectId),
+      category: ObjectCategory.fromNative(native.objectType),
+      name: decodeFixedCString(native.name, oepMaxObjectName),
+      author: decodeFixedCString(native.author, oepMaxObjectAuthor),
+      version: decodeFixedCString(native.version, oepMaxObjectVersion),
+      description: decodeFixedCString(native.description, oepMaxObjectDescription),
+      tags: tags,
+    );
+  }
 
   final String objectId;
   final ObjectCategory category;

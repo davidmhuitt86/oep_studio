@@ -476,3 +476,176 @@ is documented, not implemented around.
   content isn't squeezed by the new sidebar. Any future
   five-region-layout change should keep this structure (side panels
   inside the row, status bar outside/below it) in mind.
+
+---
+
+## Work Package 004 — Live Repository Explorer, Object Explorer, Property Inspector, Dashboard
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000007 — Live Repository Explorer — Complete
+* STUDIO-TASK-000008 — Live Object Explorer — Complete
+
+### What Exists
+
+Between Work Package 003 and this one, Foundation's own Work Package
+012 added Engineering Object Enumeration and Repository Statistics to
+`oep_api.h` (`OEP_API_VERSION` 1 → 2). This work package consumed that
+new surface with no Foundation changes:
+
+* `native/foundation_bridge/oep_foundation_bridge.def` — 6 new exports
+  (`oep_object_type_to_string`, `oep_object_store_get_count`,
+  `oep_object_store_get_by_id`, `oep_object_store_list`,
+  `oep_object_list_release`, `oep_runtime_get_repository_statistics`),
+  verified with `dumpbin /EXPORTS` (20 symbols total, up from 14).
+* `lib/core/foundation/` — `OepObjectInfoNative`,
+  `OepObjectListNative`, `OepRepositoryStatisticsNative` (native
+  structs) and four new `FoundationBridge` methods
+  (`getRepositoryStatistics`, `getObjectCount`, `getObjectById`,
+  `listObjects`). See `docs/FOUNDATION_BRIDGE.md` for the full
+  breakdown, including the one genuinely new `dart:ffi` pattern this
+  work package needed (2D fixed arrays for `tags[16][64]`).
+* `lib/core/models/object_category.dart` — `ObjectCategory` gained
+  `nativeValue`, mapping each category to its `oep_object_type_t`
+  ordinal (which is *not* the same as Studio's required display order).
+* `lib/core/models/engineering_object_summary.dart` —
+  `EngineeringObjectSummary.fromNative` decodes a real
+  `oep_object_info_t` (previously this model only existed for
+  synthetic test data).
+* `lib/core/services/` — `FoundationServiceState` gained
+  `repositoryStatistics`/`objectList` (and the derived
+  `objectsInSelectedCategory` getter); `FoundationRuntimeNotifier.
+  openRepository` fetches both after a successful open, with
+  independent non-fatal error handling for each (see
+  `docs/CONNECTION_MANAGER.md` § Foundation Interaction).
+* Repository Explorer — category counts now read real numbers from
+  `RepositoryStatistics.objectCountByCategory`; expanding a category
+  previews its actual object names.
+* Object Explorer — the object list, sort, and filter pipeline
+  (already built and unit-tested in Work Package 003 against synthetic
+  data) now runs against real `objectList` data from the Connection
+  Manager.
+* Property Inspector — displays live Name/Object ID/Object Type/
+  Author/Version/Description/Tags; Object ID is new this work package
+  and rendered in the monospace style already established for
+  technical data (SDD-002).
+* Dashboard's Repository Status card — replaced with Repository Name/
+  Version/ID (sourced from `RepositoryStatistics` when available,
+  falling back to `RepositoryStatus` if statistics haven't loaded
+  yet)/Total Objects/Relationship Count/Package Count. Foundation/API/
+  ABI Version remain on the separate Foundation Version card, per this
+  work package's explicit instruction.
+* `foundation_bridge_exception.dart` — the `NOT_FOUND` error message
+  was over-specialized to repository-open failures ("The selected
+  folder doesn't contain a valid OEP repository") in a way that would
+  have been actively misleading if a future object lookup ever
+  surfaced the same category/code pair. Generalized to "The requested
+  item couldn't be found." before wiring up `getObjectById`, even
+  though nothing calls it yet — see Architectural Observations.
+
+### What Is Explicitly Not Implemented
+
+See `docs/CONNECTION_MANAGER.md` § Missing Public API — nothing
+required for this work package's scope was missing from `oep_api.h`.
+Relationship browsing, object creation/editing/deletion, and Create
+Repository remain out of scope, as before.
+
+### Repository Structure Additions
+
+No new files — this work package extended existing Work Package
+002/003 files (`oep_api_native_types.dart`, `oep_api_bindings.dart`,
+`foundation_bridge.dart`, `foundation_runtime_state.dart`,
+`foundation_runtime_service.dart`, `object_category.dart`,
+`engineering_object_summary.dart`, `repository_page.dart`,
+`objects_page.dart`, `property_inspector_panel.dart`,
+`dashboard_page.dart`) rather than adding new ones.
+
+### Verification
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 12/12 passing (unchanged from Work Package 003 —
+  no new automated tests were needed; `ObjectListQuery`'s existing
+  synthetic-data tests already covered the sort/filter logic this work
+  package wired up to real data).
+* `flutter build windows` — succeeded, `oep_foundation_bridge.dll`
+  rebuilt with the 6 new exports confirmed present.
+* Manual verification against the built exe with a real
+  multi-object repository, generated via Foundation's own CLI
+  (`oep init` + 5× `oep object create` across 4 categories:
+  2 Components, 1 Document, 1 Diagram, 1 Procedure):
+  * Dashboard — Repository Name "wp004_test_repo", Total Objects 5,
+    Foundation API Version correctly reads 2 (bumped from 1),
+    confirming the rebuilt DLL is genuinely in use, not a stale copy.
+  * Repository Explorer — category counts exactly matched what was
+    created: Components 2, Documents 1, Diagrams 1, Procedures 1,
+    Images 0, Projects 0.
+  * Object Explorer (Components category) — both real objects listed,
+    correctly sorted by name ("Backup Battery" before "Main
+    Generator"), with correct author/version columns.
+  * Property Inspector — selecting "Main Generator" showed its real
+    Object ID (a UUID matching the CLI's create output exactly),
+    Author "jsmith", Version "1.0.0", Description "Primary electrical
+    power generator", Tags "electrical, power".
+  * Status Bar — "Selected Object: Main Generator" updated correctly
+    on selection.
+
+### Architectural Observations
+
+* **A latent error-message bug surfaced only by writing the second
+  caller of a shared code path.** `FoundationBridgeException`'s
+  `NOT_FOUND` translation was written in Work Package 002 for exactly
+  one caller (repository open) and hardcoded repository-folder
+  language into what was actually a generic `(error_code,
+  error_category)` translation table. Adding `getObjectById` (a second
+  potential `NOT_FOUND` source) made the mismatch concrete enough to
+  fix before it shipped a misleading dialog. General lesson: an error
+  translation function's messages are only as generic as its *most
+  specific* caller assumed — worth re-reading whenever a new call site
+  is added, even if that call site isn't wired into the UI yet.
+* **Foundation added exactly the API this work package's Work Package
+  003 predecessor asked for, matching the documented request almost
+  field-for-field.** `oep_repository_statistics_t.object_count_by_type`
+  directly answers "populate category counts using Foundation
+  statistics"; `oep_object_info_t.tags` uses a fixed-capacity array
+  (16 × 64 bytes) — one of the two designs
+  `docs/CONNECTION_MANAGER.md` speculated Foundation might choose for
+  the variable-length-tags problem, and the simpler of the two. This
+  is a good outcome of the "document it, don't implement it" discipline:
+  Foundation's actual design ended up more directly usable than
+  guessing and building around a shape Studio invented.
+* **`ObjectCategory`'s declaration order (required UI display order)
+  and `nativeValue` (Foundation's ordinal order) had to be decoupled
+  explicitly**, since they're genuinely different orderings that both
+  need to exist on the same enum. Getting this wrong silently
+  (e.g. relying on `ObjectCategory.values[nativeType]` instead of the
+  explicit `fromNative` lookup) would have scrambled which category
+  showed which count with no error at all — this class of bug (enum
+  declaration order accidentally standing in for a semantic mapping)
+  is worth actively watching for in any future enum that mirrors a
+  native ordinal.
+
+### Flutter-Specific Recommendations
+
+* **Extension methods are not visible transitively.** `dart:ffi`'s
+  `Array<T>.operator[]` comes from an `extension` (`ArrayArray`), and
+  extensions — unlike types — are only in scope in a file that imports
+  their declaring library directly. `engineering_object_summary.dart`
+  could reference the `OepObjectInfoNative` *type* through a transitive
+  import (`oep_api_native_types.dart` re-exporting it via normal type
+  inference) but could not call `.tags[i]` on it until `import
+  'dart:ffi';` was added directly to that file too. Any file that
+  indexes a `dart:ffi` `Array` — not just one that declares a struct
+  containing one — needs its own `dart:ffi` import.
+* **Windows focus-stealing prevention affected manual verification,
+  not the app itself** — worth noting since it cost real debugging
+  time this work package: automated UI verification via synthetic
+  mouse clicks silently failed whenever an unrelated window (e.g. a
+  browser) held foreground focus, because `SetForegroundWindow` alone
+  doesn't override Windows' focus-steal lock from a background
+  process. Confirmed by checking `GetForegroundWindow()` before/after
+  each click; fixed by tapping Alt (`keybd_event`) immediately before
+  `SetForegroundWindow`, a standard bypass for that lock. Not an
+  application bug — included here only because it's a recurring cost
+  in this verification workflow and the fix is non-obvious.

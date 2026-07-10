@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 
+import '../models/object_category.dart';
 import 'oep_api_native_types.dart';
 
 /// Mirrors `oep_runtime_state_t`. Deliberately a 1:1 copy of the native
@@ -94,6 +95,48 @@ class RepositoryStatus {
   final String repositoryName;
   final String repositoryVersion;
   final int loadedPackageCount;
+}
+
+/// Plain Dart snapshot of `oep_repository_statistics_t`. Immutable and
+/// pointer-free, decoded once from the native struct.
+class RepositoryStatistics {
+  const RepositoryStatistics({
+    required this.repositoryId,
+    required this.repositoryName,
+    required this.repositoryVersion,
+    required this.totalObjectCount,
+    required this.objectCountByCategory,
+    required this.relationshipCount,
+    required this.packageCount,
+  });
+
+  factory RepositoryStatistics.fromNative(OepRepositoryStatisticsNative native) {
+    final countByCategory = <ObjectCategory, int>{
+      for (final category in ObjectCategory.values) category: native.objectCountByType[category.nativeValue],
+    };
+
+    return RepositoryStatistics(
+      repositoryId: decodeFixedCString(native.repositoryId, oepRepositoryIdSize),
+      repositoryName: decodeFixedCString(native.repositoryName, oepRepositoryNameSize),
+      repositoryVersion: decodeFixedCString(native.repositoryVersion, oepRepositoryVersionSize),
+      totalObjectCount: native.totalObjectCount,
+      objectCountByCategory: countByCategory,
+      relationshipCount: native.relationshipCount,
+      packageCount: native.packageCount,
+    );
+  }
+
+  final String repositoryId;
+  final String repositoryName;
+  final String repositoryVersion;
+  final int totalObjectCount;
+
+  /// Object count per category, computed by Foundation
+  /// (`oep_repository_statistics_t::object_count_by_type`) — Studio
+  /// never recomputes this by enumerating objects itself.
+  final Map<ObjectCategory, int> objectCountByCategory;
+  final int relationshipCount;
+  final int packageCount;
 }
 
 /// Decodes a NUL-terminated, fixed-length `char[]` embedded in a struct

@@ -9,17 +9,15 @@ import '../../core/theme/studio_colors.dart';
 import '../../core/theme/studio_theme.dart';
 import 'object_list_query.dart';
 
-/// The Object Explorer (STUDIO-TASK-000006): displays Engineering
+/// The Object Explorer (STUDIO-TASK-000006/008): displays Engineering
 /// Objects within the Repository Explorer category currently selected
-/// in the Connection Manager. Read-only browsing only — no creation,
-/// editing, or deletion.
-///
-/// The object list is always empty in this work package: the Public C
-/// API does not yet expose object enumeration (see
-/// `docs/CONNECTION_MANAGER.md` § Missing Public API). Sorting and
-/// filtering are fully implemented and unit-tested
-/// (`test/object_list_query_test.dart`) against synthetic data ahead of
-/// that API existing — only the real data source is missing.
+/// in the Connection Manager, from `FoundationServiceState.objectList`
+/// (Work Package 004's Current Object List, populated via
+/// `oep_object_store_list`). Read-only browsing only — no creation,
+/// editing, or deletion. Sorting and filtering remain Studio
+/// responsibilities (`ObjectListQuery`), applied client-side to
+/// whatever Foundation returned — Studio never re-sorts or re-derives
+/// counts Foundation already computed.
 class ObjectsPage extends ConsumerStatefulWidget {
   const ObjectsPage({super.key});
 
@@ -61,11 +59,8 @@ class _ObjectsPageState extends ConsumerState<ObjectsPage> {
       );
     }
 
-    // Foundation cannot enumerate objects yet (no such Public C API
-    // function exists) — the list is always empty, but sort/filter is
-    // still applied so the pipeline is exercised and testable end to end.
-    const List<EngineeringObjectSummary> objectsInCategory = [];
-    final visibleObjects = _query.apply(objectsInCategory);
+    final objectsInCategory = foundation.objectsInSelectedCategory;
+    final visibleObjects = objectsInCategory == null ? null : _query.apply(objectsInCategory);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,23 +145,30 @@ class _ObjectsPageState extends ConsumerState<ObjectsPage> {
         const _ObjectListHeader(),
         const Divider(height: 1),
         Expanded(
-          child: visibleObjects.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No objects found in this category.',
-                    style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: visibleObjects.length,
-                  itemBuilder: (context, index) {
-                    final object = visibleObjects[index];
-                    return _ObjectRow(
-                      object: object,
-                      onTap: () => ref.read(foundationRuntimeServiceProvider.notifier).selectObject(object),
-                    );
-                  },
-                ),
+          child: switch (visibleObjects) {
+            null => const Center(
+              child: Text(
+                'Objects couldn\'t be loaded for this repository.',
+                style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+              ),
+            ),
+            [] => const Center(
+              child: Text(
+                'No objects found in this category.',
+                style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+              ),
+            ),
+            final objects => ListView.builder(
+              itemCount: objects.length,
+              itemBuilder: (context, index) {
+                final object = objects[index];
+                return _ObjectRow(
+                  object: object,
+                  onTap: () => ref.read(foundationRuntimeServiceProvider.notifier).selectObject(object),
+                );
+              },
+            ),
+          },
         ),
       ],
     );

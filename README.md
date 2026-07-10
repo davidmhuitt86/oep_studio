@@ -9,15 +9,17 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–003 are implemented: Application Shell + Dashboard,
-Foundation Bridge + Open Repository Workflow, and the Repository
-Explorer / Object Explorer / Property Inspector / Connection Manager.
-Studio has a real, live connection to OEP Foundation via
-`oep_foundation_bridge.dll` and `oep_api.h`, though object browsing is
-UI-complete but data-empty until Foundation exposes object enumeration
-— see `docs/CONNECTION_MANAGER.md` § Missing Public API.
-`docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
-today and what is still a placeholder.
+Work Packages 001–004 are implemented: Application Shell + Dashboard,
+Foundation Bridge + Open Repository Workflow, the Repository Explorer
+/ Object Explorer / Property Inspector / Connection Manager, and — as
+of Work Package 004 — all of it backed by **live** Foundation data:
+real repository statistics, real Engineering Object enumeration, and a
+live Property Inspector, all sourced from `oep_api.h` via
+`oep_foundation_bridge.dll`. `docs/IMPLEMENTATION_STATUS.md` has the
+full picture of what exists today and what is still a placeholder
+(repository/object creation and editing, and relationship browsing,
+remain unimplemented — see `docs/CONNECTION_MANAGER.md` § Missing
+Public API).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail

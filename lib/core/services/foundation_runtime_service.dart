@@ -59,12 +59,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Opens the repository rooted at [repositoryPath] and refreshes
-  /// Repository State on success. If a different repository is already
-  /// open, it is closed first — `oep_runtime_open_repository` is only
-  /// valid from Initialized or RepositoryClosed. Rethrows
-  /// [FoundationBridgeException] so the calling workflow (e.g. the
-  /// Dashboard) can show a dialog immediately, in addition to [lastError]
-  /// being updated for any other widget watching this provider.
+  /// Repository State, Repository Statistics, and the Current Object
+  /// List on success. If a different repository is already open, it is
+  /// closed first — `oep_runtime_open_repository` is only valid from
+  /// Initialized or RepositoryClosed. Rethrows [FoundationBridgeException]
+  /// only for the *open* step, so the calling workflow (e.g. the
+  /// Dashboard) can show a dialog immediately; a failure fetching
+  /// statistics or the object list afterward does not fail the whole
+  /// operation (Work Package 004: "the application shall remain fully
+  /// usable" if enumeration fails) — it just leaves those fields `null`,
+  /// which the Repository/Object Explorer render as an empty state.
   void openRepository(String repositoryPath) {
     final bridge = _bridge;
     if (bridge == null) return;
@@ -80,10 +84,32 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearError: true,
         clearSelectedCategory: true,
         clearSelectedObject: true,
+        clearRepositoryStatistics: true,
+        clearObjectList: true,
       );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
       rethrow;
+    }
+    _refreshRepositoryData(bridge);
+  }
+
+  /// Re-fetches Repository Statistics and the Current Object List from
+  /// the already-open repository. Failures here are non-fatal (see
+  /// [openRepository]) — they surface as `null` fields, not a thrown
+  /// exception, since no user-initiated action is waiting on this call.
+  void _refreshRepositoryData(FoundationBridge bridge) {
+    try {
+      final statistics = bridge.getRepositoryStatistics();
+      state = state.copyWith(repositoryStatistics: statistics);
+    } on FoundationBridgeException catch (error) {
+      state = state.copyWith(lastError: error, clearRepositoryStatistics: true);
+    }
+    try {
+      final objects = bridge.listObjects();
+      state = state.copyWith(objectList: objects);
+    } on FoundationBridgeException catch (error) {
+      state = state.copyWith(lastError: error, clearObjectList: true);
     }
   }
 
@@ -99,6 +125,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearError: true,
         clearSelectedCategory: true,
         clearSelectedObject: true,
+        clearRepositoryStatistics: true,
+        clearObjectList: true,
       );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);

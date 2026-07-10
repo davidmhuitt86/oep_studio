@@ -28,3 +28,9 @@ EXPORTS
     oep_runtime_shutdown
     oep_runtime_get_state
     oep_runtime_get_repository_status
+    oep_object_type_to_string
+    oep_object_store_get_count
+    oep_object_store_get_by_id
+    oep_object_store_list
+    oep_object_list_release
+    oep_runtime_get_repository_statistics

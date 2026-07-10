@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/engineering_object_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../../core/theme/studio_theme.dart';
 
 /// The Property Inspector (SDD-004, introduced as a placeholder in
 /// Work Package 003). Displays the object currently selected in the
@@ -75,6 +76,7 @@ class _ObjectProperties extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         _Field(label: 'Name', value: object.name),
+        _Field(label: 'Object ID', value: object.objectId, monospace: true),
         _Field(label: 'Object Type', value: object.category.label),
         _Field(label: 'Author', value: object.author),
         _Field(label: 'Version', value: object.version),
@@ -86,10 +88,11 @@ class _ObjectProperties extends StatelessWidget {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.value});
+  const _Field({required this.label, required this.value, this.monospace = false});
 
   final String label;
   final String value;
+  final bool monospace;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +103,12 @@ class _Field extends StatelessWidget {
         children: [
           Text(label, style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11)),
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5)),
+          Text(
+            value,
+            style: monospace
+                ? StudioTheme.monoTextStyle
+                : const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
+          ),
         ],
       ),
     );

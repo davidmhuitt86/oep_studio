@@ -2,6 +2,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import '../models/engineering_object_summary.dart';
 import 'foundation_bridge_exception.dart';
 import 'oep_api_bindings.dart';
 import 'oep_api_native_types.dart';
@@ -97,6 +98,72 @@ class FoundationBridge {
       return RepositoryStatus.fromNative(statusPointer.ref);
     } finally {
       malloc.free(statusPointer);
+    }
+  }
+
+  /// Reads repository-wide statistics (total object count, per-category
+  /// counts, relationship count, package count), computed by Foundation.
+  /// Throws [FoundationBridgeException] if no repository is open.
+  RepositoryStatistics getRepositoryStatistics() {
+    _assertNotDisposed();
+    final statisticsPointer = malloc<OepRepositoryStatisticsNative>();
+    try {
+      _checkResult(_bindings.runtimeGetRepositoryStatistics(_runtime, statisticsPointer));
+      return RepositoryStatistics.fromNative(statisticsPointer.ref);
+    } finally {
+      malloc.free(statisticsPointer);
+    }
+  }
+
+  /// The number of Engineering Objects in the currently open repository.
+  /// Throws [FoundationBridgeException] if no repository is open.
+  int getObjectCount() {
+    _assertNotDisposed();
+    final countPointer = malloc<Int32>();
+    try {
+      _checkResult(_bindings.objectStoreGetCount(_runtime, countPointer));
+      return countPointer.value;
+    } finally {
+      malloc.free(countPointer);
+    }
+  }
+
+  /// Fetches a single Engineering Object by ID.
+  /// Throws [FoundationBridgeException] if no repository is open or no
+  /// object with that ID exists.
+  EngineeringObjectSummary getObjectById(String objectId) {
+    _assertNotDisposed();
+    final idPointer = objectId.toNativeUtf8();
+    final objectPointer = malloc<OepObjectInfoNative>();
+    try {
+      _checkResult(_bindings.objectStoreGetById(_runtime, idPointer, objectPointer));
+      return EngineeringObjectSummary.fromNative(objectPointer.ref);
+    } finally {
+      malloc.free(idPointer);
+      malloc.free(objectPointer);
+    }
+  }
+
+  /// Enumerates every Engineering Object in the currently open
+  /// repository, sorted deterministically by object ID (the same order
+  /// Foundation itself guarantees — Studio never re-sorts the raw list).
+  /// Throws [FoundationBridgeException] if no repository is open.
+  List<EngineeringObjectSummary> listObjects() {
+    _assertNotDisposed();
+    final listPointer = malloc<OepObjectListNative>();
+    try {
+      _checkResult(_bindings.objectStoreList(_runtime, listPointer));
+      final list = listPointer.ref;
+      try {
+        return [for (var i = 0; i < list.count; i++) EngineeringObjectSummary.fromNative(list.items[i])];
+      } finally {
+        // Foundation-owned heap array: release through Foundation's own
+        // function, never malloc.free/free directly (see oep_api.h's
+        // ownership contract for oep_object_list_t).
+        _bindings.objectListRelease(listPointer);
+      }
+    } finally {
+      malloc.free(listPointer);
     }
   }
 
