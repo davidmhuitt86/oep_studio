@@ -5,24 +5,32 @@ import '../../core/models/engineering_object_summary.dart';
 import '../../core/models/relationship_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
-import '../../core/theme/studio_theme.dart';
+import '../../knowledge/inspector/proposal_properties.dart';
+import '../../knowledge/inspector/session_properties.dart';
+import 'property_field.dart';
 
 /// The Property Inspector (SDD-004, introduced as a placeholder in
 /// Work Package 003; live Object data in Work Package 004; Relationship
-/// mode in Work Package 005). Automatically switches between Object
-/// mode and Relationship mode based on the Connection Manager's Current
-/// Selection — the two are mutually exclusive (see
-/// `FoundationRuntimeNotifier.selectObject`/`selectRelationship`).
-/// Display only — no editing, per SDD-011 and every work package since.
+/// mode in Work Package 005; Proposal/Session modes in Work Package
+/// 007). Automatically switches between modes based on the Connection
+/// Manager's Current Selection — Proposal, Object, and Relationship
+/// selection are mutually exclusive (see
+/// `FoundationRuntimeNotifier.selectObject`/`selectRelationship`/
+/// `selectProposal`); Session mode is shown only as a fallback, when a
+/// Knowledge Curation Session exists but nothing more specific is
+/// selected. Display only — no editing here, per SDD-011 and every
+/// work package since (proposal editing happens through the
+/// Engineering Review panel instead).
 class PropertyInspectorPanel extends ConsumerWidget {
   const PropertyInspectorPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedObject = ref.watch(foundationRuntimeServiceProvider.select((state) => state.selectedObject));
-    final selectedRelationship = ref.watch(
-      foundationRuntimeServiceProvider.select((state) => state.selectedRelationship),
-    );
+    final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final selectedProposal = foundation.selectedProposal;
+    final selectedObject = foundation.selectedObject;
+    final selectedRelationship = foundation.selectedRelationship;
+    final knowledgeSession = foundation.knowledgeSession;
 
     return Container(
       width: 280,
@@ -46,9 +54,18 @@ class PropertyInspectorPanel extends ConsumerWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: switch ((selectedObject, selectedRelationship)) {
-              (final object?, _) => _ObjectProperties(object: object),
-              (_, final relationship?) => _RelationshipProperties(relationship: relationship),
+            child: switch ((selectedProposal, selectedObject, selectedRelationship, knowledgeSession)) {
+              (final proposal?, _, _, _) => ProposalProperties(proposal: proposal),
+              (_, final object?, _, _) => _ObjectProperties(object: object),
+              (_, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, final session?) => SessionProperties(
+                session: session,
+                sourceCount: foundation.knowledgeSourceCount,
+                proposalCount: foundation.knowledgeProposalCount,
+                acceptedCount: foundation.knowledgeAcceptedCount,
+                rejectedCount: foundation.knowledgeRejectedCount,
+                pendingCount: foundation.knowledgePendingCount,
+              ),
               _ => const _NoSelection(),
             },
           ),
@@ -86,13 +103,13 @@ class _ObjectProperties extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _Field(label: 'Name', value: object.name),
-        _Field(label: 'Object ID', value: object.objectId, monospace: true),
-        _Field(label: 'Object Type', value: object.category.label),
-        _Field(label: 'Author', value: object.author),
-        _Field(label: 'Version', value: object.version),
-        _Field(label: 'Description', value: object.description.isEmpty ? '—' : object.description),
-        _Field(label: 'Tags', value: object.tags.isEmpty ? '—' : object.tags.join(', ')),
+        PropertyField(label: 'Name', value: object.name),
+        PropertyField(label: 'Object ID', value: object.objectId, monospace: true),
+        PropertyField(label: 'Object Type', value: object.category.label),
+        PropertyField(label: 'Author', value: object.author),
+        PropertyField(label: 'Version', value: object.version),
+        PropertyField(label: 'Description', value: object.description.isEmpty ? '—' : object.description),
+        PropertyField(label: 'Tags', value: object.tags.isEmpty ? '—' : object.tags.join(', ')),
       ],
     );
   }
@@ -108,42 +125,14 @@ class _RelationshipProperties extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _Field(label: 'Relationship ID', value: relationship.relationshipId, monospace: true),
-        _Field(label: 'Relationship Type', value: relationship.type.label),
-        _Field(label: 'Source Object', value: relationship.sourceObjectName),
-        _Field(label: 'Target Object', value: relationship.targetObjectName),
-        _Field(label: 'Author', value: relationship.author),
-        _Field(label: 'Description', value: relationship.description.isEmpty ? '—' : relationship.description),
-        _Field(label: 'Created Date', value: relationship.createdUtc.isEmpty ? '—' : relationship.createdUtc),
+        PropertyField(label: 'Relationship ID', value: relationship.relationshipId, monospace: true),
+        PropertyField(label: 'Relationship Type', value: relationship.type.label),
+        PropertyField(label: 'Source Object', value: relationship.sourceObjectName),
+        PropertyField(label: 'Target Object', value: relationship.targetObjectName),
+        PropertyField(label: 'Author', value: relationship.author),
+        PropertyField(label: 'Description', value: relationship.description.isEmpty ? '—' : relationship.description),
+        PropertyField(label: 'Created Date', value: relationship.createdUtc.isEmpty ? '—' : relationship.createdUtc),
       ],
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.value, this.monospace = false});
-
-  final String label;
-  final String value;
-  final bool monospace;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11)),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: monospace
-                ? StudioTheme.monoTextStyle
-                : const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
-          ),
-        ],
-      ),
     );
   }
 }

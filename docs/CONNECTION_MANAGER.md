@@ -4,9 +4,11 @@ Introduced in Work Package 002 (as the Studio Service owning Runtime
 State and Repository State), formalized in Work Package 003 (Current
 Selection), extended in Work Package 004 (Repository Statistics,
 Current Object List), extended again in Work Package 005 (Current
-Search Query/Results, Current Relationship Selection), and again in
-Work Package 006 (Current Relationship List; Current Search Query/Results
-now live).
+Search Query/Results, Current Relationship Selection), again in Work
+Package 006 (Current Relationship List; Current Search Query/Results
+now live), and again in Work Package 007 (Current Knowledge Curation
+Session, Current Proposals, Current Proposal Selection — see
+`docs/KNOWLEDGE_STUDIO.md`).
 
 Implemented by `lib/core/services/foundation_runtime_service.dart`
 (`FoundationRuntimeNotifier` / `foundationRuntimeServiceProvider`) and
@@ -19,7 +21,7 @@ Work Package 003 introduced for it.
 
 ## Responsibilities
 
-Per Work Package 006:
+Per Work Package 007:
 
 * Current Runtime
 * Current Repository
@@ -28,7 +30,15 @@ Per Work Package 006:
 * Current Relationship List
 * Current Search Query
 * Current Search Results
-* Current Selection (of an object *or* a relationship — mutually exclusive)
+* Current Knowledge Curation Session
+* Current Proposals
+* Current Selection (of an object, a relationship, *or* a proposal — mutually exclusive)
+
+Current Knowledge Curation Session/Proposals are Studio-only state
+(never backed by Foundation — see `docs/KNOWLEDGE_STUDIO.md`) but are
+still owned by this same Connection Manager rather than a separate
+service, per Work Package 007's Architecture Rules: *"The Connection
+Manager owns session state."*
 
 The Connection Manager is the **only** place in Studio that holds a
 [`FoundationBridge`](FOUNDATION_BRIDGE.md) instance. Every feature —
@@ -75,6 +85,9 @@ never call an `oep_api.h` function directly — verified by grep: only
 | `selectedRelationship` | WP005 | The Relationship Explorer row currently selected (Current Relationship Selection). Mutually exclusive with `selectedObject` |
 | `searchQuery` | WP005 | The Search Workspace's Current Search Query, `''` when idle |
 | `searchResults` | WP005/WP006 | The Search Workspace's Current Search Results, via `oep_search_repository`/`oep_search_objects`/`oep_search_relationships` since WP006; `null` means "not searched, or the last search attempt failed" — always set together with `searchQuery` on success, so a non-empty query with `null` results shouldn't occur in steady state |
+| `knowledgeSession` | WP007 | The active Knowledge Curation Session (Current Knowledge Curation Session), `null` until one is created. Studio-only, entirely in-memory — never backed by Foundation |
+| `proposals` | WP007 | Manual Engineering Review proposals within `knowledgeSession` (Current Proposals); always empty when `knowledgeSession` is `null` |
+| `selectedProposal` | WP007 | The Engineering Review proposal currently selected, if any. Mutually exclusive with `selectedObject`/`selectedRelationship` |
 
 `objectsInSelectedCategory` (a getter, not a stored field) derives the
 Object Explorer's visible list from `objectList` filtered by
@@ -93,11 +106,20 @@ whenever what they refer to becomes stale:
 * Closing the repository clears the same set.
 * Selecting a new category clears `selectedObject` (it belonged to the
   previous category's list).
-* Selecting an object clears `selectedRelationship`, and selecting a
-  relationship clears `selectedObject` — the Property Inspector shows
-  exactly one of Object mode or Relationship mode at a time (Work
-  Package 005: *"The Property Inspector shall automatically switch
-  between Object mode and Relationship mode"*).
+* Selecting an object, a relationship, or a proposal clears the other
+  two — the Property Inspector shows exactly one of Object mode,
+  Relationship mode, or Proposal mode at a time (Work Package 005:
+  *"The Property Inspector shall automatically switch between Object
+  mode and Relationship mode"*; Work Package 007 extends the same rule
+  to Proposal mode). See `docs/KNOWLEDGE_STUDIO.md` § State Ownership
+  for the Property Inspector's full mode-selection order, including
+  its Session-mode fallback.
+
+`knowledgeSession`/`proposals`/`selectedProposal` are **not** cleared
+by opening or closing a repository — a Knowledge Curation Session's
+assigned repository (`KnowledgeSession.repositoryName`, a plain string
+the engineer types) is independent of whatever Foundation repository
+happens to be open elsewhere in Studio (see `docs/KNOWLEDGE_STUDIO.md`).
 
 ## Foundation Interaction
 
@@ -114,6 +136,15 @@ carry full detail). `search(query, {scope})` is the one method here
 that *does* call Foundation (`oep_search_repository`/`oep_search_objects`/
 `oep_search_relationships`, per `scope`) — see § Error Handling below
 for how its failure mode differs from every other method here.
+
+`createKnowledgeSession`/`advanceKnowledgeSession`/`addProposal`/
+`editProposal`/`acceptProposal`/`rejectProposal`/`deleteProposal`/
+`selectProposal`/`clearProposalSelection` (Work Package 007) are also
+all pure local state mutations, for the strongest possible reason:
+there is no Foundation call to make at all for Studio-only session
+state (see `docs/KNOWLEDGE_STUDIO.md`). They validate through
+`KnowledgeSessionService` and throw `KnowledgeValidationException` —
+never `FoundationBridgeException` — on invalid input.
 
 ## Lifecycle
 

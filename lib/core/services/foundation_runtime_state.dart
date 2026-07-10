@@ -1,3 +1,6 @@
+import '../../knowledge/models/engineering_proposal.dart';
+import '../../knowledge/models/knowledge_session.dart';
+import '../../knowledge/models/proposal_status.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
@@ -11,13 +14,14 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-006): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-007): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
-/// Search Results, and Current Selection (of either an object or a
-/// relationship — never both at once). Immutable; widgets watch this
-/// through `foundationRuntimeServiceProvider` and never touch
-/// [FoundationBridge] directly. See `docs/CONNECTION_MANAGER.md`.
+/// Search Results, Current Knowledge Curation Session (Work Package 007),
+/// and Current Selection (of an object, a relationship, or a proposal —
+/// never more than one at once). Immutable; widgets watch this through
+/// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
+/// directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
   const FoundationServiceState({
     required this.phase,
@@ -35,6 +39,9 @@ class FoundationServiceState {
     this.selectedRelationship,
     this.searchQuery = '',
     this.searchResults,
+    this.knowledgeSession,
+    this.proposals = const [],
+    this.selectedProposal,
   });
 
   final FoundationConnectionPhase phase;
@@ -93,6 +100,22 @@ class FoundationServiceState {
   /// occur in steady state.
   final List<SearchResult>? searchResults;
 
+  /// The active Knowledge Curation Session (Work Package 007), `null`
+  /// until one is created. Entirely in-memory — Studio-only, never
+  /// committed to Foundation (see `docs/KNOWLEDGE_STUDIO.md`).
+  final KnowledgeSession? knowledgeSession;
+
+  /// Manual Engineering Review proposals within [knowledgeSession]
+  /// (Work Package 007 Engineering Review). Always empty when
+  /// [knowledgeSession] is `null`; cleared whenever a new session
+  /// replaces the current one.
+  final List<EngineeringProposal> proposals;
+
+  /// The Engineering Review proposal currently selected, if any.
+  /// Mutually exclusive with [selectedObject]/[selectedRelationship] —
+  /// the Property Inspector shows exactly one selection mode at a time.
+  final EngineeringProposal? selectedProposal;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -105,6 +128,17 @@ class FoundationServiceState {
     if (category == null) return objects;
     return objects.where((object) => object.category == category).toList();
   }
+
+  /// Source material count for the active session (Work Package 007
+  /// Knowledge Curation Session display). Always `0` in this work
+  /// package — the Import Queue is placeholder content, so no source
+  /// ingestion mechanism exists yet to count.
+  int get knowledgeSourceCount => 0;
+
+  int get knowledgeProposalCount => proposals.length;
+  int get knowledgeAcceptedCount => proposals.where((proposal) => proposal.status == ProposalStatus.accepted).length;
+  int get knowledgeRejectedCount => proposals.where((proposal) => proposal.status == ProposalStatus.rejected).length;
+  int get knowledgePendingCount => proposals.where((proposal) => proposal.status == ProposalStatus.pending).length;
 
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
@@ -131,6 +165,11 @@ class FoundationServiceState {
     String? searchQuery,
     List<SearchResult>? searchResults,
     bool clearSearchResults = false,
+    KnowledgeSession? knowledgeSession,
+    bool clearKnowledgeSession = false,
+    List<EngineeringProposal>? proposals,
+    EngineeringProposal? selectedProposal,
+    bool clearSelectedProposal = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -152,6 +191,9 @@ class FoundationServiceState {
           : (selectedRelationship ?? this.selectedRelationship),
       searchQuery: searchQuery ?? this.searchQuery,
       searchResults: clearSearchResults ? null : (searchResults ?? this.searchResults),
+      knowledgeSession: clearKnowledgeSession ? null : (knowledgeSession ?? this.knowledgeSession),
+      proposals: proposals ?? this.proposals,
+      selectedProposal: clearSelectedProposal ? null : (selectedProposal ?? this.selectedProposal),
     );
   }
 }

@@ -1132,3 +1132,316 @@ no other new files.
   pumping the real widget tree — useful whenever a test needs to
   bypass one specific UI-triggered action but still verify everything
   downstream of it.
+
+---
+
+## Work Package 007 — Knowledge Studio (first slice)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000013 — Knowledge Studio Shell — Complete
+* STUDIO-TASK-000014 — Knowledge Curation Session — Complete
+
+### What Exists
+
+A new top-level `lib/knowledge/` module (per explicit user instruction
+alongside this work package — see `docs/KNOWLEDGE_STUDIO.md`'s
+introduction) implements the first, Studio-only slice of Knowledge
+Studio (SDD-013): manually-created Engineering Object proposals,
+reviewed within an in-memory Knowledge Curation Session. No AI, no
+OCR, no repository commit, no Foundation calls anywhere in this
+module, per this work package's explicit scope.
+
+* `lib/knowledge/models/` — `KnowledgeSession`/`SessionStatus`,
+  `EngineeringProposal`/`ProposalType`/`ProposalStatus`,
+  `KnowledgeValidationException`. See `docs/KNOWLEDGE_STUDIO.md` § Session
+  Lifecycle / § Proposal Model for the full model and its deliberate
+  narrowing relative to SDD-015/017/018/020.
+* `lib/knowledge/services/knowledge_session_service.dart` — pure
+  validation (new-session name/repository, proposal name
+  uniqueness, session status transitions) and ID generation. Holds no
+  state; called by the Connection Manager, not by widgets, keeping
+  "no engineering logic shall exist inside widgets" true without
+  pushing that logic into `foundation_runtime_service.dart` itself.
+* `lib/knowledge/workspaces/knowledge_studio_page.dart` — the
+  six-panel workspace layout (Import Queue, Source Viewer, AI
+  Suggestions, Repository Matches, Engineering Review, Commit
+  Summary) plus the session header, registered as
+  `StudioDestination.knowledge` (`/knowledge`, positioned right after
+  Dashboard in the Navigation Rail). Reuses the shell's existing
+  Property Inspector rather than embedding a second copy — see
+  `docs/KNOWLEDGE_STUDIO.md` § Workspace Layout for why SDD-016's
+  seven-panel diagram maps onto six new panels plus the
+  already-existing shared one.
+* `lib/knowledge/review/` — Engineering Review panel
+  (`engineering_review_panel.dart`), proposal row
+  (`proposal_row.dart`), and the shared New/Edit Proposal dialog
+  (`proposal_form_dialog.dart`). The only panel with real
+  functionality besides the Property Inspector, per
+  STUDIO-TASK-000013's explicit scope.
+* `lib/knowledge/sessions/` — New Session dialog
+  (`new_session_dialog.dart`) and the session header
+  (`session_header.dart`, showing name/status/counts and the one
+  valid forward status-transition button plus Cancel).
+* `lib/knowledge/controllers/` — `SessionFormController`/
+  `ProposalFormController`, bundling each dialog's
+  `TextEditingController`s (and, for proposals, a `ValueNotifier<ProposalType>`)
+  so the New and Edit flows share one implementation.
+* `lib/knowledge/widgets/` — `KnowledgePanel` (shared titled/bordered
+  panel chrome) and `KnowledgePlaceholder` (compact placeholder,
+  panel-cell-sized rather than full-workspace-sized like the existing
+  `PlaceholderWorkspace`).
+* `lib/knowledge/inspector/` — `ProposalProperties`/`SessionProperties`,
+  the two new Property Inspector modes, wired into
+  `lib/shared/widgets/property_inspector_panel.dart`'s existing
+  record-pattern `switch` (now four-wide: Proposal → Object →
+  Relationship → Session → No Selection).
+* `lib/shared/widgets/property_field.dart` (new) — the label/value row
+  widget the Property Inspector's Object/Relationship modes already
+  had privately (`_Field`) was extracted to a shared, public
+  `PropertyField` so the two new Proposal/Session modes (and any
+  future mode) don't duplicate it. `lib/shared/format.dart` (new) —
+  a single `formatDateTime` helper, used by both new inspector modes,
+  since no formatting package is a dependency.
+* `lib/core/services/foundation_runtime_state.dart`/
+  `foundation_runtime_service.dart` — extended per Work Package 007's
+  explicit Architecture Rule ("The Connection Manager owns session
+  state"): `knowledgeSession`/`proposals`/`selectedProposal` added to
+  `FoundationServiceState`; `createKnowledgeSession`/
+  `advanceKnowledgeSession`/`addProposal`/`editProposal`/
+  `acceptProposal`/`rejectProposal`/`deleteProposal`/`selectProposal`/
+  `clearProposalSelection` added to `FoundationRuntimeNotifier`.
+  `selectObject`/`selectRelationship` now also clear
+  `selectedProposal` (three-way mutual exclusivity). See
+  `docs/CONNECTION_MANAGER.md` for the updated state table.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit scope: AI analysis, OCR, Import Queue
+ingestion, Source Viewer rendering, Repository Matches (duplicate
+detection), Commit Summary computation, and Repository Commit itself.
+Session persistence and Session Recovery (SDD-017: Resume/Pause/
+Archive/Duplicate/Export) are also deferred — sessions are
+process-lifetime only. See `docs/KNOWLEDGE_STUDIO.md` § Future
+Foundation Integration for the concrete extension points once the
+corresponding Public C API exists.
+
+**SDD-014 gap.** SDD-014 (Engineering Knowledge Acquisition Pipeline)
+is listed among the architecture this work package is meant to
+validate but is an empty file (0 bytes) in this repository. This did
+not block implementation — SDD-013's own Import Pipeline section
+covers the same ground at the level of detail this work package
+needed, and the stages SDD-014 would presumably detail further (OCR,
+AI Analysis) are explicitly out of scope here regardless — but it's
+flagged in `docs/KNOWLEDGE_STUDIO.md`'s introduction for whoever
+populates SDD-014 next, since a future work package implementing the
+acquisition pipeline itself will need real content there.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/                              New top-level module
+    models/
+      knowledge_session.dart
+      session_status.dart
+      engineering_proposal.dart
+      proposal_type.dart
+      proposal_status.dart
+      knowledge_validation_exception.dart
+    services/
+      knowledge_session_service.dart
+    controllers/
+      session_form_controller.dart
+      proposal_form_controller.dart
+    widgets/
+      knowledge_panel.dart
+      knowledge_placeholder.dart
+    workspaces/
+      knowledge_studio_page.dart
+    review/
+      engineering_review_panel.dart
+      proposal_row.dart
+      proposal_form_dialog.dart
+    sessions/
+      new_session_dialog.dart
+      session_header.dart
+    inspector/
+      proposal_properties.dart
+      session_properties.dart
+  shared/
+    format.dart                           New
+    widgets/
+      property_field.dart                 New
+test/
+  knowledge_session_service_test.dart      New
+docs/
+  KNOWLEDGE_STUDIO.md                      New
+```
+
+`lib/core/routing/studio_destination.dart`/`app_router.dart` gained
+the `knowledge` destination; every other pre-existing top-level
+directory (`app/`, `core/`, `features/`, `shared/`) is otherwise
+untouched — an explicit, user-confirmed scope decision (see below).
+
+### Verification
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 38/38 passing: 12 new `KnowledgeSessionService`
+  unit tests (new-session validation, proposal-name uniqueness
+  including the edit-exclusion case, and every status-transition rule
+  — forward sequence, skip-a-stage rejection, cancel-from-anywhere,
+  cancel-from-cancelled rejection, advance-from-cancelled rejection);
+  2 new widget tests (`Knowledge Studio opens with placeholder panels
+  and no active session`; a full `Knowledge Curation Session` lifecycle
+  test — create a session, add a proposal, select it, accept it —
+  driven through the real widget tree and real
+  `FoundationRuntimeNotifier`, not mocked).
+* `flutter build windows` — succeeded. No native/DLL changes (this
+  work package touches nothing under `native/` or `lib/core/foundation/` —
+  confirmed, this module makes zero Foundation Bridge calls).
+* Manual verification against the built exe: navigated to Knowledge
+  Studio via the Navigation Rail (confirmed via screenshot — all six
+  panels render with the correct titles and placeholder text, session
+  header shows "No Knowledge Curation Session" and a "New Session"
+  button). Clicking further into dialogs via simulated OS-level mouse
+  input was **not** reliably reproducible in this session (see
+  Architectural Observations) — the interactive session/proposal
+  lifecycle (session creation and its two validation failures,
+  duplicate-proposal-name validation, proposal Accept/Edit/Delete,
+  Property Inspector Proposal-mode switching, the full status
+  advancement sequence Created → Preparing → Reviewing → Ready to
+  Commit, Cancel Session, and window resizing to the 1000×700 minimum)
+  was instead verified with a temporary `integration_test` (added,
+  run, then fully removed — not part of the committed tree, mirroring
+  Work Package 006's precedent) driving the actual compiled
+  `oep_studio.exe` through Flutter's own test bindings. Every
+  assertion passed on the first corrected run; see Architectural
+  Observations for the two real bugs this caught before they shipped.
+
+### Architectural Observations
+
+* **A dialog-lifecycle bug — disposing `TextEditingController`s via
+  the `showDialog` `Future`'s completion rather than the dialog
+  `State`'s own `dispose()` — crashed the app during automated
+  testing** ("Tried to build dirty widget in the wrong build scope").
+  `showDialog<void>(...).whenComplete(formController.dispose)` disposes
+  as soon as `Navigator.pop()` is called, which is *before* the
+  dialog's exit animation finishes rebuilding the still-visible,
+  still-controller-attached `TextField`s. Fixed by moving both dialogs'
+  form controllers into `late final` fields on their own
+  `ConsumerState`, disposed in `State.dispose()` — the standard
+  Flutter pattern, which ties disposal to when the element is actually
+  torn down rather than to an unrelated `Future`. Worth remembering
+  for any future dialog that owns a controller: create and dispose it
+  inside the dialog's own `State`, never via the caller's `showDialog`
+  future.
+* **Simulated OS-level mouse clicks could not reliably open this work
+  package's own in-app `AlertDialog`s, despite pixel-exact coordinate
+  verification.** Nav-rail item clicks (computed from
+  `StudioNavRail`'s actual padding/item-height constants, cross-checked
+  against Work Package 006's now-corrected coordinate formula) worked
+  reliably and repeatably in this same session; the "New Session"
+  `OutlinedButton` — confirmed via `WindowFromPoint` to resolve to the
+  Studio window, and via pixel-scanning the screenshot to be clicked
+  dead-center on its rendered text — never opened its dialog under
+  either `SendInput`-injected or `PostMessage`-queued clicks. No
+  exception, no crash, no new window (confirmed by relaunching with
+  stdout/stderr redirected to a file — both stayed empty). This is a
+  narrower, more specific case of the same environment limitation
+  Work Package 006 hit with the native folder-picker dialog, except
+  this time it's a plain Flutter `AlertDialog`, which rules out
+  "native COM dialogs specifically don't render here" as the
+  explanation — something about this sandboxed session's synthetic
+  input specifically fails to trigger *some* button presses while
+  reliably triggering others, and the difference isn't (as far as
+  this investigation went) explained by widget type, nesting depth, or
+  screen position. Recommendation for future work packages: don't
+  re-attempt raw OS-level UI automation as the first resort — reach
+  for a temporary `integration_test` immediately, as it sidesteps this
+  class of problem entirely (see Flutter-Specific Recommendations) and
+  is dramatically faster in practice (minutes instead of the better
+  part of an hour spent here re-diagnosing a variant of Work Package
+  006's issue).
+* **The `integration_test` harness itself caught two real
+  application-layer bugs before they shipped** (beyond the dialog
+  lifecycle crash above): (1) an ambiguous `find.text(...)` finder in
+  the test matched both a Relationship-Explorer-style row and the
+  Property Inspector showing the same string, which surfaced a
+  genuine design fact worth documenting — `PropertyField` values and
+  list-row labels can legitimately collide once a selection's detail
+  view echoes fields also visible in its list row, so tests (and any
+  future scripted verification) need to disambiguate by widget
+  position, not just text content; (2) `tester.enterText` on a
+  `TextField` that had never been focused failed to update its
+  controller when called back-to-back with other fields without an
+  intervening tap — switching from index-based `find.byType(TextField).at(n)`
+  lookups to label-based lookups (`find.byWidgetPredicate` matching
+  `InputDecoration.labelText`) fixed it and is also more robust against
+  future field reordering. Neither was a defect in the shipped
+  Knowledge Studio code — both were test-authoring pitfalls — but
+  both are worth remembering verbatim next time a dialog with several
+  `TextField`s needs testing.
+* **Extending `PropertyInspectorPanel`'s record-pattern `switch` from
+  two arms to four was a direct, low-risk application of the pattern
+  Work Package 005 flagged as reusable** ("Worth reaching for again if
+  a third mutually-exclusive selection kind is ever added") — Work
+  Package 007 added a third (Proposal) *and* a fourth, non-mutually-
+  exclusive fallback (Session), and the record-pattern `switch` handled
+  both additions with no structural change, just two more tuple
+  positions and two more `case` arms.
+* **`KnowledgeSession`/`EngineeringProposal` were kept deliberately
+  smaller than SDD-015/016/017/018/020's full future models** (no
+  confidence, no evidence chain, no trust level, no revision history)
+  rather than adding fields now that nothing populates yet. This
+  mirrors the "document it, don't implement it" discipline this
+  project has applied to missing Foundation API surface since Work
+  Package 004, extended here to missing *future Studio* surface (AI
+  analysis, repository matching) that this work package explicitly
+  scopes out — the fields will have an obvious, evidence-driven shape
+  to add once the code that would actually populate them exists,
+  rather than guessing that shape now.
+* **The `lib/knowledge/` top-level module structure (with its eight
+  subdirectories) was specified directly by the user, separately from
+  `WORK_PACKAGE_007.md` itself**, which says nothing about directory
+  layout. The user's original message also sketched a full `lib/`
+  reorganization (flattening `core/foundation` → `bridge/`,
+  `core/services` → `connection/`, every `features/*` module to
+  top-level); asked for clarification before touching anything, and
+  the user confirmed: add only `lib/knowledge/`, leave `app/`, `core/`,
+  `features/`, and `shared/` exactly as they are, treating the fuller
+  reorganization as "a long-term architectural target, not a
+  requirement for WP007." Recorded here since it's a scope decision a
+  future reader of this codebase's directory layout might otherwise
+  wonder about.
+
+### Flutter-Specific Recommendations
+
+* **Reach for a temporary `integration_test` before spending
+  significant time on OS-level UI automation.** Add
+  `integration_test: {sdk: flutter}` to `dev_dependencies`, write the
+  test under `integration_test/`, run with `flutter test
+  integration_test/foo_test.dart -d windows`, then remove both the
+  file and the dependency (`flutter pub get` to regenerate a clean
+  `pubspec.lock`) once verification is complete — this repository's
+  convention is interactive/screenshot verification, not a committed
+  integration-test suite, so treat it as a diagnostic tool, not a
+  deliverable. It runs the real compiled app with real FFI/plugin code
+  (nothing mocked) but drives it via `WidgetTester`, which never posts
+  an OS window message — immune to focus-stealing, coordinate
+  miscalculation, and whatever this session's click-delivery
+  inconsistency actually was.
+* **Own dialog form controllers in the dialog's `State`, not in the
+  caller.** See the dialog-lifecycle bug above — this is a general
+  Flutter rule, not specific to this work package, but this is the
+  first place in this codebase a dialog needed its own
+  `TextEditingController`s (`dashboard_page.dart`'s and
+  `search_page.dart`'s controllers are owned by a persistent page
+  `State`, not a transient dialog), so the pitfall hadn't come up
+  before.
+* **`find.byWidgetPredicate` matching `InputDecoration.labelText`** is
+  a more robust way to locate a specific `TextField` in a multi-field
+  form than positional `find.byType(TextField).at(n)` — worth using by
+  default for any future dialog test with more than one text field.

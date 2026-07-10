@@ -1,5 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../knowledge/models/engineering_proposal.dart';
+import '../../knowledge/models/knowledge_session.dart';
+import '../../knowledge/models/knowledge_validation_exception.dart';
+import '../../knowledge/models/proposal_status.dart';
+import '../../knowledge/models/proposal_type.dart';
+import '../../knowledge/models/session_status.dart';
+import '../../knowledge/services/knowledge_session_service.dart';
 import '../foundation/foundation_bridge.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
@@ -9,13 +16,18 @@ import '../models/relationship_summary.dart';
 import '../models/search_scope.dart';
 import 'foundation_runtime_state.dart';
 
-/// The Studio Connection Manager (Work Packages 002-006). Owns Current
+/// The Studio Connection Manager (Work Packages 002-007). Owns Current
 /// Runtime, Current Repository, Repository Statistics, Current Object
-/// List, Current Relationship List, Current Search Query/Results, and
-/// Current Selection — see `docs/CONNECTION_MANAGER.md`. This is the
-/// only place in Studio that holds a [FoundationBridge] instance; every
-/// feature reaches Foundation through this provider, never through the
-/// Bridge directly.
+/// List, Current Relationship List, Current Search Query/Results,
+/// Current Knowledge Curation Session (Work Package 007), and Current
+/// Selection — see `docs/CONNECTION_MANAGER.md`. This is the only place
+/// in Studio that holds a [FoundationBridge] instance; every feature
+/// reaches Foundation through this provider, never through the Bridge
+/// directly. Knowledge Curation Session/proposal state is Studio-only
+/// (Work Package 007: "No Foundation modifications occur") but is still
+/// owned here rather than in a separate service, per that work
+/// package's Architecture Rules ("The Connection Manager owns session
+/// state").
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   FoundationBridge? _bridge;
 
@@ -181,11 +193,13 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Selects an Object Explorer row, switching the Property Inspector to
-  /// Object mode. Clears any Relationship selection — the two are
-  /// mutually exclusive (Work Package 005: "The Property Inspector shall
-  /// automatically switch between Object mode and Relationship mode").
+  /// Object mode. Clears any Relationship/Proposal selection — Object,
+  /// Relationship, and Proposal selection are mutually exclusive (Work
+  /// Package 005: "The Property Inspector shall automatically switch
+  /// between Object mode and Relationship mode"; Work Package 007 adds
+  /// Proposal mode to that same rule).
   void selectObject(EngineeringObjectSummary object) {
-    state = state.copyWith(selectedObject: object, clearSelectedRelationship: true);
+    state = state.copyWith(selectedObject: object, clearSelectedRelationship: true, clearSelectedProposal: true);
   }
 
   /// Clears the current object selection (Property Inspector reverts to
@@ -195,9 +209,14 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Selects a Relationship Explorer row, switching the Property
-  /// Inspector to Relationship mode. Clears any Object selection.
+  /// Inspector to Relationship mode. Clears any Object/Proposal
+  /// selection.
   void selectRelationship(RelationshipSummary relationship) {
-    state = state.copyWith(selectedRelationship: relationship, clearSelectedObject: true);
+    state = state.copyWith(
+      selectedRelationship: relationship,
+      clearSelectedObject: true,
+      clearSelectedProposal: true,
+    );
   }
 
   /// Clears the current relationship selection.
@@ -238,6 +257,139 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Clears the Current Search Query and Results.
   void clearSearch() {
     state = state.copyWith(searchQuery: '', clearSearchResults: true);
+  }
+
+  /// Creates a new Knowledge Curation Session (Work Package 007,
+  /// STUDIO-TASK-000014), replacing any existing one — sessions are
+  /// Studio-only and entirely in-memory, so there is nothing to persist
+  /// or close server-side. Throws [KnowledgeValidationException] for an
+  /// invalid name or missing repository, per this work package's Error
+  /// Handling rule.
+  void createKnowledgeSession({
+    required String name,
+    required String repositoryName,
+    required String author,
+    String description = '',
+  }) {
+    KnowledgeSessionService.validateNewSession(name: name, repositoryName: repositoryName);
+    state = state.copyWith(
+      knowledgeSession: KnowledgeSession(
+        id: KnowledgeSessionService.generateId('session'),
+        name: name.trim(),
+        repositoryName: repositoryName.trim(),
+        author: author.trim(),
+        description: description.trim(),
+        createdTime: DateTime.now(),
+      ),
+      proposals: const [],
+      clearSelectedProposal: true,
+    );
+  }
+
+  /// Advances or cancels the current session's status, per the Session
+  /// Workflow (Created → Preparing → Reviewing → Ready to Commit, or →
+  /// Cancelled). Throws [KnowledgeValidationException] for an invalid
+  /// transition (see `KnowledgeSessionService.validateStatusTransition`).
+  /// A no-op if no session exists.
+  void advanceKnowledgeSession(SessionStatus to) {
+    final session = state.knowledgeSession;
+    if (session == null) return;
+    KnowledgeSessionService.validateStatusTransition(session.status, to);
+    state = state.copyWith(knowledgeSession: session.copyWith(status: to));
+  }
+
+  /// Creates a new manual Engineering Review proposal (Work Package
+  /// 007: "The engineer shall be able to create manual proposals").
+  /// Throws [KnowledgeValidationException] if no session exists yet, or
+  /// for an empty/duplicate name.
+  void addProposal({required ProposalType type, required String name, String description = ''}) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create a Knowledge Curation Session before adding proposals.');
+    }
+    KnowledgeSessionService.validateProposalName(name, state.proposals);
+    final proposal = EngineeringProposal(
+      id: KnowledgeSessionService.generateId('proposal'),
+      type: type,
+      name: name.trim(),
+      description: description.trim(),
+      createdTime: DateTime.now(),
+    );
+    state = state.copyWith(proposals: [...state.proposals, proposal]);
+  }
+
+  /// Edits an existing proposal's type/name/description. Throws
+  /// [KnowledgeValidationException] for an empty or duplicate name
+  /// (excluding the proposal being edited from that check).
+  void editProposal(String proposalId, {ProposalType? type, String? name, String? description}) {
+    if (name != null) {
+      KnowledgeSessionService.validateProposalName(name, state.proposals, excludingId: proposalId);
+    }
+    EngineeringProposal? updated;
+    final proposals = <EngineeringProposal>[];
+    for (final proposal in state.proposals) {
+      if (proposal.id == proposalId) {
+        updated = proposal.copyWith(
+          type: type,
+          name: name?.trim(),
+          description: description?.trim(),
+          modifiedTime: DateTime.now(),
+        );
+        proposals.add(updated);
+      } else {
+        proposals.add(proposal);
+      }
+    }
+    state = state.copyWith(
+      proposals: proposals,
+      selectedProposal: state.selectedProposal?.id == proposalId ? updated : null,
+    );
+  }
+
+  /// Accepts a proposal (Work Package 007 Engineering Review: Accept).
+  void acceptProposal(String proposalId) => _setProposalStatus(proposalId, ProposalStatus.accepted);
+
+  /// Rejects a proposal (Work Package 007 Engineering Review: Reject).
+  void rejectProposal(String proposalId) => _setProposalStatus(proposalId, ProposalStatus.rejected);
+
+  void _setProposalStatus(String proposalId, ProposalStatus status) {
+    EngineeringProposal? updated;
+    final proposals = <EngineeringProposal>[];
+    for (final proposal in state.proposals) {
+      if (proposal.id == proposalId) {
+        updated = proposal.copyWith(status: status, modifiedTime: DateTime.now());
+        proposals.add(updated);
+      } else {
+        proposals.add(proposal);
+      }
+    }
+    state = state.copyWith(
+      proposals: proposals,
+      selectedProposal: state.selectedProposal?.id == proposalId ? updated : null,
+    );
+  }
+
+  /// Deletes a proposal (Work Package 007 Engineering Review: Delete).
+  void deleteProposal(String proposalId) {
+    state = state.copyWith(
+      proposals: state.proposals.where((proposal) => proposal.id != proposalId).toList(),
+      clearSelectedProposal: state.selectedProposal?.id == proposalId,
+    );
+  }
+
+  /// Selects an Engineering Review proposal, switching the Property
+  /// Inspector to Proposal mode. Clears any Object/Relationship
+  /// selection.
+  void selectProposal(EngineeringProposal proposal) {
+    state = state.copyWith(
+      selectedProposal: proposal,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+    );
+  }
+
+  /// Clears the current proposal selection.
+  void clearProposalSelection() {
+    state = state.copyWith(clearSelectedProposal: true);
   }
 
   void _disposeBridge() {

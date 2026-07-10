@@ -10,6 +10,7 @@ import '../../features/repository/repository_page.dart';
 import '../../features/search/search_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/validation/validation_page.dart';
+import '../../knowledge/workspaces/knowledge_studio_page.dart';
 import 'studio_destination.dart';
 
 /// Studio's route table (SDD-003 Navigation Framework).
@@ -32,6 +33,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: StudioDestination.dashboard.path,
           builder: (context, state) => const DashboardPage(),
+        ),
+        GoRoute(
+          path: StudioDestination.knowledge.path,
+          builder: (context, state) => const KnowledgeStudioPage(),
         ),
         GoRoute(
           path: StudioDestination.repository.path,

@@ -112,4 +112,105 @@ void main() {
 
     expect(find.text('No Repository Open'), findsOneWidget);
   });
+
+  testWidgets('Knowledge Studio opens with placeholder panels and no active session', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: StudioApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Knowledge Studio').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('No Knowledge Curation Session'), findsOneWidget);
+    expect(find.text('Import Queue'), findsOneWidget);
+    expect(find.text('Source Viewer'), findsOneWidget);
+    expect(find.text('AI Suggestions'), findsOneWidget);
+    expect(find.text('Repository Matches'), findsOneWidget);
+    expect(find.text('Engineering Review'), findsOneWidget);
+    expect(find.text('Commit Summary'), findsOneWidget);
+    // Knowledge Studio is Studio-only — it never requires a live
+    // Foundation repository to be open (Work Package 007).
+    expect(find.text('No Repository Open'), findsNothing);
+  });
+
+  testWidgets('Knowledge Curation Session: create a session, add a proposal, accept it', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: StudioApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Knowledge Studio').first);
+    await tester.pumpAndSettle();
+
+    // Create a session.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'New Session'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(findFieldLabeled('Session Name'), 'Timing Chain Manual Import');
+    await tester.pump();
+    await tester.enterText(findFieldLabeled('Repository'), 'demo-repo');
+    await tester.pump();
+    await tester.enterText(findFieldLabeled('Author'), 'jsmith');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Create Session'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byType(AlertDialog),
+      findsNothing,
+      reason: 'the New Session dialog should have closed after a valid submission',
+    );
+    // Appears in both the session header and the Property Inspector's
+    // Session mode (no proposal/object/relationship selected yet).
+    expect(find.text('Timing Chain Manual Import'), findsNWidgets(2));
+    expect(find.text('Created'), findsWidgets);
+    expect(find.text('No Knowledge Curation Session'), findsNothing);
+
+    // Add a manual proposal.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'New Proposal'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(findFieldLabeled('Name'), 'Timing Chain Cover');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Add Proposal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Timing Chain Cover'), findsOneWidget);
+    expect(find.text('Pending'), findsOneWidget);
+
+    // Selecting the proposal updates the Property Inspector.
+    await tester.tap(find.text('Timing Chain Cover'));
+    await tester.pumpAndSettle();
+    expect(find.text('Proposal ID'), findsOneWidget);
+
+    // Accept it — the status badge (Engineering Review) and the
+    // Property Inspector's Proposal mode (still showing this same,
+    // now-updated proposal) both read "Accepted".
+    await tester.tap(find.widgetWithTooltip('Accept'));
+    await tester.pumpAndSettle();
+    expect(find.text('Accepted'), findsNWidgets(2));
+    expect(find.text('Pending'), findsNothing);
+  });
+}
+
+extension on CommonFinders {
+  Finder widgetWithTooltip(String tooltip) =>
+      find.byWidgetPredicate((widget) => widget is IconButton && widget.tooltip == tooltip);
+}
+
+/// Finds a `TextField` by its `InputDecoration.labelText`, avoiding
+/// positional-index ambiguity across a dialog's several fields.
+Finder findFieldLabeled(String label) {
+  return find.byWidgetPredicate((widget) => widget is TextField && widget.decoration?.labelText == label);
 }
