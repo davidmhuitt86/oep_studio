@@ -9,19 +9,21 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–005 are implemented: Application Shell + Dashboard,
+Work Packages 001–006 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
-/ Object Explorer / Property Inspector / Connection Manager (all
-backed by **live** Foundation data since Work Package 004 — real
-repository statistics and Engineering Object enumeration via
-`oep_api.h`), and — as of Work Package 005 — the Relationship Explorer
-and Search Workspace. The Public C API doesn't yet expose relationship
-enumeration or repository search, so both of those honestly report
-themselves as unavailable rather than showing placeholder or
-misleading data — see `docs/CONNECTION_MANAGER.md` § Missing Public
-API and `docs/SEARCH_WORKSPACE.md`. `docs/IMPLEMENTATION_STATUS.md`
+/ Object Explorer / Property Inspector / Connection Manager, and the
+Relationship Explorer / Search Workspace — all backed by **live**
+Foundation data (Engineering Object enumeration and statistics since
+Work Package 004; Engineering Relationship enumeration and repository
+search since Work Package 006's consumption of Foundation Work Package
+013's `oep_api.h` surface). The Relationship Explorer shows every
+relationship in the open repository with sort/filter and "Go To
+Source"/"Go To Target" navigation; the Search Workspace performs live
+Repository/Object/Relationship search against Foundation's Search
+Engine, in Foundation's own result order. `docs/IMPLEMENTATION_STATUS.md`
 has the full picture of what exists today and what is still a
-placeholder.
+placeholder (repository/object/relationship creation, editing, and
+deletion remain entirely unexposed).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail

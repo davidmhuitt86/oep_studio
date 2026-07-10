@@ -34,3 +34,15 @@ EXPORTS
     oep_object_store_list
     oep_object_list_release
     oep_runtime_get_repository_statistics
+    oep_relationship_type_to_string
+    oep_relationship_store_get_count
+    oep_relationship_store_get_by_id
+    oep_relationship_store_list
+    oep_relationship_list_release
+    oep_match_location_to_string
+    oep_search_repository
+    oep_repository_search_result_release
+    oep_search_objects
+    oep_object_search_result_list_release
+    oep_search_relationships
+    oep_relationship_search_result_list_release

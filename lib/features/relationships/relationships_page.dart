@@ -7,19 +7,19 @@ import '../../core/routing/studio_destination.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
 import '../../core/theme/studio_theme.dart';
+import '../../shared/navigation/explorer_navigation.dart';
 import 'relationship_list_query.dart';
 
-/// The Relationship Explorer (STUDIO-TASK-000009): visibility into the
-/// relationships connecting Engineering Objects, read-only. Consumes
-/// only the Connection Manager (`foundationRuntimeServiceProvider`) —
-/// never the Foundation Bridge directly.
+/// The Relationship Explorer (STUDIO-TASK-000009/000011): visibility
+/// into the relationships connecting Engineering Objects, read-only.
+/// Consumes only the Connection Manager (`foundationRuntimeServiceProvider`)
+/// — never the Foundation Bridge directly.
 ///
-/// The relationship list is always empty in this work package: the
-/// Public C API does not yet expose relationship enumeration (see
-/// `docs/CONNECTION_MANAGER.md` § Missing Public API). Sorting and
-/// filtering are fully implemented and unit-tested
-/// (`test/relationship_list_query_test.dart`) against synthetic data
-/// ahead of that API existing — only the real data source is missing.
+/// Backed by live Foundation data since Work Package 006
+/// (`FoundationServiceState.relationshipList`, populated via
+/// `oep_relationship_store_list`). Sorting and filtering
+/// (`RelationshipListQuery`) are applied client-side to whatever
+/// Foundation returned — Studio never re-sorts the raw list itself.
 class RelationshipsPage extends ConsumerStatefulWidget {
   const RelationshipsPage({super.key});
 
@@ -60,24 +60,38 @@ class _RelationshipsPageState extends ConsumerState<RelationshipsPage> {
       );
     }
 
-    // Foundation cannot enumerate relationships yet (no such Public C
-    // API function exists) — the list is always empty, but sort/filter
-    // still runs so the pipeline is exercised and testable end to end.
-    const List<RelationshipSummary> relationships = [];
-    final visibleRelationships = _query.apply(relationships);
+    final relationships = foundation.relationshipList;
+    final visibleRelationships = relationships == null ? null : _query.apply(relationships);
+    final selectedRelationship = foundation.selectedRelationship;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
           child: Row(
             children: [
-              Icon(Icons.hub_outlined, size: 18, color: StudioColors.selection),
-              SizedBox(width: 10),
-              Text(
+              const Icon(Icons.hub_outlined, size: 18, color: StudioColors.selection),
+              const SizedBox(width: 10),
+              const Text(
                 'Relationships',
                 style: TextStyle(color: StudioColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: selectedRelationship == null
+                    ? null
+                    : () => goToObject(context, ref, selectedRelationship.sourceObjectId),
+                icon: const Icon(Icons.north_east, size: 14),
+                label: const Text('Go To Source'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: selectedRelationship == null
+                    ? null
+                    : () => goToObject(context, ref, selectedRelationship.targetObjectId),
+                icon: const Icon(Icons.south_east, size: 14),
+                label: const Text('Go To Target'),
               ),
             ],
           ),
@@ -172,21 +186,38 @@ class _RelationshipsPageState extends ConsumerState<RelationshipsPage> {
         const _RelationshipListHeader(),
         const Divider(height: 1),
         Expanded(
-          child: visibleRelationships.isEmpty
-              ? const _NoRelationshipsFound()
-              : ListView.builder(
-                  itemCount: visibleRelationships.length,
-                  itemBuilder: (context, index) {
-                    final relationship = visibleRelationships[index];
-                    return _RelationshipRow(
-                      relationship: relationship,
-                      onTap: () =>
-                          ref.read(foundationRuntimeServiceProvider.notifier).selectRelationship(relationship),
-                    );
-                  },
-                ),
+          child: switch (visibleRelationships) {
+            null => const _RelationshipsCouldNotBeLoaded(),
+            [] => const _NoRelationshipsFound(),
+            final relationships => ListView.builder(
+              itemCount: relationships.length,
+              itemBuilder: (context, index) {
+                final relationship = relationships[index];
+                return _RelationshipRow(
+                  relationship: relationship,
+                  onTap: () => ref.read(foundationRuntimeServiceProvider.notifier).selectRelationship(relationship),
+                  onDoubleTapSource: () => goToObject(context, ref, relationship.sourceObjectId),
+                  onDoubleTapTarget: () => goToObject(context, ref, relationship.targetObjectId),
+                );
+              },
+            ),
+          },
         ),
       ],
+    );
+  }
+}
+
+class _RelationshipsCouldNotBeLoaded extends StatelessWidget {
+  const _RelationshipsCouldNotBeLoaded();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Text(
+        'Relationships couldn\'t be loaded for this repository.',
+        style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+      ),
     );
   }
 }
@@ -245,10 +276,21 @@ class _RelationshipListHeader extends StatelessWidget {
 }
 
 class _RelationshipRow extends StatelessWidget {
-  const _RelationshipRow({required this.relationship, required this.onTap});
+  const _RelationshipRow({
+    required this.relationship,
+    required this.onTap,
+    required this.onDoubleTapSource,
+    required this.onDoubleTapTarget,
+  });
 
   final RelationshipSummary relationship;
   final VoidCallback onTap;
+
+  /// Double-clicking the Source cell navigates to the Source Object
+  /// (STUDIO-TASK-000011 "Relationship Navigation") — the same
+  /// destination as the "Go To Source" toolbar button.
+  final VoidCallback onDoubleTapSource;
+  final VoidCallback onDoubleTapTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -270,16 +312,22 @@ class _RelationshipRow extends StatelessWidget {
               ),
               Expanded(
                 flex: 3,
-                child: Text(
-                  relationship.sourceObjectName,
-                  style: StudioTheme.monoTextStyle,
+                child: InkWell(
+                  onDoubleTap: onDoubleTapSource,
+                  child: Text(
+                    relationship.sourceObjectName,
+                    style: StudioTheme.monoTextStyle,
+                  ),
                 ),
               ),
               Expanded(
                 flex: 3,
-                child: Text(
-                  relationship.targetObjectName,
-                  style: StudioTheme.monoTextStyle,
+                child: InkWell(
+                  onDoubleTap: onDoubleTapTarget,
+                  child: Text(
+                    relationship.targetObjectName,
+                    style: StudioTheme.monoTextStyle,
+                  ),
                 ),
               ),
               Expanded(

@@ -1,21 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/foundation/foundation_bridge_exception.dart';
+import '../../core/models/search_result.dart';
+import '../../core/models/search_scope.dart';
+import '../../core/routing/studio_destination.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../../core/theme/studio_theme.dart';
+import '../../shared/navigation/explorer_navigation.dart';
+import '../dashboard/dashboard_page.dart' show showFoundationErrorDialog;
 
-/// The Search Workspace (STUDIO-TASK-000010): live repository search
-/// against Foundation's Search Engine. Consumes only the Connection
-/// Manager (`foundationRuntimeServiceProvider`) — never the Foundation
-/// Bridge or Public C API directly. Studio never performs searching
-/// independently and never reorders Foundation's results.
+/// The Search Workspace (STUDIO-TASK-000010/000012): live repository
+/// search against Foundation's Search Engine. Consumes only the
+/// Connection Manager (`foundationRuntimeServiceProvider`) — never the
+/// Foundation Bridge or Public C API directly. Studio never performs
+/// searching independently and never reorders Foundation's results.
 ///
-/// The Public C API exposes no search function yet (see
-/// `docs/SEARCH_WORKSPACE.md` and `docs/CONNECTION_MANAGER.md` §
-/// Missing Public API), so every search honestly reports itself as
-/// unavailable rather than silently claiming "no results" — those are
-/// different facts, and Work Package 005's error handling rule requires
-/// a professional message, not a misleading empty state.
+/// Backed by live Foundation data since Work Package 006
+/// (`oep_search_repository`/`oep_search_objects`/`oep_search_relationships`).
+/// A failed search shows a professional error dialog (Work Package 006's
+/// error handling rule) rather than a silent empty state — distinct from
+/// a search that succeeds with zero matches, which is an honest "no
+/// results" panel.
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -25,8 +33,9 @@ class SearchPage extends ConsumerStatefulWidget {
 
 class _SearchPageState extends ConsumerState<SearchPage> {
   final _controller = TextEditingController();
+  SearchScope _scope = SearchScope.repository;
 
-  /// Search History (Work Package 005): in-memory only, most-recent
+  /// Search History (Work Package 005/006): in-memory only, most-recent
   /// first, never persisted between sessions.
   final List<String> _history = [];
 
@@ -36,10 +45,16 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     super.dispose();
   }
 
-  void _runSearch(String query) {
+  Future<void> _runSearch(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return;
-    ref.read(foundationRuntimeServiceProvider.notifier).search(trimmed);
+    try {
+      ref.read(foundationRuntimeServiceProvider.notifier).search(trimmed, scope: _scope);
+    } on FoundationBridgeException catch (error) {
+      if (!mounted) return;
+      await showFoundationErrorDialog(context, title: 'Couldn\'t Search', error: error);
+      return;
+    }
     setState(() {
       _history.remove(trimmed);
       _history.insert(0, trimmed);
@@ -51,10 +66,47 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     ref.read(foundationRuntimeServiceProvider.notifier).clearSearch();
   }
 
+  void _selectResult(SearchResult result) {
+    switch (result.kind) {
+      case SearchResultKind.object:
+        goToObject(context, ref, result.id);
+      case SearchResultKind.relationship:
+        goToRelationship(context, ref, result.id);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
+
+    if (!foundation.isRepositoryOpen) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.search_outlined, size: 48, color: StudioColors.textDisabled),
+            const SizedBox(height: 16),
+            const Text(
+              'No Repository Open',
+              style: TextStyle(color: StudioColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Open a repository from the Dashboard to search it.',
+              style: TextStyle(color: StudioColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => context.go(StudioDestination.dashboard.path),
+              child: const Text('Open Repository'),
+            ),
+          ],
+        ),
+      );
+    }
+
     final hasSearched = foundation.searchQuery.isNotEmpty;
+    final results = foundation.searchResults;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,6 +148,24 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               const SizedBox(width: 12),
               SizedBox(
                 height: 36,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<SearchScope>(
+                    value: _scope,
+                    dropdownColor: StudioColors.surfaceRaised,
+                    style: const TextStyle(fontSize: 12, color: StudioColors.textPrimary),
+                    items: [
+                      for (final scope in SearchScope.values)
+                        DropdownMenuItem(value: scope, child: Text('Search: ${scope.label}')),
+                    ],
+                    onChanged: (scope) {
+                      if (scope != null) setState(() => _scope = scope);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 36,
                 child: ElevatedButton(
                   onPressed: () => _runSearch(_controller.text),
                   child: const Text('Search'),
@@ -118,9 +188,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: hasSearched
-                    ? _SearchUnavailable(query: foundation.searchQuery)
-                    : const _SearchIdle(),
+                child: !hasSearched
+                    ? const _SearchIdle()
+                    : switch (results) {
+                        null => const _SearchIdle(),
+                        [] => _SearchNoResults(query: foundation.searchQuery),
+                        final results => _SearchResultsList(results: results, onSelect: _selectResult),
+                      },
               ),
               _SearchHistoryPanel(
                 history: _history,
@@ -164,8 +238,8 @@ class _SearchIdle extends StatelessWidget {
   }
 }
 
-class _SearchUnavailable extends StatelessWidget {
-  const _SearchUnavailable({required this.query});
+class _SearchNoResults extends StatelessWidget {
+  const _SearchNoResults({required this.query});
 
   final String query;
 
@@ -180,17 +254,112 @@ class _SearchUnavailable extends StatelessWidget {
             const Icon(Icons.search_off_outlined, size: 40, color: StudioColors.textDisabled),
             const SizedBox(height: 16),
             Text(
-              'Couldn\'t search for "$query"',
+              'No results for "$query"',
               textAlign: TextAlign.center,
               style: const TextStyle(color: StudioColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Live repository search isn\'t available in this version of Studio yet.',
+              'Try a different search term or search scope.',
               textAlign: TextAlign.center,
               style: TextStyle(color: StudioColors.textSecondary, fontSize: 12, height: 1.4),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchResultsList extends StatelessWidget {
+  const _SearchResultsList({required this.results, required this.onSelect});
+
+  final List<SearchResult> results;
+  final ValueChanged<SearchResult> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SearchResultsHeader(),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.builder(
+            itemCount: results.length,
+            itemBuilder: (context, index) {
+              final result = results[index];
+              return _SearchResultRow(result: result, onTap: () => onSelect(result));
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchResultsHeader extends StatelessWidget {
+  const _SearchResultsHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(color: StudioColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600);
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(width: 24),
+          Expanded(flex: 3, child: Text('Name', style: style)),
+          Expanded(flex: 2, child: Text('Type', style: style)),
+          Expanded(flex: 1, child: Text('Score', style: style)),
+          Expanded(flex: 2, child: Text('Match Location', style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchResultRow extends StatelessWidget {
+  const _SearchResultRow({required this.result, required this.onTap});
+
+  final SearchResult result;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(width: 24, child: Icon(result.icon, size: 15, color: StudioColors.textSecondary)),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  result.name,
+                  style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(result.typeLabel, style: const TextStyle(color: StudioColors.textSecondary, fontSize: 12)),
+              ),
+              Expanded(
+                flex: 1,
+                child: Text(result.matchScore.toStringAsFixed(2), style: StudioTheme.monoTextStyle),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  result.matchLocation.label,
+                  style: const TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

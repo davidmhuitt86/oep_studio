@@ -831,3 +831,304 @@ docs/
   generic `ListQuery<T>` could reduce duplication if a fourth
   sortable/filterable list ever appears in Studio. Not done here to
   avoid a premature abstraction over just two instances.
+
+---
+
+## Work Package 006 — Live Relationship Explorer, Live Search Workspace
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000011 — Live Relationship Explorer — Complete
+* STUDIO-TASK-000012 — Live Search Workspace — Complete
+
+### What Exists
+
+Foundation Work Package 013 added Engineering Relationship Enumeration
+and Repository Search to `oep_api.h` (`OEP_API_VERSION` 2 → 3) between
+Work Packages 005 and 006, resolving both gaps Work Package 005 had
+documented in `docs/CONNECTION_MANAGER.md` § Missing Public API. This
+work package consumed that surface with no Foundation changes:
+
+* `native/foundation_bridge/oep_foundation_bridge.def` — 12 new
+  exports (`oep_relationship_type_to_string`,
+  `oep_relationship_store_get_count/get_by_id/list`,
+  `oep_relationship_list_release`, `oep_match_location_to_string`,
+  `oep_search_repository`, `oep_repository_search_result_release`,
+  `oep_search_objects`, `oep_object_search_result_list_release`,
+  `oep_search_relationships`, `oep_relationship_search_result_list_release`),
+  verified with `dumpbin /EXPORTS` — 32 symbols total (see §
+  Verification).
+* `lib/core/foundation/oep_api_native_types.dart`/`oep_api_bindings.dart` —
+  native structs and bindings for all 12 functions, including
+  `OepRepositorySearchResultNative`, which flattens
+  `oep_repository_search_result_t`'s two nested list structs into four
+  top-level fields rather than nesting struct-typed fields (see
+  `docs/FOUNDATION_BRIDGE.md` § Extension (Work Package 006) for why).
+* `lib/core/foundation/foundation_bridge.dart` — `getRelationshipCount`,
+  `getRelationshipById`, `listRelationships`, `searchObjects`,
+  `searchRelationships`, `searchRepository`.
+* `lib/core/models/relationship_type.dart` — gained `nativeValue` +
+  `fromNative` (declaration order already matched
+  `oep_relationship_type_t`'s, anticipated in Work Package 005).
+* `lib/core/models/relationship_summary.dart` — gained `sourceObjectId`/
+  `targetObjectId` and a `fromNative` factory that resolves
+  `sourceObjectName`/`targetObjectName` against a caller-supplied
+  `objectNamesById` map (built from the Current Object List), falling
+  back to the raw ID if not found.
+* `lib/core/models/search_result.dart` — `SearchMatchLocation` gained
+  `nativeValue`/`fromNative`/`label`; `SearchResult` gained
+  `fromNativeObject`/`fromNativeRelationship` factories (the latter
+  builds `name` as `"$sourceName → $targetName"`, since Foundation's
+  relationship search hits carry no display name of their own, unlike
+  object hits' `display_name`).
+* `lib/core/models/search_scope.dart` (new) — `SearchScope`
+  (repository/objects/relationships), Search Workspace presentation
+  state (like Search History, not part of the Connection Manager).
+* `lib/shared/navigation/explorer_navigation.dart` (new) —
+  `goToObject`/`goToRelationship`: look an ID up in the Current
+  Object/Relationship List, select it, and navigate — shared by the
+  Relationship Explorer's "Go To Source"/"Go To Target" and the Search
+  Workspace's result selection (STUDIO-TASK-000011's Relationship
+  Navigation and STUDIO-TASK-000012's Selection Lifecycle turned out to
+  need the identical three-step sequence).
+* `lib/core/services/foundation_runtime_state.dart`/`foundation_runtime_service.dart` —
+  `relationshipList` (Current Relationship List) added, fetched after
+  `objectList` in `_refreshRepositoryData` (so relationship name
+  resolution has the freshest object list) and cleared on
+  open/close alongside the existing fields; `search()` now calls
+  Foundation for real and only mutates state on success, rethrowing on
+  failure instead of degrading silently (see § Error Handling in
+  `docs/CONNECTION_MANAGER.md`).
+* `lib/features/relationships/relationships_page.dart` — live
+  `relationshipList` replaces the always-empty placeholder; a
+  three-way `switch` (`null`/`[]`/populated) distinguishes "couldn't be
+  loaded" from "genuinely empty" from populated, mirroring
+  `ObjectsPage`'s Work Package 004 pattern; "Go To Source"/"Go To
+  Target" buttons (enabled only when a relationship is selected) plus
+  per-cell double-tap on the Source/Target columns, both via
+  `goToObject`.
+* `lib/features/search/search_page.dart` — a scope dropdown
+  (Repository/Objects/Relationships); live results rendered as an
+  Icon/Name/Type/Score/Match Location table; a "No Repository Open"
+  gate (`oep_search_*` is only valid from `RepositoryOpen`); selecting
+  a result calls `goToObject`/`goToRelationship`; search failures show
+  `showFoundationErrorDialog` (reused from `dashboard_page.dart`)
+  instead of the Work Package 005 "unavailable" message, which no
+  longer applies now that search is live.
+* Property Inspector — unchanged; Work Package 005 already implemented
+  Object/Relationship mode switching generically enough that live data
+  required no further change.
+
+### What Is Explicitly Not Implemented
+
+Repository/object/relationship **creation, editing, and deletion**
+remain entirely unexposed — every work package through 006 has been
+read-only by design. `oep_object_store_get_by_id`,
+`oep_relationship_store_get_by_id`, `oep_relationship_type_to_string`,
+and `oep_match_location_to_string` are bound but unused (see
+`docs/CONNECTION_MANAGER.md` § Missing Public API for why).
+
+### Repository Structure Additions
+
+```
+lib/
+  core/
+    models/
+      search_scope.dart              New
+  shared/
+    navigation/
+      explorer_navigation.dart       New
+```
+
+Everything else this work package touched (`oep_foundation_bridge.def`,
+`oep_api_native_types.dart`, `oep_api_bindings.dart`,
+`foundation_bridge.dart`, `relationship_type.dart`,
+`relationship_summary.dart`, `search_result.dart`,
+`foundation_runtime_state.dart`, `foundation_runtime_service.dart`,
+`relationships_page.dart`, `search_page.dart`) was rewritten in place —
+no other new files.
+
+### Verification
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 24/24 passing: `relationship_list_query_test.dart`
+  updated for `RelationshipSummary`'s two new required fields
+  (`sourceObjectId`/`targetObjectId`); `widget_test.dart`'s Search
+  Workspace test rewritten from "runs a search and reports it
+  unavailable" (Work Package 005's behavior) to "shows No Repository
+  Open when disconnected" (Work Package 006's behavior — `flutter
+  test`'s environment never has a real repository open, so the
+  live-search UI itself isn't exercised by this suite; see below for
+  how it was actually verified).
+* `flutter build windows` — succeeded. `dumpbin /EXPORTS` on the built
+  `oep_foundation_bridge.dll` confirmed all 32 expected symbols present
+  (20 from Work Packages 002/004 plus the 12 new ones); four
+  release-function RVAs collapse to the same address, which is MSVC's
+  identical-code-folding linker optimization for byte-identical
+  function bodies (all four release functions reduce to "if non-null,
+  delete the array, zero the two fields" over structurally identical
+  `{pointer; int32;}` shapes), not a build defect.
+* **Manual verification method.** The Dashboard's "Open Repository"
+  button (`file_selector`'s native Windows folder-picker dialog) did
+  not appear under this session's simulated OS-level mouse input,
+  despite extensive troubleshooting: nav-rail taps were confirmed
+  reliable via both `PostMessage`-queued and `SendInput`-injected
+  clicks once coordinates were derived from the actual widget layout
+  (`StudioNavRail`'s padding/item-height arithmetic) rather than
+  estimated from screenshots; the "Open Repository"/"Go to Repository
+  Explorer" button's position was independently confirmed
+  pixel-exact by scanning the built screenshot for
+  `StudioColors.selection`'s exact RGB (59, 130, 246); the process was
+  relaunched with stdout/stderr redirected to confirm no exception was
+  thrown; no dialog-owning window (visible or hidden) or new process
+  ever appeared. This points to the native `IFileOpenDialog` COM
+  dialog specifically failing to display in this sandboxed session —
+  an environment/tooling limitation, not a Studio defect (this exact
+  workflow is unchanged since Work Package 002, and Work Package 005's
+  own verification notes already document severe, unrelated
+  focus-stealing problems with the same dialog in this environment).
+  Rather than claim a manual pass that didn't happen, verification was
+  performed instead with a temporary `integration_test` (Flutter's
+  bundled `dev_dependency`, added and then removed — not part of the
+  committed tree) that ran the *actual compiled app* (real FFI, real
+  `oep_foundation_bridge.dll`, no mocking) and drove it with Flutter's
+  own test bindings (`WidgetTester.tap`/`enterText`, which dispatch
+  directly into the framework's gesture arena and don't depend on OS
+  window-message delivery), opening a Foundation-CLI-generated
+  repository directly through `FoundationRuntimeNotifier.openRepository`
+  — the same code path the Dashboard button calls — rather than through
+  the file picker.
+* **Fixture.** `wp004_test_repo` (from Work Package 004's manual
+  verification), extended via the Foundation CLI with a sixth object
+  (`Cryogenic Cooling Unit`, author `zolotov`, tags including
+  `cryogenic`) and a third relationship (`DependsOn`,
+  `Cryogenic Cooling Unit` → `Main Generator`, author `zolotov`) so the
+  fixture has multiple objects, multiple relationships, and multiple
+  independently-searchable metadata fields (name/author/description),
+  per the work package's manual-verification requirement. Expected
+  values for every search performed were established first via `oep
+  search`/`oep search objects` directly against this fixture, then
+  cross-checked against Studio's results.
+* **Results, all matching the CLI's independently-computed values
+  exactly** (object/relationship IDs, match scores, match locations):
+  * Relationship Explorer showed all 3 live relationships with correct
+    type/source/target/author (`DependsOn` Cryogenic Cooling Unit →
+    Main Generator by zolotov; `ConnectedTo` Main Generator → Backup
+    Battery by jsmith; `Documents` System Overview → Main Generator by
+    jsmith).
+  * Selecting a relationship row (tapping its Author or Source cell)
+    updated `selectedRelationship` and the Property Inspector showed
+    the Relationship ID.
+  * "Go To Source" navigated to the Object Explorer with the correct
+    category (Components) and object (Cryogenic Cooling Unit) selected.
+  * Repository-scope search for "generator" returned 4 results (1
+    object, Name match, score 0.5; 3 relationships, Description match,
+    score 0.5 each) — exact match to `oep search generator`.
+  * Repository-scope search for "zolotov" returned 2 results (1
+    object, Author match, score 1.0; 1 relationship, Author match,
+    score 1.0) — exact match to `oep search zolotov`, and confirmed
+    *distinct* from the "generator" results (ruling out any state
+    leakage between successive searches on the same `OEP_Runtime`).
+  * Object-only and relationship-only scopes (`oep_search_objects`/
+    `oep_search_relationships` called directly) independently returned
+    results matching `oep search objects`/`oep search relationships`.
+  * Selecting an object search result cleared `selectedRelationship`
+    and set `selectedObject` to the correct object, confirming
+    STUDIO-TASK-000012's "Navigate to the appropriate Explorer, select
+    the corresponding Object, update the Property Inspector."
+  * Two apparent failures surfaced during the first verification pass
+    and were both root-caused to the *test script*, not Studio: (1) a
+    `find.text(...)` finder matched two widgets (a relationship-row
+    cell and the Property Inspector showing the same string as a field
+    value) — fixed by disambiguating with `.first`; (2) a second
+    `enterText` call after a button tap left the search box's
+    `TextEditingController` unchanged until the field was explicitly
+    re-focused first — a `WidgetTester` interaction quirk, confirmed
+    because direct `FoundationRuntimeNotifier.search()` calls
+    (bypassing the text field entirely) worked correctly on every
+    query in every order. Neither reflects a Studio defect; both are
+    noted here so a future verification session doesn't re-diagnose
+    them from scratch.
+
+### Architectural Observations
+
+* **The native Windows folder-picker dialog could not be driven by
+  simulated OS input in this session, despite `file_selector`/
+  `getDirectoryPath()` being unchanged since Work Package 002.**
+  Ordinary window messages (used by every nav-rail/button click)
+  reached the app reliably once coordinates were computed correctly;
+  the dialog specifically never appeared, with no exception in
+  captured stdout/stderr and no new process or window (hidden or
+  visible). This is consistent with — and likely the same underlying
+  cause as — the "severe recurring focus-stealing" issue Work Package
+  005 documented for this exact dialog, just manifesting as a harder
+  failure this session. Recommendation for future work packages: don't
+  re-attempt raw OS-level UI automation against this specific dialog
+  without a fresh diagnosis; the `integration_test` approach used here
+  (open the repository directly through the Connection Manager,
+  verify everything downstream with `WidgetTester`) is faster, more
+  reliable, and exercises the real FFI/DLL just as thoroughly, at the
+  cost of not exercising the file-picker plugin itself.
+* **Coordinate calculation from source beats visual estimation from
+  screenshots.** Repeated attempts to click UI elements by eyeballing
+  pixel positions in a screenshot produced *plausible but wrong*
+  coordinates (each guess landed on some real, nearby element, so
+  failures looked like flakiness rather than being obviously wrong).
+  Deriving exact positions from the actual widget tree's padding/size
+  constants (`StudioNavRail`'s `_BrandHeader`/`_NavRailItem` padding
+  arithmetic) and cross-checking against `StudioColors.selection`'s
+  exact RGB via pixel-scanning a screenshot resolved this immediately
+  and repeatably. Worth doing first, not last, in any future session
+  that needs OS-level UI automation against this app.
+* **`FoundationBridge.searchRepository`'s struct-flattening approach
+  (four top-level fields instead of two nested struct-typed fields)
+  was verified correct by the integration test's repeated,
+  interleaved calls to `searchRepository`/`searchObjects`/
+  `searchRelationships` on the same `OEP_Runtime`** — every call
+  returned results matching the CLI independently, including
+  immediately after a *different*-scope call, which would have
+  surfaced any stale-pointer/incorrect-offset bug from a wrong
+  flattening. This is the first `oep_api.h` struct in Studio with a
+  nested-struct member; the flattening technique (verified here) is
+  the template to reuse if a future struct has the same shape, rather
+  than depending on unverified assumptions about dart:ffi's
+  struct-of-struct field support.
+* **Relationship/search name resolution (`objectNamesById`) is a
+  Studio-side join across two already-Foundation-returned lists, not
+  independent business logic** — `oep_relationship_info_t`/
+  `oep_relationship_search_result_t` carry only `source_object_id`/
+  `target_object_id`, unlike `oep_object_search_result_t::display_name`.
+  Building a `Map<String, String>` from the already-fetched Current
+  Object List and doing a lookup is squarely "convert Foundation data
+  into Flutter models" (`docs/FOUNDATION_BRIDGE.md` § Responsibilities),
+  not a reimplementation of anything Foundation does — the alternative
+  (Studio never resolving names, always showing raw IDs) would be a
+  worse user experience for no architectural benefit.
+
+### Flutter-Specific Recommendations
+
+* **`integration_test` (Flutter's bundled test package) is a viable,
+  higher-reliability alternative to OS-level UI automation for
+  Windows-desktop manual verification**, when the thing under test
+  doesn't itself require driving a native OS dialog. It runs the real
+  compiled app end-to-end (`flutter test integration_test/foo_test.dart
+  -d windows`) with real FFI/DLL/plugin code — nothing is mocked — but
+  interacts via `WidgetTester`, which dispatches directly into
+  Flutter's own gesture/text-input handling rather than posting real
+  OS window messages, sidestepping focus-stealing and coordinate-
+  calculation problems entirely. Not added as a permanent dependency
+  or committed test file this work package (this repository's manual-
+  verification convention has been screenshots/interactive sessions,
+  not committed integration tests, and the fixture path used here is
+  machine-specific), but worth reaching for again — and potentially
+  worth formalizing with a portable fixture — if OS-level automation
+  proves unreliable for a future work package too.
+* `ProviderContainer` + `UncontrolledProviderScope` is the pattern for
+  driving a Riverpod app's providers directly from a test (here, to
+  call `FoundationRuntimeNotifier.openRepository`/`search` without
+  going through the Dashboard button or Search box) while still
+  pumping the real widget tree — useful whenever a test needs to
+  bypass one specific UI-triggered action but still verify everything
+  downstream of it.

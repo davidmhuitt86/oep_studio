@@ -4,7 +4,9 @@ Introduced in Work Package 002 (as the Studio Service owning Runtime
 State and Repository State), formalized in Work Package 003 (Current
 Selection), extended in Work Package 004 (Repository Statistics,
 Current Object List), extended again in Work Package 005 (Current
-Search Query/Results, Current Relationship Selection).
+Search Query/Results, Current Relationship Selection), and again in
+Work Package 006 (Current Relationship List; Current Search Query/Results
+now live).
 
 Implemented by `lib/core/services/foundation_runtime_service.dart`
 (`FoundationRuntimeNotifier` / `foundationRuntimeServiceProvider`) and
@@ -17,12 +19,13 @@ Work Package 003 introduced for it.
 
 ## Responsibilities
 
-Per Work Package 005:
+Per Work Package 006:
 
 * Current Runtime
 * Current Repository
 * Repository Statistics
 * Current Object List
+* Current Relationship List
 * Current Search Query
 * Current Search Results
 * Current Selection (of an object *or* a relationship — mutually exclusive)
@@ -65,12 +68,13 @@ never call an `oep_api.h` function directly — verified by grep: only
 | `repositoryStatus` | WP002 | Mirrors `oep_repository_status_t` (Current Repository) |
 | `repositoryStatistics` | WP004 | Mirrors `oep_repository_statistics_t`; `null` if never fetched or the last fetch failed |
 | `objectList` | WP004 | Every object in the repository (Current Object List); `null` if never fetched or the last fetch failed — distinct from an empty (non-null) list, which means "fetched successfully, repository has zero objects" |
+| `relationshipList` | WP006 | Every relationship in the repository (Current Relationship List), via `oep_relationship_store_list`; same `null`-means-"not fetched/failed" vs. empty-means-"genuinely zero" distinction as `objectList` |
 | `lastError` | WP002 | Most recent translated `FoundationBridgeException`, if any |
 | `selectedCategory` | WP003 | The Repository Explorer category currently selected (Current Selection) |
 | `selectedObject` | WP003 | The Object Explorer row currently selected. Mutually exclusive with `selectedRelationship` (WP005) |
 | `selectedRelationship` | WP005 | The Relationship Explorer row currently selected (Current Relationship Selection). Mutually exclusive with `selectedObject` |
 | `searchQuery` | WP005 | The Search Workspace's Current Search Query, `''` when idle |
-| `searchResults` | WP005 | The Search Workspace's Current Search Results; always `null` in this work package — see `docs/SEARCH_WORKSPACE.md` |
+| `searchResults` | WP005/WP006 | The Search Workspace's Current Search Results, via `oep_search_repository`/`oep_search_objects`/`oep_search_relationships` since WP006; `null` means "not searched, or the last search attempt failed" — always set together with `searchQuery` on success, so a non-empty query with `null` results shouldn't occur in steady state |
 
 `objectsInSelectedCategory` (a getter, not a stored field) derives the
 Object Explorer's visible list from `objectList` filtered by
@@ -82,9 +86,10 @@ whenever what they refer to becomes stale:
 
 * Opening a (possibly different) repository clears `selectedCategory`,
   `selectedObject`, `selectedRelationship`, `repositoryStatistics`,
-  `objectList`, `searchQuery`, and `searchResults`, then immediately
-  re-fetches Repository Statistics and the Current Object List for the
-  newly opened repository.
+  `objectList`, `relationshipList`, `searchQuery`, and `searchResults`,
+  then immediately re-fetches Repository Statistics, the Current
+  Object List, and the Current Relationship List for the newly opened
+  repository.
 * Closing the repository clears the same set.
 * Selecting a new category clears `selectedObject` (it belonged to the
   previous category's list).
@@ -98,15 +103,17 @@ whenever what they refer to becomes stale:
 
 `openRepository` calls, in order: `bridge.openRepository`,
 `bridge.getRepositoryStatus` (both must succeed or the whole call
-throws), then `bridge.getRepositoryStatistics` and `bridge.listObjects`
-(each independently non-fatal — see Enumeration Workflow in
-`FOUNDATION_BRIDGE.md`). `selectCategory`/`selectObject`/
-`selectRelationship`/`clearObjectSelection`/`clearRelationshipSelection`/
-`search`/`clearSearch` are all pure local state mutations — none call
-Foundation. For object/category selection this is because `objectList`
-already carries full detail; for search and relationship selection
-this is because no Public C API function exists yet for either (see §
-Missing Public API) — there is nothing to call.
+throws), then `bridge.getRepositoryStatistics`, `bridge.listObjects`,
+and `bridge.listRelationships` (each independently non-fatal — see
+Enumeration Workflow in `FOUNDATION_BRIDGE.md`). `selectCategory`/
+`selectObject`/`selectRelationship`/`clearObjectSelection`/
+`clearRelationshipSelection`/`clearSearch` are pure local state
+mutations — none call Foundation (for object/category/relationship
+selection this is because `objectList`/`relationshipList` already
+carry full detail). `search(query, {scope})` is the one method here
+that *does* call Foundation (`oep_search_repository`/`oep_search_objects`/
+`oep_search_relationships`, per `scope`) — see § Error Handling below
+for how its failure mode differs from every other method here.
 
 ## Lifecycle
 
@@ -120,61 +127,59 @@ Missing Public API) — there is nothing to call.
    `IMPLEMENTATION_STATUS.md` — this is *why* `build()` must return
    the outcome rather than assign `state` and return separately).
 2. **Steady state** — `openRepository` additionally fetches Repository
-   Statistics and the Current Object List (Work Package 004) after the
-   open itself succeeds; every other method (`closeRepository`,
-   `selectCategory`, `selectObject`/`selectRelationship`,
-   `clearObjectSelection`/`clearRelationshipSelection`, `search`/
-   `clearSearch`) mutates `state` via `copyWith`. Foundation-calling
-   methods rethrow `FoundationBridgeException` for their primary
-   action so the calling workflow can show a dialog immediately, in
-   addition to `lastError` being available to any other observer.
+   Statistics, the Current Object List, and the Current Relationship
+   List (Work Packages 004/006) after the open itself succeeds; every
+   other method (`closeRepository`, `selectCategory`, `selectObject`/
+   `selectRelationship`, `clearObjectSelection`/`clearRelationshipSelection`,
+   `search`/`clearSearch`) mutates `state` via `copyWith`.
+   Foundation-calling methods rethrow `FoundationBridgeException` for
+   their primary action so the calling workflow can show a dialog
+   immediately, in addition to `lastError` being available to any
+   other observer.
 3. **Teardown** — `ref.onDispose(_disposeBridge)` shuts the Runtime
    down (best-effort — a `FoundationBridgeException` during shutdown
    is swallowed, since the process is tearing down regardless) and
    releases the native handle via `FoundationBridge.dispose()`.
 
+## Error Handling
+
+Per Work Package 006, relationship retrieval and search fail
+differently:
+
+* **Relationship retrieval failure** degrades silently, like object
+  enumeration: `relationshipList` becomes `null`, and the Relationship
+  Explorer renders an informative "couldn't be loaded" message
+  (distinct from "No Relationships Found", which means the fetch
+  succeeded and the repository genuinely has none) — see
+  `_RelationshipsCouldNotBeLoaded` in `relationships_page.dart`.
+* **Search failure** rethrows `FoundationBridgeException` from
+  `FoundationRuntimeNotifier.search()`, so `SearchPage` can show
+  `showFoundationErrorDialog` — a professional dialog, not a silent
+  empty state, per *"If search fails: Display a professional error
+  dialog"*. `searchQuery`/`searchResults` are left unchanged on
+  failure (only `lastError` updates), so a failed search doesn't wipe
+  out whatever the Search Workspace was previously showing.
+
 ## Missing Public API
 
-Per Work Package 005: *"If additional Public API functionality is
-required: Document the requirement. Do not implement it."*
+Per Work Packages 005/006: *"If additional Public API functionality is
+required: Document the requirement. Do not implement it."* Relationship
+enumeration and repository search — the two gaps Work Package 005
+documented here — are both resolved as of Work Package 006 (Foundation
+Work Package 013): `oep_relationship_store_list`, `oep_search_repository`,
+`oep_search_objects`, and `oep_search_relationships` now exist and are
+consumed (see `docs/FOUNDATION_BRIDGE.md` § Extension (Work Package 006)).
+What remains unexposed:
 
-* **Relationship enumeration.** No `oep_api.h` function returns
-  `oep::repository::Relationship` data (mirroring `oep_object_info_t`'s
-  pattern, a natural future shape: `oep_relationship_store_get_count`/
-  `oep_relationship_store_list`/`oep_relationship_list_release`,
-  returning a fixed-layout `oep_relationship_info_t` with
-  `relationship_id`, `source_object_id`, `target_object_id`,
-  `relationship_type` (an `oep_relationship_type_t` mirroring
-  `oep::repository::RelationshipType`'s 6 values, the same way
-  `oep_object_type_t` already mirrors `ObjectType`), `author`,
-  `description`, `created_utc`). Until this exists, Relationship
-  Explorer always shows "No Relationships Found" — including, as
-  manually verified this work package, against a real repository that
-  genuinely has relationships created via the Foundation CLI. Ideally
-  such a function would return `source_object_name`/`target_object_name`
-  directly (resolved server-side) rather than raw IDs Studio would
-  otherwise need a second lookup per relationship to resolve — see
-  `RelationshipSummary.sourceObjectName`'s doc comment
-  (`lib/core/models/relationship_summary.dart`).
-* **Repository search.** `oep::search::SearchEngine::search_objects`/
-  `search_relationships` (`platform/search/include/oep/search/search_engine.hpp`)
-  exist in Foundation's C++ layer with exactly the shape Studio needs
-  (`ObjectSearchResult`/`RelationshipSearchResult`, each carrying
-  `match_location` and `match_score`, sorted deterministically by
-  Foundation) but nothing in `oep_api.h` calls them yet. A natural
-  future shape: `oep_search_objects`/`oep_search_relationships` taking
-  a query string and an open runtime, returning a Foundation-owned
-  array (following `oep_object_list_t`'s ownership pattern) of a fixed
-  `oep_search_result_t` struct. Until this exists, the Search Workspace
-  always reports every search as unavailable — see
-  `docs/SEARCH_WORKSPACE.md`.
-* `oep_object_store_get_by_id` is exposed and bindable but unused —
-  `objectList` already carries full detail for every object, so no
-  code path needs a single-object lookup yet. It's expected to matter
-  once something resolves a Relationship's target object by ID rather
-  than by list membership — likely once relationship enumeration
-  above exists and needs to cross-reference object names.
 * Repository/object/relationship **creation, editing, and deletion**
-  remain entirely unexposed — every work package through 005 has been
+  remain entirely unexposed — every work package through 006 has been
   read-only by design (Dashboard's "Create Repository" button is still
   a placeholder for the same reason it was in Work Package 002).
+* `oep_object_store_get_by_id`, `oep_relationship_store_get_by_id`,
+  `oep_relationship_type_to_string`, and `oep_match_location_to_string`
+  are exposed and bindable but unused — `objectList`/`relationshipList`
+  already carry full detail for every row, so no code path needs a
+  single-item lookup, and Studio decodes type/location labels through
+  its own Dart enums (`RelationshipType.fromNative`,
+  `SearchMatchLocation.fromNative`) rather than calling Foundation's
+  `_to_string` helpers.

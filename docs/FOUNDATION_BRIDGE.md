@@ -301,3 +301,113 @@ implement, per its "document it, do not implement it" rule).
 `lib/core/models/search_result.dart`) are plain Dart models with no
 `fromNative` constructor, unlike `EngineeringObjectSummary`'s — there
 is no native struct yet for either to decode.
+
+---
+
+# Extension (Work Package 006): Engineering Relationship Enumeration + Repository Search
+
+`oep_api.h` gained Engineering Relationship Enumeration (TASK-000025)
+and Repository Search (TASK-000026) between Work Packages 005 and 006
+(Foundation's own Work Package 013); `OEP_API_VERSION` moved from 2 to
+3. Studio consumed the new surface without any Foundation change,
+resolving every gap Work Package 005 had documented in
+`docs/CONNECTION_MANAGER.md` § Missing Public API.
+
+## New Public C API Surface Consumed
+
+* `oep_relationship_type_to_string`
+* `oep_relationship_store_get_count`
+* `oep_relationship_store_get_by_id`
+* `oep_relationship_store_list` / `oep_relationship_list_release`
+* `oep_match_location_to_string`
+* `oep_search_repository` / `oep_repository_search_result_release`
+* `oep_search_objects` / `oep_object_search_result_list_release`
+* `oep_search_relationships` / `oep_relationship_search_result_list_release`
+
+All twelve are added to `native/foundation_bridge/oep_foundation_bridge.def`
+(verified with `dumpbin /EXPORTS` — 32 symbols total; several
+release-function RVAs collapse to the same address in the Release
+build, which is the MSVC linker's identical-code-folding optimization
+for byte-identical function bodies, not a build error). `oep_relationship_type_to_string`,
+`oep_relationship_store_get_by_id`, and `oep_match_location_to_string`
+are bound (mirroring how `oep_object_type_to_string` and
+`oep_object_store_get_by_id` were bound in Work Package 004) but
+unused — Studio decodes `relationship_type`/`match_location` via its
+own `RelationshipType.fromNative`/`SearchMatchLocation.fromNative`
+(mirroring `ObjectCategory.fromNative`), and no code path needs a
+single-relationship lookup since `relationshipList` already carries
+full detail.
+
+## New Native Structs
+
+* `OepRelationshipInfoNative` mirrors `oep_relationship_info_t`.
+* `OepRelationshipListNative` mirrors `oep_relationship_list_t` — same
+  Foundation-owned-heap-array ownership model as `oep_object_list_t`.
+* `OepObjectSearchResultNative`/`OepObjectSearchResultListNative` and
+  `OepRelationshipSearchResultNative`/`OepRelationshipSearchResultListNative`
+  mirror `oep_object_search_result_t`/`_list_t` and
+  `oep_relationship_search_result_t`/`_list_t`.
+* `OepRepositorySearchResultNative` mirrors `oep_repository_search_result_t`,
+  whose two C members (`oep_object_search_result_list_t objects`,
+  `oep_relationship_search_result_list_t relationships`) are each just
+  `{pointer; int32;}`. Rather than nesting the two list structs as
+  struct-typed fields, this flattens both into four top-level fields in
+  the same declaration order — the platform ABI lays out nested
+  structs-by-value as their members concatenated in order, so this
+  produces an identical byte layout without depending on dart:ffi
+  struct-of-struct field support (untested in this codebase before now).
+
+## New FoundationBridge Methods
+
+`getRelationshipCount()`, `getRelationshipById()`, `listRelationships()`
+follow the Work Package 004 object-enumeration pattern exactly.
+`searchObjects()`, `searchRelationships()`, and `searchRepository()`
+follow the same `malloc`/call/decode/release/`malloc.free` pattern;
+`searchRepository()` returns a single `List<SearchResult>` — every
+object hit followed by every relationship hit, each group in exactly
+Foundation's own order (never interleaved or re-sorted), matching
+`oep_repository_search_result_t`'s own two-list shape and `oep
+search`'s CLI presentation convention.
+
+### Relationship Name Resolution
+
+`oep_relationship_info_t`/`oep_relationship_search_result_t` carry only
+`source_object_id`/`target_object_id` — no display name, unlike
+`oep_object_search_result_t::display_name`. `RelationshipSummary.fromNative`
+and `SearchResult.fromNativeRelationship` both accept an
+`objectNamesById` map (built by `FoundationRuntimeNotifier._objectNamesById()`
+from the already-fetched Current Object List) to resolve display names,
+falling back to the raw ID if the object can't be found there (e.g. the
+object list fetch failed independently). This is a presentation-layer
+join across two already-Foundation-returned lists, not independent
+business logic — see `docs/CONNECTION_MANAGER.md` § Foundation
+Interaction.
+
+## Relationship Enumeration Workflow
+
+```
+FoundationRuntimeNotifier._refreshRepositoryData(bridge):
+     -> bridge.getRepositoryStatistics()  [failure non-fatal]
+     -> bridge.listObjects()              [failure non-fatal]
+     -> bridge.listRelationships(objectNamesById: _objectNamesById())  [failure non-fatal]
+```
+
+Relationships are fetched *after* objects specifically so name
+resolution has the freshest object list available; if the object fetch
+itself failed, relationships still get fetched, just with source/target
+names falling back to raw IDs rather than the whole operation failing.
+
+## Search Workflow
+
+```
+SearchPage._runSearch(query)
+  -> FoundationRuntimeNotifier.search(query, scope: SearchScope.{repository,objects,relationships})
+       -> bridge.searchRepository/searchObjects/searchRelationships(...)
+       -> state.copyWith(searchQuery: query, searchResults: results)  [only on success]
+```
+
+Unlike relationship retrieval, a failed search does not touch
+`searchQuery`/`searchResults` — it rethrows so `SearchPage` can show
+`showFoundationErrorDialog` (Work Package 006: "If search fails:
+Display a professional error dialog"), per `docs/CONNECTION_MANAGER.md`
+§ Error Handling.

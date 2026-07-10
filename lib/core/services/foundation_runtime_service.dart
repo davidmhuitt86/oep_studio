@@ -6,14 +6,16 @@ import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
 import '../models/object_category.dart';
 import '../models/relationship_summary.dart';
+import '../models/search_scope.dart';
 import 'foundation_runtime_state.dart';
 
-/// The Studio Connection Manager (Work Packages 002-005). Owns Current
+/// The Studio Connection Manager (Work Packages 002-006). Owns Current
 /// Runtime, Current Repository, Repository Statistics, Current Object
-/// List, Current Search Query/Results, and Current Selection — see
-/// `docs/CONNECTION_MANAGER.md`. This is the only place in Studio that
-/// holds a [FoundationBridge] instance; every feature reaches
-/// Foundation through this provider, never through the Bridge directly.
+/// List, Current Relationship List, Current Search Query/Results, and
+/// Current Selection — see `docs/CONNECTION_MANAGER.md`. This is the
+/// only place in Studio that holds a [FoundationBridge] instance; every
+/// feature reaches Foundation through this provider, never through the
+/// Bridge directly.
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   FoundationBridge? _bridge;
 
@@ -89,6 +91,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearSelectedRelationship: true,
         clearRepositoryStatistics: true,
         clearObjectList: true,
+        clearRelationshipList: true,
         searchQuery: '',
         clearSearchResults: true,
       );
@@ -99,10 +102,20 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     _refreshRepositoryData(bridge);
   }
 
-  /// Re-fetches Repository Statistics and the Current Object List from
-  /// the already-open repository. Failures here are non-fatal (see
-  /// [openRepository]) — they surface as `null` fields, not a thrown
-  /// exception, since no user-initiated action is waiting on this call.
+  /// Re-fetches Repository Statistics, the Current Object List, and the
+  /// Current Relationship List from the already-open repository.
+  /// Failures here are non-fatal (see [openRepository]) — they surface
+  /// as `null` fields, not a thrown exception, since no user-initiated
+  /// action is waiting on this call (Work Package 006: "If relationship
+  /// retrieval fails: Display an informative empty-state message" — not
+  /// a dialog, unlike search failures below).
+  ///
+  /// Objects are fetched before relationships because relationship name
+  /// resolution (`RelationshipSummary.sourceObjectName`/
+  /// `targetObjectName`) needs the freshly-fetched object list; if the
+  /// object fetch itself failed, relationships still get fetched, just
+  /// with source/target names falling back to raw IDs (see
+  /// [_objectNamesById]).
   void _refreshRepositoryData(FoundationBridge bridge) {
     try {
       final statistics = bridge.getRepositoryStatistics();
@@ -116,6 +129,23 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error, clearObjectList: true);
     }
+    try {
+      final relationships = bridge.listRelationships(objectNamesById: _objectNamesById());
+      state = state.copyWith(relationshipList: relationships);
+    } on FoundationBridgeException catch (error) {
+      state = state.copyWith(lastError: error, clearRelationshipList: true);
+    }
+  }
+
+  /// Builds an `object_id` -> display name map from the Current Object
+  /// List, used to resolve Relationship/Search result display names
+  /// (see `RelationshipSummary.fromNative`/`SearchResult.fromNativeRelationship`).
+  /// Empty if [FoundationServiceState.objectList] hasn't loaded — callers
+  /// degrade to showing raw IDs rather than failing.
+  Map<String, String> _objectNamesById() {
+    final objects = state.objectList;
+    if (objects == null) return const {};
+    return {for (final object in objects) object.objectId: object.name};
   }
 
   /// Closes the currently open repository, if any.
@@ -133,6 +163,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearSelectedRelationship: true,
         clearRepositoryStatistics: true,
         clearObjectList: true,
+        clearRelationshipList: true,
         searchQuery: '',
         clearSearchResults: true,
       );
@@ -174,14 +205,34 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(clearSelectedRelationship: true);
   }
 
-  /// Records the Search Workspace's Current Search Query and Results
-  /// (Work Package 005). As of this work package the Public C API
-  /// exposes no search function (see `docs/SEARCH_WORKSPACE.md`), so
-  /// this only ever records [query] with `null` results — Studio does
-  /// not perform searching independently, and there is nothing yet to
-  /// call through the Foundation Bridge.
-  void search(String query) {
-    state = state.copyWith(searchQuery: query, clearSearchResults: true);
+  /// Runs a live Foundation search for [query] within [scope] (Work
+  /// Package 006), populating the Current Search Query and Results
+  /// together on success. Studio performs no searching or reordering of
+  /// its own — [scope] only selects which Bridge method is called;
+  /// Foundation's SearchEngine does the actual matching and scoring.
+  ///
+  /// Per Work Package 006's error handling rule ("If search fails:
+  /// Display a professional error dialog"), a failure leaves
+  /// [FoundationServiceState.searchQuery]/[FoundationServiceState.searchResults]
+  /// unchanged (unlike relationship retrieval, which degrades silently)
+  /// and rethrows so the calling workflow (`SearchPage`) can show a
+  /// dialog immediately.
+  void search(String query, {SearchScope scope = SearchScope.repository}) {
+    final bridge = _bridge;
+    final trimmed = query.trim();
+    if (bridge == null || trimmed.isEmpty) return;
+    try {
+      final objectNamesById = _objectNamesById();
+      final results = switch (scope) {
+        SearchScope.repository => bridge.searchRepository(trimmed, objectNamesById: objectNamesById),
+        SearchScope.objects => bridge.searchObjects(trimmed),
+        SearchScope.relationships => bridge.searchRelationships(trimmed, objectNamesById: objectNamesById),
+      };
+      state = state.copyWith(searchQuery: trimmed, searchResults: results, clearError: true);
+    } on FoundationBridgeException catch (error) {
+      state = state.copyWith(lastError: error);
+      rethrow;
+    }
   }
 
   /// Clears the Current Search Query and Results.

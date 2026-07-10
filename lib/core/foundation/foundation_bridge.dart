@@ -3,6 +3,8 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
 import '../models/engineering_object_summary.dart';
+import '../models/relationship_summary.dart';
+import '../models/search_result.dart';
 import 'foundation_bridge_exception.dart';
 import 'oep_api_bindings.dart';
 import 'oep_api_native_types.dart';
@@ -164,6 +166,140 @@ class FoundationBridge {
       }
     } finally {
       malloc.free(listPointer);
+    }
+  }
+
+  /// The number of Relationships in the currently open repository.
+  /// Throws [FoundationBridgeException] if no repository is open.
+  int getRelationshipCount() {
+    _assertNotDisposed();
+    final countPointer = malloc<Int32>();
+    try {
+      _checkResult(_bindings.relationshipStoreGetCount(_runtime, countPointer));
+      return countPointer.value;
+    } finally {
+      malloc.free(countPointer);
+    }
+  }
+
+  /// Fetches a single Relationship by ID. [objectNamesById] resolves
+  /// its source/target display names (see [RelationshipSummary.fromNative]).
+  /// Throws [FoundationBridgeException] if no repository is open or no
+  /// relationship with that ID exists.
+  RelationshipSummary getRelationshipById(String relationshipId, {required Map<String, String> objectNamesById}) {
+    _assertNotDisposed();
+    final idPointer = relationshipId.toNativeUtf8();
+    final relationshipPointer = malloc<OepRelationshipInfoNative>();
+    try {
+      _checkResult(_bindings.relationshipStoreGetById(_runtime, idPointer, relationshipPointer));
+      return RelationshipSummary.fromNative(relationshipPointer.ref, objectNamesById: objectNamesById);
+    } finally {
+      malloc.free(idPointer);
+      malloc.free(relationshipPointer);
+    }
+  }
+
+  /// Enumerates every Relationship in the currently open repository,
+  /// sorted deterministically by relationship ID (the same order
+  /// Foundation itself guarantees — Studio never re-sorts the raw list).
+  /// [objectNamesById] resolves source/target display names.
+  /// Throws [FoundationBridgeException] if no repository is open.
+  List<RelationshipSummary> listRelationships({required Map<String, String> objectNamesById}) {
+    _assertNotDisposed();
+    final listPointer = malloc<OepRelationshipListNative>();
+    try {
+      _checkResult(_bindings.relationshipStoreList(_runtime, listPointer));
+      final list = listPointer.ref;
+      try {
+        return [
+          for (var i = 0; i < list.count; i++)
+            RelationshipSummary.fromNative(list.items[i], objectNamesById: objectNamesById),
+        ];
+      } finally {
+        // Foundation-owned heap array: release through Foundation's own
+        // function, never malloc.free/free directly.
+        _bindings.relationshipListRelease(listPointer);
+      }
+    } finally {
+      malloc.free(listPointer);
+    }
+  }
+
+  /// Searches Engineering Objects only for [query] (case-insensitive,
+  /// partial-match, per Foundation's SearchEngine). Results are returned
+  /// in exactly the order Foundation produced them — never reordered.
+  /// Throws [FoundationBridgeException] if no repository is open or
+  /// [query] is empty.
+  List<SearchResult> searchObjects(String query) {
+    _assertNotDisposed();
+    final queryPointer = query.toNativeUtf8();
+    final listPointer = malloc<OepObjectSearchResultListNative>();
+    try {
+      _checkResult(_bindings.searchObjects(_runtime, queryPointer, listPointer));
+      final list = listPointer.ref;
+      try {
+        return [for (var i = 0; i < list.count; i++) SearchResult.fromNativeObject(list.items[i])];
+      } finally {
+        _bindings.objectSearchResultListRelease(listPointer);
+      }
+    } finally {
+      malloc.free(queryPointer);
+      malloc.free(listPointer);
+    }
+  }
+
+  /// Searches Relationships only for [query]. [objectNamesById] resolves
+  /// each hit's source/target display names for [SearchResult.name].
+  /// Throws [FoundationBridgeException] if no repository is open or
+  /// [query] is empty.
+  List<SearchResult> searchRelationships(String query, {required Map<String, String> objectNamesById}) {
+    _assertNotDisposed();
+    final queryPointer = query.toNativeUtf8();
+    final listPointer = malloc<OepRelationshipSearchResultListNative>();
+    try {
+      _checkResult(_bindings.searchRelationships(_runtime, queryPointer, listPointer));
+      final list = listPointer.ref;
+      try {
+        return [
+          for (var i = 0; i < list.count; i++)
+            SearchResult.fromNativeRelationship(list.items[i], objectNamesById: objectNamesById),
+        ];
+      } finally {
+        _bindings.relationshipSearchResultListRelease(listPointer);
+      }
+    } finally {
+      malloc.free(queryPointer);
+      malloc.free(listPointer);
+    }
+  }
+
+  /// Searches both Engineering Objects and Relationships for [query].
+  /// Returns every object hit followed by every relationship hit — each
+  /// group in exactly the order Foundation's SearchEngine produced it,
+  /// matching `oep_repository_search_result_t`'s own two-list, never-
+  /// merged shape (and `oep search`'s own "Objects: ... / Relationships:
+  /// ..." presentation) rather than interleaving or re-sorting them by
+  /// score. Throws [FoundationBridgeException] if no repository is open
+  /// or [query] is empty.
+  List<SearchResult> searchRepository(String query, {required Map<String, String> objectNamesById}) {
+    _assertNotDisposed();
+    final queryPointer = query.toNativeUtf8();
+    final resultPointer = malloc<OepRepositorySearchResultNative>();
+    try {
+      _checkResult(_bindings.searchRepository(_runtime, queryPointer, resultPointer));
+      final result = resultPointer.ref;
+      try {
+        return [
+          for (var i = 0; i < result.objectCount; i++) SearchResult.fromNativeObject(result.objectItems[i]),
+          for (var i = 0; i < result.relationshipCount; i++)
+            SearchResult.fromNativeRelationship(result.relationshipItems[i], objectNamesById: objectNamesById),
+        ];
+      } finally {
+        _bindings.repositorySearchResultRelease(resultPointer);
+      }
+    } finally {
+      malloc.free(queryPointer);
+      malloc.free(resultPointer);
     }
   }
 

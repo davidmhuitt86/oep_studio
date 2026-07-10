@@ -11,13 +11,13 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-005): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-006): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
-/// Object List, Current Search Query, Current Search Results, and
-/// Current Selection (of either an object or a relationship — never
-/// both at once). Immutable; widgets watch this through
-/// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
-/// directly. See `docs/CONNECTION_MANAGER.md`.
+/// Object List, Current Relationship List, Current Search Query, Current
+/// Search Results, and Current Selection (of either an object or a
+/// relationship — never both at once). Immutable; widgets watch this
+/// through `foundationRuntimeServiceProvider` and never touch
+/// [FoundationBridge] directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
   const FoundationServiceState({
     required this.phase,
@@ -28,6 +28,7 @@ class FoundationServiceState {
     this.repositoryStatus,
     this.repositoryStatistics,
     this.objectList,
+    this.relationshipList,
     this.lastError,
     this.selectedCategory,
     this.selectedObject,
@@ -56,6 +57,13 @@ class FoundationServiceState {
   /// "genuinely empty" is what lets the UI show the right empty state.
   final List<EngineeringObjectSummary>? objectList;
 
+  /// Every Relationship in the open repository (Work Package 006 Current
+  /// Relationship List), `null` until fetched or if the last fetch
+  /// failed — distinct from an empty (non-null) list, which means
+  /// enumeration succeeded and the repository genuinely has no
+  /// relationships. See `docs/CONNECTION_MANAGER.md` § Error Handling.
+  final List<RelationshipSummary>? relationshipList;
+
   final FoundationBridgeException? lastError;
 
   /// The Repository Explorer category currently selected, if any
@@ -76,12 +84,13 @@ class FoundationServiceState {
   /// The Search Workspace's Current Search Query (Work Package 005).
   final String searchQuery;
 
-  /// The Search Workspace's Current Search Results (Work Package 005).
-  /// `null` means "no search has been run yet, or search is
-  /// unavailable" (see `docs/SEARCH_WORKSPACE.md`) — distinct from a
-  /// non-null empty list, which would mean "searched, Foundation found
-  /// nothing." As of this work package the Public C API exposes no
-  /// search function, so this is always `null` in practice.
+  /// The Search Workspace's Current Search Results (Work Package
+  /// 005/006). `null` means "no search has been run yet, or the last
+  /// search attempt failed" (see `docs/SEARCH_WORKSPACE.md`) — distinct
+  /// from a non-null empty list, which means "searched, Foundation found
+  /// nothing." Always set together with [searchQuery] on a successful
+  /// search, so a non-empty [searchQuery] with `null` results should not
+  /// occur in steady state.
   final List<SearchResult>? searchResults;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
@@ -109,6 +118,8 @@ class FoundationServiceState {
     bool clearRepositoryStatistics = false,
     List<EngineeringObjectSummary>? objectList,
     bool clearObjectList = false,
+    List<RelationshipSummary>? relationshipList,
+    bool clearRelationshipList = false,
     FoundationBridgeException? lastError,
     bool clearError = false,
     ObjectCategory? selectedCategory,
@@ -132,6 +143,7 @@ class FoundationServiceState {
           ? null
           : (repositoryStatistics ?? this.repositoryStatistics),
       objectList: clearObjectList ? null : (objectList ?? this.objectList),
+      relationshipList: clearRelationshipList ? null : (relationshipList ?? this.relationshipList),
       lastError: clearError ? null : (lastError ?? this.lastError),
       selectedCategory: clearSelectedCategory ? null : (selectedCategory ?? this.selectedCategory),
       selectedObject: clearSelectedObject ? null : (selectedObject ?? this.selectedObject),

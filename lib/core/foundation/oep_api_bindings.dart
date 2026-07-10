@@ -80,6 +80,48 @@ class OepApiBindings {
       runtimeGetRepositoryStatistics = _library
           .lookupFunction<OepRuntimeGetRepositoryStatisticsNative, OepRuntimeGetRepositoryStatisticsDart>(
             'oep_runtime_get_repository_statistics',
+          ),
+      relationshipTypeToString = _library
+          .lookupFunction<OepRelationshipTypeToStringNative, OepRelationshipTypeToStringDart>(
+            'oep_relationship_type_to_string',
+          ),
+      relationshipStoreGetCount = _library
+          .lookupFunction<OepRelationshipStoreGetCountNative, OepRelationshipStoreGetCountDart>(
+            'oep_relationship_store_get_count',
+          ),
+      relationshipStoreGetById = _library
+          .lookupFunction<OepRelationshipStoreGetByIdNative, OepRelationshipStoreGetByIdDart>(
+            'oep_relationship_store_get_by_id',
+          ),
+      relationshipStoreList = _library
+          .lookupFunction<OepRelationshipStoreListNative, OepRelationshipStoreListDart>(
+            'oep_relationship_store_list',
+          ),
+      relationshipListRelease = _library
+          .lookupFunction<OepRelationshipListReleaseNative, OepRelationshipListReleaseDart>(
+            'oep_relationship_list_release',
+          ),
+      matchLocationToString = _library.lookupFunction<OepMatchLocationToStringNative, OepMatchLocationToStringDart>(
+        'oep_match_location_to_string',
+      ),
+      searchRepository = _library.lookupFunction<OepSearchRepositoryNative, OepSearchRepositoryDart>(
+        'oep_search_repository',
+      ),
+      repositorySearchResultRelease = _library
+          .lookupFunction<OepRepositorySearchResultReleaseNative, OepRepositorySearchResultReleaseDart>(
+            'oep_repository_search_result_release',
+          ),
+      searchObjects = _library.lookupFunction<OepSearchObjectsNative, OepSearchObjectsDart>('oep_search_objects'),
+      objectSearchResultListRelease = _library
+          .lookupFunction<OepObjectSearchResultListReleaseNative, OepObjectSearchResultListReleaseDart>(
+            'oep_object_search_result_list_release',
+          ),
+      searchRelationships = _library.lookupFunction<OepSearchRelationshipsNative, OepSearchRelationshipsDart>(
+        'oep_search_relationships',
+      ),
+      relationshipSearchResultListRelease = _library
+          .lookupFunction<OepRelationshipSearchResultListReleaseNative, OepRelationshipSearchResultListReleaseDart>(
+            'oep_relationship_search_result_list_release',
           );
 
   // ignore: unused_field
@@ -105,4 +147,16 @@ class OepApiBindings {
   final OepObjectStoreListDart objectStoreList;
   final OepObjectListReleaseDart objectListRelease;
   final OepRuntimeGetRepositoryStatisticsDart runtimeGetRepositoryStatistics;
+  final OepRelationshipTypeToStringDart relationshipTypeToString;
+  final OepRelationshipStoreGetCountDart relationshipStoreGetCount;
+  final OepRelationshipStoreGetByIdDart relationshipStoreGetById;
+  final OepRelationshipStoreListDart relationshipStoreList;
+  final OepRelationshipListReleaseDart relationshipListRelease;
+  final OepMatchLocationToStringDart matchLocationToString;
+  final OepSearchRepositoryDart searchRepository;
+  final OepRepositorySearchResultReleaseDart repositorySearchResultRelease;
+  final OepSearchObjectsDart searchObjects;
+  final OepObjectSearchResultListReleaseDart objectSearchResultListRelease;
+  final OepSearchRelationshipsDart searchRelationships;
+  final OepRelationshipSearchResultListReleaseDart relationshipSearchResultListRelease;
 }

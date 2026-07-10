@@ -5,6 +5,8 @@ import 'package:oep_studio/features/relationships/relationship_list_query.dart';
 
 const _supplies = RelationshipSummary(
   relationshipId: '1',
+  sourceObjectId: 'obj-generator',
+  targetObjectId: 'obj-panel',
   sourceObjectName: 'Main Generator',
   targetObjectName: 'Distribution Panel',
   type: RelationshipType.connectedTo,
@@ -13,6 +15,8 @@ const _supplies = RelationshipSummary(
 );
 const _monitors = RelationshipSummary(
   relationshipId: '2',
+  sourceObjectId: 'obj-control',
+  targetObjectId: 'obj-generator',
   sourceObjectName: 'Control Unit',
   targetObjectName: 'Main Generator',
   type: RelationshipType.dependsOn,
@@ -20,6 +24,8 @@ const _monitors = RelationshipSummary(
 );
 const _documents = RelationshipSummary(
   relationshipId: '3',
+  sourceObjectId: 'obj-overview',
+  targetObjectId: 'obj-generator',
   sourceObjectName: 'System Overview',
   targetObjectName: 'Main Generator',
   type: RelationshipType.documents,
