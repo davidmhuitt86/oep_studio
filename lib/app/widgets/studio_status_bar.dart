@@ -7,7 +7,7 @@ import '../../core/theme/studio_colors.dart';
 
 /// The bottom Status Bar (SDD-003/SDD-004, overridden by Work Package 002:
 /// displays Runtime, Repository, Theme, and Studio Version — Foundation
-/// Version moved to the Dashboard).
+/// Version moved to the Dashboard). Work Package 003 adds Selected Object.
 class StudioStatusBar extends ConsumerWidget {
   const StudioStatusBar({super.key});
 
@@ -18,6 +18,7 @@ class StudioStatusBar extends ConsumerWidget {
     final repositoryLabel = foundation.isRepositoryOpen
         ? 'Repository: ${foundation.repositoryStatus?.repositoryName ?? "Open"}'
         : 'Repository: None Open';
+    final selectedObjectLabel = 'Selected Object: ${foundation.selectedObject?.name ?? "None"}';
 
     return Container(
       height: 28,
@@ -31,6 +32,13 @@ class StudioStatusBar extends ConsumerWidget {
           _StatusDot(color: connected ? StudioColors.success : StudioColors.warning),
           const SizedBox(width: 6),
           Flexible(
+            // Weighted higher than the right-hand group and the Spacer:
+            // this side's content (Ready/Repository/Runtime/Selected
+            // Object) is both longer and more important than the
+            // Theme/Version group, so it should keep more of the
+            // available width before either side starts clipping at
+            // the window's minimum size (1000px, win32_window.cpp).
+            flex: 3,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -43,6 +51,8 @@ class StudioStatusBar extends ConsumerWidget {
                     connected ? 'Runtime: Connected' : 'Runtime: Disconnected',
                     color: connected ? StudioColors.success : StudioColors.warning,
                   ),
+                  const _StatusSeparator(),
+                  _StatusText(selectedObjectLabel),
                 ],
               ),
             ),
@@ -51,7 +61,7 @@ class StudioStatusBar extends ConsumerWidget {
           Flexible(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              reverse: true,
+              reverse: true, // if clipped, keep the trailing (version) text visible rather than "Theme:"
               child: const Row(
                 children: [
                   _StatusText('Theme: Dark'),

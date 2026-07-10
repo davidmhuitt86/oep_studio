@@ -9,12 +9,20 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Package 001 (Application Shell + Dashboard) and Work Package 002
-(Foundation Bridge + Open Repository Workflow) are implemented. Studio
-now has a real, live connection to OEP Foundation via
-`oep_foundation_bridge.dll` and `oep_api.h`. See
-`docs/IMPLEMENTATION_STATUS.md` for what exists today and what is
-still a placeholder.
+Work Packages 001–003 are implemented: Application Shell + Dashboard,
+Foundation Bridge + Open Repository Workflow, and the Repository
+Explorer / Object Explorer / Property Inspector / Connection Manager.
+Studio has a real, live connection to OEP Foundation via
+`oep_foundation_bridge.dll` and `oep_api.h`, though object browsing is
+UI-complete but data-empty until Foundation exposes object enumeration
+— see `docs/CONNECTION_MANAGER.md` § Missing Public API.
+`docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
+today and what is still a placeholder.
+
+The desktop window has a minimum size of 1000×700 logical pixels
+(`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
+and Property Inspector don't leave enough room for the Primary
+Workspace.
 
 ## Getting Started
 
@@ -41,5 +49,6 @@ Studio Design Documents live under `docs/`:
 * `WORKSPACE_FRAMEWORK.md` (SDD-004) — workspace layout and lifecycle
 * `FOUNDATION_BRIDGE.md` (SDD-006) — Studio/Foundation integration boundary
 * `DASHBOARD.md` (SDD-007) — Dashboard requirements
+* `CONNECTION_MANAGER.md` — Runtime/Repository/Selection state ownership
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# This project only scaffolds windows/android (see docs/TECH_STACK.md).
+# `flutter pub get`/analyze/test/build still regenerate ephemeral plugin
+# registrant files for every platform listed in .metadata, including
+# linux/macos, which aren't real scaffolds here — ignore them rather
+# than repeatedly cleaning them up before every commit.
+/linux/flutter/
+/macos/Flutter/ephemeral/
+/macos/Flutter/GeneratedPluginRegistrant.swift

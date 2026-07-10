@@ -320,3 +320,159 @@ lib/
   repositories, the Notifier's single `_bridge` field is the thing that
   will need to become a collection — flagged here rather than
   speculatively built now.
+
+---
+
+## Work Package 003 — Repository Explorer, Object Explorer, Property Inspector, Connection Manager
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000005 — Repository Explorer — Complete
+* STUDIO-TASK-000006 — Object Explorer — Complete
+
+### What Exists
+
+* `lib/features/repository/repository_page.dart` — Repository Explorer:
+  shows the open repository's name, all six categories (Components,
+  Documents, Diagrams, Procedures, Images, Projects — matching
+  Foundation's `ObjectType` enum exactly), expand/collapse per
+  category, an incremental filter over category labels, and a "No
+  Repository Open" state with a button that returns to the Dashboard.
+  Category counts always read "—" — see § Missing Public API.
+* `lib/features/objects/objects_page.dart` +
+  `lib/features/objects/object_list_query.dart` — Object Explorer: a
+  "No Category Selected" prompt when navigated to directly, otherwise
+  a sortable (Name/Type/Author), filterable (author, incremental name
+  search; type filtering supported by the same pure `ObjectListQuery`
+  logic but not exposed as a separate control here since the list is
+  already scoped to one category) object list. The list is always
+  empty in practice — see § Missing Public API — but the sort/filter
+  pipeline itself is fully implemented and unit-tested against
+  synthetic data (`test/object_list_query_test.dart`, 8 cases).
+* `lib/shared/widgets/property_inspector_panel.dart` — a new persistent
+  right-hand region added to `StudioShell` (SDD-004's fifth region,
+  deferred in Work Package 001), showing the selected object's Name/
+  Object Type/Author/Version/Description/Tags, or "No Object Selected".
+* `docs/CONNECTION_MANAGER.md` (new) — documents
+  `FoundationRuntimeNotifier`/`FoundationServiceState` (introduced in
+  Work Package 002, not renamed) as fulfilling the "Connection
+  Manager" role Work Package 003 introduces, extended with
+  `selectedCategory`/`selectedObject` (Current Selection). Selection is
+  automatically cleared on repository open/close and on category
+  change.
+* Status Bar: added "Selected Object: <name/None>".
+* `lib/core/models/object_category.dart` /
+  `engineering_object_summary.dart` — plain Dart models mirroring
+  Foundation's `ObjectType`/`EngineeringObject` shape, used for UI
+  structure and the sort/filter pipeline. Not populated from real
+  Foundation data (see below).
+* `windows/runner/win32_window.cpp` — added a `WM_GETMINMAXINFO`
+  handler enforcing a 1000×700 logical-pixel minimum window size (see
+  Architectural Observations).
+
+### What Is Explicitly Not Implemented
+
+Per Work Package 003's Public API rule ("If additional Public API
+functionality is required: Document it. Do not implement it.") — see
+`docs/CONNECTION_MANAGER.md` § Missing Public API for full detail:
+
+* Real category object counts (Repository Explorer always shows "—").
+* Real object listing (Object Explorer's list is always empty; sort/
+  filter logic is implemented and tested, just has no live data to
+  operate on yet).
+* Real object detail (Property Inspector only ever shows "No Object
+  Selected" in practice, since no object can be selected without a
+  real list to select from).
+
+No changes were made to `oep_foundation` to work around this — the gap
+is documented, not implemented around.
+
+### Verification
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 12/12 passing: the existing app-shell test (extended
+  with Property Inspector/Status Bar assertions), the two new
+  navigation tests (Repository Explorer's "No Repository Open" →
+  Dashboard round trip; Object Explorer's "No Category Selected" →
+  Repository Explorer round trip), and 8 `ObjectListQuery` unit tests
+  (sort by name/type/author, filter by type/author/tag, incremental
+  search, non-mutation, combined-filter AND semantics, empty input).
+* `flutter build windows` — succeeded twice (once before, once after
+  the Status Bar flex-weighting fix below), producing `oep_studio.exe`
+  with the native Foundation Bridge and the new `WM_GETMINMAXINFO`
+  minimum-size behavior both included.
+* Manual verification against the built exe with a real open
+  repository (`smoke-repo`): Repository Explorer lists all six
+  categories with correct icons and honest "—" counts; clicking a
+  category navigates to Object Explorer with the category name in the
+  header and an honest "No objects found in this category." state;
+  Object Explorer's "No Category Selected" prompt correctly routes back
+  to Repository Explorer when navigated to directly via the nav rail;
+  Property Inspector is visible on every page, always reads "No Object
+  Selected" (nothing is ever selectable yet); Status Bar shows
+  "Selected Object: None".
+* Manual resize verification: attempted to resize the window to
+  500×400 via a programmatic `MoveWindow` call (bypasses the
+  interactive-drag path but still routes through `WM_GETMINMAXINFO`
+  via `DefWindowProc`) — confirmed the OS clamped it to the enforced
+  1000×700 logical minimum (1250×875 physical at this machine's 125%
+  DPI scale) rather than allowing an unusably small window.
+
+### Architectural Observations
+
+* **The Status Bar's two `Flexible` regions competed equally for space
+  by default, silently clipping the newer (and more important) left
+  group.** At the enforced 1000px minimum width with a real repository
+  open, "Ready | Repository: smoke-repo | Runtime: Connected |
+  Selected Object: None" (~465px) didn't fit in an equal 1/3 share of
+  the available row width, and `SingleChildScrollView` clipped from
+  the end — silently dropping "Selected Object: None" entirely rather
+  than throwing a `RenderFlex` overflow error (which is why `flutter
+  test` didn't catch it; it was only caught by capturing a screenshot
+  at the real minimum size against a real open repository). Fixed by
+  weighting the left `Flexible` at `flex: 3` against the right side's
+  default `flex: 1`, and marking the right side `reverse: true` so
+  *its* clipping (if any) drops the less-important leading label
+  rather than the trailing version string. General lesson carried
+  forward from Work Package 001/002: a passing `flutter test` run does
+  not guarantee no visual clipping — narrow-width manual verification
+  against real (not just placeholder) content remains necessary.
+* **The desktop window previously had no enforced minimum size** —
+  `flutter create`'s default `win32_window.cpp` doesn't set one. Added
+  a `WM_GETMINMAXINFO` handler (1000×700 logical pixels, matching the
+  width this and prior work packages have already established as the
+  practical minimum for the Navigation Rail + Property Inspector +
+  Primary Workspace layout). This is a real Win32 mechanism that
+  constrains interactive drag-resizing directly; it was also confirmed
+  to constrain programmatic `MoveWindow` calls via manual testing.
+* **`docs/CONNECTION_MANAGER.md` documents an existing class under a
+  new name rather than renaming it.** `FoundationRuntimeNotifier`/
+  `foundationRuntimeServiceProvider` (Work Package 002) already
+  fulfilled everything Work Package 003 asks of a "Connection
+  Manager" except Current Selection, which was added to the same
+  class. Renaming the symbols themselves was judged unnecessary
+  churn — the work package asks to "introduce" the concept and
+  document it, which is satisfied by documentation plus the additive
+  extension, without disrupting working, tested code.
+
+### Flutter-Specific Recommendations
+
+* `ObjectListQuery` (pure sort/filter logic, no widget dependencies) is
+  a pattern worth repeating: whenever a feature's real data source
+  doesn't exist yet, separating the data-transformation logic from the
+  widget that displays it means the logic can still be genuinely unit
+  tested, rather than leaving "sort/filter works" as an unverified
+  claim until Foundation catches up.
+* When adding a new persistent shell region (Property Inspector), the
+  `StudioShell` `Row` needed restructuring — the `Column`
+  (workspace + status bar) that was previously the sole `Expanded`
+  child of the outer `Row` now needs to sit *between* the Nav Rail and
+  the new fixed-width panel, with the Status Bar pulled out to a
+  `Column` that spans the *full* shell width (below the Nav
+  Rail+Workspace+Inspector `Row`), not just the workspace's width, so
+  the Status Bar's Runtime/Repository/Selected Object/Theme/Version
+  content isn't squeezed by the new sidebar. Any future
+  five-region-layout change should keep this structure (side panels
+  inside the row, status bar outside/below it) in mind.

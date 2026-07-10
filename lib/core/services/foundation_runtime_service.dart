@@ -3,13 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../foundation/foundation_bridge.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
+import '../models/engineering_object_summary.dart';
+import '../models/object_category.dart';
 import 'foundation_runtime_state.dart';
 
-/// Owns Runtime State and Repository State (SDD-001/SDD-004: "Studio
-/// Services own Runtime State, Repository State..."). This is the only
-/// place in Studio that holds a [FoundationBridge] instance — every
-/// feature reaches Foundation through this provider, never through the
-/// Bridge directly.
+/// The Studio Connection Manager (Work Package 002/003). Owns Runtime
+/// State, Repository State, Current Repository, and Current Selection
+/// — see `docs/CONNECTION_MANAGER.md`. This is the only place in Studio
+/// that holds a [FoundationBridge] instance; every feature reaches
+/// Foundation through this provider, never through the Bridge directly.
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   FoundationBridge? _bridge;
 
@@ -72,7 +74,13 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       }
       bridge.openRepository(repositoryPath);
       final status = bridge.getRepositoryStatus();
-      state = state.copyWith(runtimeState: bridge.state, repositoryStatus: status, clearError: true);
+      state = state.copyWith(
+        runtimeState: bridge.state,
+        repositoryStatus: status,
+        clearError: true,
+        clearSelectedCategory: true,
+        clearSelectedObject: true,
+      );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
       rethrow;
@@ -85,11 +93,35 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     if (bridge == null || !state.isRepositoryOpen) return;
     try {
       bridge.closeRepository();
-      state = state.copyWith(runtimeState: bridge.state, clearRepositoryStatus: true, clearError: true);
+      state = state.copyWith(
+        runtimeState: bridge.state,
+        clearRepositoryStatus: true,
+        clearError: true,
+        clearSelectedCategory: true,
+        clearSelectedObject: true,
+      );
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
       rethrow;
     }
+  }
+
+  /// Selects a Repository Explorer category (Work Package 003 Current
+  /// Selection). Clears any previously selected object, since it
+  /// belonged to a different category's list.
+  void selectCategory(ObjectCategory category) {
+    state = state.copyWith(selectedCategory: category, clearSelectedObject: true);
+  }
+
+  /// Selects an Object Explorer row, populating the Property Inspector.
+  void selectObject(EngineeringObjectSummary object) {
+    state = state.copyWith(selectedObject: object);
+  }
+
+  /// Clears the current object selection (Property Inspector reverts to
+  /// "No Object Selected").
+  void clearObjectSelection() {
+    state = state.copyWith(clearSelectedObject: true);
   }
 
   void _disposeBridge() {
