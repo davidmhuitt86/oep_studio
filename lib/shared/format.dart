@@ -20,3 +20,11 @@ String formatFileSize(int bytes) {
   }
   return '${value.toStringAsFixed(1)} ${units[unitIndex]}';
 }
+
+/// "No linked candidates" / "1 linked candidate" / "2 linked candidates"
+/// — used by the Evidence Browser (Work Package 009 STUDIO-TASK-000020:
+/// "Display: ... Linked Candidate Count").
+String formatLinkedCount(int count) {
+  if (count == 0) return 'No linked candidates';
+  return '$count linked candidate${count == 1 ? '' : 's'}';
+}

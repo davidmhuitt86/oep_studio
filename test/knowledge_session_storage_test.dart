@@ -1,12 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oep_studio/knowledge/models/evidence_link.dart';
+import 'package:oep_studio/knowledge/models/evidence_region.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_status.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_type.dart';
 import 'package:oep_studio/knowledge/models/knowledge_session.dart';
 import 'package:oep_studio/knowledge/models/knowledge_session_record.dart';
 import 'package:oep_studio/knowledge/models/knowledge_validation_exception.dart';
+import 'package:oep_studio/knowledge/models/page_selection.dart';
 import 'package:oep_studio/knowledge/models/review_decision.dart';
 import 'package:oep_studio/knowledge/services/knowledge_session_service.dart';
 import 'package:oep_studio/knowledge/services/knowledge_session_storage.dart';
@@ -132,6 +136,75 @@ void main() {
         KnowledgeSessionStorage.load(record.session.id),
         throwsA(isA<KnowledgeValidationException>()),
       );
+    });
+  });
+
+  group('evidence round trip', () {
+    test('Evidence Regions, Evidence Links, and Page Selections survive save/load', () async {
+      final record = makeRecord(
+        candidates: [
+          KnowledgeCandidate(
+            id: 'c1',
+            type: KnowledgeCandidateType.component,
+            name: 'Timing Cover',
+            createdTime: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+      final withEvidence = KnowledgeSessionRecord(
+        session: record.session,
+        candidates: record.candidates,
+        evidenceRegions: [
+          EvidenceRegion(
+            id: 'region1',
+            sourceId: 'source1',
+            page: 2,
+            x: 0.1,
+            y: 0.2,
+            width: 0.3,
+            height: 0.4,
+            label: 'Torque Spec',
+            notes: 'See callout',
+            createdTime: DateTime(2026, 1, 1),
+          ),
+        ],
+        evidenceLinks: [
+          EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'region1', createdTime: DateTime(2026, 1, 1)),
+        ],
+        pageSelections: [
+          PageSelection(id: 'page1', sourceId: 'source1', page: 5, createdTime: DateTime(2026, 1, 1)),
+        ],
+      );
+
+      await KnowledgeSessionStorage.save(withEvidence);
+      final loaded = await KnowledgeSessionStorage.load(record.session.id);
+
+      expect(loaded.evidenceRegions, hasLength(1));
+      expect(loaded.evidenceRegions.single.label, 'Torque Spec');
+      expect(loaded.evidenceRegions.single.page, 2);
+      expect(loaded.evidenceRegions.single.width, 0.3);
+      expect(loaded.evidenceLinks, hasLength(1));
+      expect(loaded.evidenceLinks.single.candidateId, 'c1');
+      expect(loaded.evidenceLinks.single.regionId, 'region1');
+      expect(loaded.pageSelections, hasLength(1));
+      expect(loaded.pageSelections.single.page, 5);
+    });
+
+    test('a session saved before Work Package 009 (no evidence fields) still loads', () async {
+      final record = makeRecord();
+      final directory = KnowledgeSessionStorage.sessionDirectory(record.session.id);
+      await directory.create(recursive: true);
+      // Simulates a pre-WP009 session.json with no evidenceRegions/
+      // evidenceLinks/pageSelections keys at all.
+      await File('${directory.path}${Platform.pathSeparator}session.json').writeAsString(
+        '{"formatVersion":1,"session":${jsonEncode(record.session.toJson())},'
+        '"candidates":[],"relationshipCandidates":[],"sources":[],"reviewDecisions":[]}',
+      );
+
+      final loaded = await KnowledgeSessionStorage.load(record.session.id);
+      expect(loaded.evidenceRegions, isEmpty);
+      expect(loaded.evidenceLinks, isEmpty);
+      expect(loaded.pageSelections, isEmpty);
     });
   });
 

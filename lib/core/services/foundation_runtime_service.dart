@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../knowledge/models/evidence_link.dart';
+import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_candidate_type.dart';
 import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/knowledge_session_record.dart';
 import '../../knowledge/models/knowledge_validation_exception.dart';
+import '../../knowledge/models/page_selection.dart';
 import '../../knowledge/models/relationship_candidate.dart';
 import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/session_status.dart';
@@ -25,23 +28,25 @@ import '../models/relationship_type.dart';
 import '../models/search_scope.dart';
 import 'foundation_runtime_state.dart';
 
-/// The Studio Connection Manager (Work Packages 002-008). Owns Current
+/// The Studio Connection Manager (Work Packages 002-009). Owns Current
 /// Runtime, Current Repository, Repository Statistics, Current Object
 /// List, Current Relationship List, Current Search Query/Results,
-/// Current Knowledge Curation Session, Current Source List, Current
-/// Relationship Candidate List, Current Commit Preview (derived — see
-/// `FoundationServiceState.commitPreview`), and Current Selection — see
-/// `docs/CONNECTION_MANAGER.md`. This is the only place in Studio that
-/// holds a [FoundationBridge] instance; every feature reaches
+/// Current Knowledge Curation Session, Current Source List (doubling as
+/// Current Source Document), Current Page, Current Relationship
+/// Candidate List, Current Evidence Region List, Current Evidence Link
+/// List, Current Page Selection List, Current Commit Preview (derived —
+/// see `FoundationServiceState.commitPreview`), and Current Selection —
+/// see `docs/CONNECTION_MANAGER.md`. This is the only place in Studio
+/// that holds a [FoundationBridge] instance; every feature reaches
 /// Foundation through this provider, never through the Bridge directly.
 ///
-/// Knowledge Curation Session/candidate/source/relationship-candidate
-/// state is Studio-only (Work Package 007/008: "No Foundation
-/// modifications occur") but is still owned here rather than in a
-/// separate service, per the Architecture Rules both work packages
-/// restate ("The Connection Manager owns session state" / "coordinates
-/// state only"). Persistence and validation logic itself lives in
-/// `KnowledgeSessionService`/`KnowledgeSessionStorage`/
+/// Knowledge Curation Session/candidate/source/relationship-candidate/
+/// evidence state is Studio-only (Work Package 007/008/009: "No
+/// Foundation modifications occur") but is still owned here rather than
+/// in a separate service, per the Architecture Rules every one of those
+/// work packages restates ("The Connection Manager owns session state" /
+/// "coordinates state only"). Persistence and validation logic itself
+/// lives in `KnowledgeSessionService`/`KnowledgeSessionStorage`/
 /// `SourceMaterialService` — this notifier calls them, it doesn't
 /// reimplement them.
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
@@ -216,9 +221,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
 
   /// Selects an Object Explorer row, switching the Property Inspector to
   /// Object mode. Clears every other selection field — Object,
-  /// Relationship, Knowledge Candidate, Relationship Candidate, and
-  /// Source Material selection are mutually exclusive (Work Package
-  /// 005, extended by Work Packages 007/008).
+  /// Relationship, Knowledge Candidate, Relationship Candidate, Source
+  /// Material, and Evidence Region selection are mutually exclusive
+  /// (Work Package 005, extended by Work Packages 007/008/009).
   void selectObject(EngineeringObjectSummary object) {
     state = state.copyWith(
       selectedObject: object,
@@ -226,6 +231,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
     );
   }
 
@@ -244,6 +250,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
     );
   }
 
@@ -317,9 +324,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       relationshipCandidates: const [],
       sourceMaterials: const [],
       reviewDecisions: const [],
+      evidenceRegions: const [],
+      evidenceLinks: const [],
+      pageSelections: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearOpenSourceDocument: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedEvidenceLink: true,
+      clearCurrentPage: true,
       clearKnowledgeStorageError: true,
     );
     unawaited(_persistActiveSession());
@@ -348,9 +362,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       relationshipCandidates: const [],
       sourceMaterials: const [],
       reviewDecisions: const [],
+      evidenceRegions: const [],
+      evidenceLinks: const [],
+      pageSelections: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearOpenSourceDocument: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedEvidenceLink: true,
+      clearCurrentPage: true,
       clearKnowledgeStorageError: true,
     );
   }
@@ -372,9 +393,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         relationshipCandidates: record.relationshipCandidates,
         sourceMaterials: record.sources,
         reviewDecisions: record.reviewDecisions,
+        evidenceRegions: record.evidenceRegions,
+        evidenceLinks: record.evidenceLinks,
+        pageSelections: record.pageSelections,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
+        clearOpenSourceDocument: true,
+        clearSelectedEvidenceRegion: true,
+        clearSelectedEvidenceLink: true,
+        clearCurrentPage: true,
         clearKnowledgeStorageError: true,
       );
     } on KnowledgeValidationException catch (error) {
@@ -417,6 +445,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           relationshipCandidates: record.relationshipCandidates,
           sources: record.sources,
           reviewDecisions: record.reviewDecisions,
+          evidenceRegions: record.evidenceRegions,
+          evidenceLinks: record.evidenceLinks,
+          pageSelections: record.pageSelections,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -465,6 +496,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           relationshipCandidates: state.relationshipCandidates,
           sources: state.sourceMaterials,
           reviewDecisions: state.reviewDecisions,
+          evidenceRegions: state.evidenceRegions,
+          evidenceLinks: state.evidenceLinks,
+          pageSelections: state.pageSelections,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -583,7 +617,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// that no longer exists would otherwise be a dangling reference
   /// (see `KnowledgeSessionService.computeCommitPreview`'s validation,
   /// which checks for exactly this in case this cascade is ever
-  /// bypassed, e.g. by a future bulk-delete path).
+  /// bypassed, e.g. by a future bulk-delete path). Also removes any
+  /// Evidence Link referencing this candidate (Work Package 009) — an
+  /// evidence link to a deleted candidate would be equally dangling.
   void deleteKnowledgeCandidate(String candidateId) {
     final removed = state.candidates.where((candidate) => candidate.id == candidateId);
     final removedName = removed.isEmpty ? candidateId : removed.first.name;
@@ -596,11 +632,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final selectedRelationshipRemoved =
         state.selectedRelationshipCandidate != null &&
         !remainingRelationships.any((relationship) => relationship.id == state.selectedRelationshipCandidate!.id);
+    final remainingLinks = state.evidenceLinks.where((link) => link.candidateId != candidateId).toList();
+    final selectedLinkRemoved =
+        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
     state = state.copyWith(
       candidates: state.candidates.where((candidate) => candidate.id != candidateId).toList(),
       relationshipCandidates: remainingRelationships,
+      evidenceLinks: remainingLinks,
       clearSelectedCandidate: state.selectedCandidate?.id == candidateId,
       clearSelectedRelationshipCandidate: selectedRelationshipRemoved,
+      clearSelectedEvidenceLink: selectedLinkRemoved,
     );
     _recordDecision(candidateId, removedName, ReviewDecisionKind.deleted);
     unawaited(_persistActiveSession());
@@ -615,6 +656,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationship: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
     );
   }
 
@@ -717,6 +759,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationship: true,
       clearSelectedCandidate: true,
       clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
     );
   }
 
@@ -767,12 +810,33 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     unawaited(_persistActiveSession());
   }
 
-  /// Detaches a source and removes its managed file copy.
+  /// Detaches a source and removes its managed file copy. Cascades:
+  /// every Evidence Region and Page Selection belonging to this source
+  /// is removed too (Work Package 009) — a region or page marker
+  /// pointing at evidence that no longer exists would be meaningless —
+  /// along with any Evidence Link referencing one of the removed
+  /// regions.
   Future<void> removeSourceMaterial(String sourceId) async {
     final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    final remainingRegions = state.evidenceRegions.where((region) => region.sourceId != sourceId).toList();
+    final removedRegionIds = state.evidenceRegions
+        .where((region) => region.sourceId == sourceId)
+        .map((region) => region.id)
+        .toSet();
+    final remainingLinks = state.evidenceLinks.where((link) => !removedRegionIds.contains(link.regionId)).toList();
+    final selectedRegionRemoved = state.selectedEvidenceRegion != null && removedRegionIds.contains(state.selectedEvidenceRegion!.id);
+    final selectedLinkRemoved =
+        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
     state = state.copyWith(
       sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
+      evidenceRegions: remainingRegions,
+      evidenceLinks: remainingLinks,
+      pageSelections: state.pageSelections.where((selection) => selection.sourceId != sourceId).toList(),
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
+      clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
+      clearCurrentPage: state.openSourceDocument?.id == sourceId,
+      clearSelectedEvidenceRegion: selectedRegionRemoved,
+      clearSelectedEvidenceLink: selectedLinkRemoved,
     );
     if (matches.isNotEmpty) {
       await SourceMaterialService.removeFile(matches.first);
@@ -781,18 +845,36 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Selects a Source Material, switching the Property Inspector to
-  /// Source Material mode. Clears every other selection.
+  /// Source Material mode, **and** opens it in the Source Viewer as
+  /// Work Package 009's "Current Source Document"
+  /// ([FoundationServiceState.openSourceDocument]). Clears every other
+  /// selection, resets the Current Page (a different document starts
+  /// back at whatever `PdfViewer.initialPageNumber` opens it on, not
+  /// wherever the previous document happened to be scrolled to), and
+  /// resets the Current Evidence Link (its Property Inspector context
+  /// no longer applies once the selection driving it changes).
+  ///
+  /// Only *this* method opens a document — every other `select*` method
+  /// leaves [FoundationServiceState.openSourceDocument] untouched, so
+  /// the Source Viewer stays open while the engineer selects other
+  /// things elsewhere (see that field's doc comment).
   void selectSourceMaterial(SourceMaterial source) {
     state = state.copyWith(
       selectedSourceMaterial: source,
+      openSourceDocument: source,
       clearSelectedObject: true,
       clearSelectedRelationship: true,
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedEvidenceLink: true,
+      clearCurrentPage: true,
     );
   }
 
-  /// Clears the current Source Material selection.
+  /// Clears the current Source Material selection (Property Inspector
+  /// mode only — the Source Viewer stays open; see
+  /// [FoundationServiceState.openSourceDocument]).
   void clearSourceMaterialSelection() {
     state = state.copyWith(clearSelectedSourceMaterial: true);
   }
@@ -801,6 +883,229 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// anything (Session Header's error banner close button).
   void clearKnowledgeStorageError() {
     state = state.copyWith(clearKnowledgeStorageError: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // PDF Source Viewer (Work Package 009 STUDIO-TASK-000019)
+  // ---------------------------------------------------------------------
+
+  /// Records the Source Viewer's Current Page, driven by `pdfrx`'s
+  /// `PdfViewerParams.onPageChanged` callback. Ephemeral — see
+  /// [FoundationServiceState.currentPage]'s doc comment — so this
+  /// intentionally does not autosave.
+  void setCurrentPage(int page) {
+    state = state.copyWith(currentPage: page);
+  }
+
+  // ---------------------------------------------------------------------
+  // Evidence Regions (Work Package 009 STUDIO-TASK-000020)
+  // ---------------------------------------------------------------------
+
+  /// Creates a new Evidence Region on [sourceId]'s page [page]. [x]/[y]/
+  /// [width]/[height] are fractions of the page's own dimensions (see
+  /// [EvidenceRegion]'s doc comment) — the caller (the PDF viewer's
+  /// drag-to-create gesture) is responsible for computing them from the
+  /// page hit-test result, not this method. Throws
+  /// [KnowledgeValidationException] if no session is active. Defaults
+  /// [label] to `"Region <n>"` (1-based, counting this session's
+  /// existing regions) when omitted or blank, since the drag gesture
+  /// itself has no label input — the engineer renames afterward via the
+  /// Evidence Browser if they want something more specific.
+  EvidenceRegion createEvidenceRegion({
+    required String sourceId,
+    required int page,
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    String? label,
+  }) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding evidence.');
+    }
+    final resolvedLabel = (label == null || label.trim().isEmpty)
+        ? 'Region ${state.evidenceRegions.length + 1}'
+        : label.trim();
+    final region = EvidenceRegion(
+      id: KnowledgeSessionService.generateId('region'),
+      sourceId: sourceId,
+      page: page,
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+      label: resolvedLabel,
+      createdTime: DateTime.now(),
+    );
+    state = state.copyWith(evidenceRegions: [...state.evidenceRegions, region]);
+    unawaited(_persistActiveSession());
+    return region;
+  }
+
+  /// Renames an Evidence Region (Evidence Browser: "Support: Rename").
+  /// Throws [KnowledgeValidationException] for an empty label.
+  void renameEvidenceRegion(String regionId, String label) {
+    KnowledgeSessionService.validateEvidenceRegionLabel(label);
+    EvidenceRegion? updated;
+    final regions = <EvidenceRegion>[];
+    for (final region in state.evidenceRegions) {
+      if (region.id == regionId) {
+        updated = region.copyWith(label: label.trim(), modifiedTime: DateTime.now());
+        regions.add(updated);
+      } else {
+        regions.add(region);
+      }
+    }
+    state = state.copyWith(
+      evidenceRegions: regions,
+      selectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId ? updated : null,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Updates an Evidence Region's notes.
+  void setEvidenceRegionNotes(String regionId, String notes) {
+    EvidenceRegion? updated;
+    final regions = <EvidenceRegion>[];
+    for (final region in state.evidenceRegions) {
+      if (region.id == regionId) {
+        updated = region.copyWith(notes: notes.trim(), modifiedTime: DateTime.now());
+        regions.add(updated);
+      } else {
+        regions.add(region);
+      }
+    }
+    state = state.copyWith(
+      evidenceRegions: regions,
+      selectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId ? updated : null,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Deletes an Evidence Region (Evidence Browser: "Support: Delete").
+  /// Cascades: every Evidence Link referencing this region is removed
+  /// too.
+  void deleteEvidenceRegion(String regionId) {
+    final remainingLinks = state.evidenceLinks.where((link) => link.regionId != regionId).toList();
+    final selectedLinkRemoved =
+        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
+    state = state.copyWith(
+      evidenceRegions: state.evidenceRegions.where((region) => region.id != regionId).toList(),
+      evidenceLinks: remainingLinks,
+      clearSelectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId,
+      clearSelectedEvidenceLink: selectedLinkRemoved,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects an Evidence Region, switching the Property Inspector to
+  /// Evidence Region mode. Clears every other selection. Selecting a
+  /// region highlights its linked Knowledge Candidates (Work Package
+  /// 009 § Source Viewer Interaction) — a derived view
+  /// (`FoundationServiceState.candidatesLinkedToEvidenceRegion`), not
+  /// separate state.
+  void selectEvidenceRegion(EvidenceRegion region) {
+    state = state.copyWith(
+      selectedEvidenceRegion: region,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceLink: true,
+    );
+  }
+
+  /// Clears the current Evidence Region selection.
+  void clearEvidenceRegionSelection() {
+    state = state.copyWith(clearSelectedEvidenceRegion: true, clearSelectedEvidenceLink: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Evidence Links (Work Package 009 STUDIO-TASK-000021)
+  // ---------------------------------------------------------------------
+
+  /// Links a Knowledge Candidate to an Evidence Region. Idempotent — a
+  /// second call for the same pair is a no-op rather than creating a
+  /// duplicate link (Work Package 009: "One candidate may reference
+  /// multiple regions. One region may support multiple candidates." —
+  /// this describes a set of distinct pairs, not a multiset).
+  void linkEvidence({required String candidateId, required String regionId}) {
+    if (KnowledgeSessionService.isEvidenceLinked(
+      candidateId: candidateId,
+      regionId: regionId,
+      existingLinks: state.evidenceLinks,
+    )) {
+      return;
+    }
+    final link = EvidenceLink(
+      id: KnowledgeSessionService.generateId('link'),
+      candidateId: candidateId,
+      regionId: regionId,
+      createdTime: DateTime.now(),
+    );
+    state = state.copyWith(evidenceLinks: [...state.evidenceLinks, link]);
+    unawaited(_persistActiveSession());
+  }
+
+  /// Removes an Evidence Link.
+  void unlinkEvidence(String linkId) {
+    state = state.copyWith(
+      evidenceLinks: state.evidenceLinks.where((link) => link.id != linkId).toList(),
+      clearSelectedEvidenceLink: state.selectedEvidenceLink?.id == linkId,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects an Evidence Link within the Property Inspector's Evidence
+  /// Links list (Work Package 009's "Current Evidence Link"). Unlike
+  /// `select*` for the other kinds, this does *not* clear the other
+  /// selections — it only makes sense alongside an already-selected
+  /// Knowledge Candidate or Evidence Region, to target the "Unlink"
+  /// action at one specific link (see
+  /// [FoundationServiceState.selectedEvidenceLink]'s doc comment).
+  void selectEvidenceLink(EvidenceLink link) {
+    state = state.copyWith(selectedEvidenceLink: link);
+  }
+
+  /// Clears the current Evidence Link selection.
+  void clearEvidenceLinkSelection() {
+    state = state.copyWith(clearSelectedEvidenceLink: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Page Selections (Work Package 009 STUDIO-TASK-000019 § Selection)
+  // ---------------------------------------------------------------------
+
+  /// Toggles whether [page] of [sourceId] is marked as a Page Selection
+  /// — "The engineer may select pages ... No text selection required.
+  /// Page selection only." Throws [KnowledgeValidationException] if no
+  /// session is active.
+  void togglePageSelection({required String sourceId, required int page}) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before selecting pages.');
+    }
+    final existing = state.pageSelections.where(
+      (selection) => selection.sourceId == sourceId && selection.page == page,
+    );
+    if (existing.isNotEmpty) {
+      state = state.copyWith(
+        pageSelections: state.pageSelections.where((selection) => selection.id != existing.first.id).toList(),
+      );
+    } else {
+      state = state.copyWith(
+        pageSelections: [
+          ...state.pageSelections,
+          PageSelection(
+            id: KnowledgeSessionService.generateId('page'),
+            sourceId: sourceId,
+            page: page,
+            createdTime: DateTime.now(),
+          ),
+        ],
+      );
+    }
+    unawaited(_persistActiveSession());
   }
 
   void _disposeBridge() {

@@ -1,5 +1,8 @@
+import 'evidence_link.dart';
+import 'evidence_region.dart';
 import 'knowledge_candidate.dart';
 import 'knowledge_session.dart';
+import 'page_selection.dart';
 import 'relationship_candidate.dart';
 import 'review_decision.dart';
 import 'source_material.dart';
@@ -8,9 +11,10 @@ import 'source_material.dart';
 /// what `session.json` holds (`docs/KNOWLEDGE_SESSION_FORMAT.md`) and
 /// what `KnowledgeSessionStorage.load`/`save` round-trip. Also what the
 /// Connection Manager holds in memory for the active session, spread
-/// across `FoundationServiceState.knowledgeSession`/`knowledgeCandidates`/
-/// `relationshipCandidates`/`sourceMaterials`/`reviewDecisions` rather
-/// than as one field — see `docs/CONNECTION_MANAGER.md`.
+/// across `FoundationServiceState.knowledgeSession`/`candidates`/
+/// `relationshipCandidates`/`sourceMaterials`/`reviewDecisions`/
+/// `evidenceRegions`/`evidenceLinks`/`pageSelections` rather than as one
+/// field — see `docs/CONNECTION_MANAGER.md`.
 class KnowledgeSessionRecord {
   const KnowledgeSessionRecord({
     required this.session,
@@ -18,6 +22,9 @@ class KnowledgeSessionRecord {
     this.relationshipCandidates = const [],
     this.sources = const [],
     this.reviewDecisions = const [],
+    this.evidenceRegions = const [],
+    this.evidenceLinks = const [],
+    this.pageSelections = const [],
   });
 
   final KnowledgeSession session;
@@ -26,6 +33,18 @@ class KnowledgeSessionRecord {
   final List<SourceMaterial> sources;
   final List<ReviewDecision> reviewDecisions;
 
+  /// Manually-identified rectangular Evidence Regions (Work Package 009
+  /// STUDIO-TASK-000020).
+  final List<EvidenceRegion> evidenceRegions;
+
+  /// Knowledge Candidate ↔ Evidence Region links (Work Package 009
+  /// STUDIO-TASK-000021).
+  final List<EvidenceLink> evidenceLinks;
+
+  /// Whole-page evidence markers (Work Package 009 STUDIO-TASK-000019 §
+  /// Selection).
+  final List<PageSelection> pageSelections;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -33,6 +52,9 @@ class KnowledgeSessionRecord {
     'relationshipCandidates': relationshipCandidates.map((relationship) => relationship.toJson()).toList(),
     'sources': sources.map((source) => source.toJson()).toList(),
     'reviewDecisions': reviewDecisions.map((decision) => decision.toJson()).toList(),
+    'evidenceRegions': evidenceRegions.map((region) => region.toJson()).toList(),
+    'evidenceLinks': evidenceLinks.map((link) => link.toJson()).toList(),
+    'pageSelections': pageSelections.map((selection) => selection.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -44,6 +66,9 @@ class KnowledgeSessionRecord {
     final relationshipsJson = json['relationshipCandidates'] as List<dynamic>? ?? const [];
     final sourcesJson = json['sources'] as List<dynamic>? ?? const [];
     final decisionsJson = json['reviewDecisions'] as List<dynamic>? ?? const [];
+    final evidenceRegionsJson = json['evidenceRegions'] as List<dynamic>? ?? const [];
+    final evidenceLinksJson = json['evidenceLinks'] as List<dynamic>? ?? const [];
+    final pageSelectionsJson = json['pageSelections'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -55,6 +80,15 @@ class KnowledgeSessionRecord {
       sources: [for (final entry in sourcesJson) SourceMaterial.fromJson(entry as Map<String, dynamic>)],
       reviewDecisions: [
         for (final entry in decisionsJson) ReviewDecision.fromJson(entry as Map<String, dynamic>),
+      ],
+      evidenceRegions: [
+        for (final entry in evidenceRegionsJson) EvidenceRegion.fromJson(entry as Map<String, dynamic>),
+      ],
+      evidenceLinks: [
+        for (final entry in evidenceLinksJson) EvidenceLink.fromJson(entry as Map<String, dynamic>),
+      ],
+      pageSelections: [
+        for (final entry in pageSelectionsJson) PageSelection.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

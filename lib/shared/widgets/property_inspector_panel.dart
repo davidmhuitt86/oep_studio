@@ -5,34 +5,42 @@ import '../../core/models/engineering_object_summary.dart';
 import '../../core/models/relationship_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../../knowledge/inspector/evidence_link_entries.dart';
+import '../../knowledge/inspector/evidence_region_properties.dart';
 import '../../knowledge/inspector/knowledge_candidate_properties.dart';
 import '../../knowledge/inspector/relationship_candidate_properties.dart';
 import '../../knowledge/inspector/session_properties.dart';
 import '../../knowledge/inspector/source_material_properties.dart';
+import '../../knowledge/models/evidence_link.dart';
+import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
+import '../../knowledge/models/source_material.dart';
 import 'property_field.dart';
 
 /// The Property Inspector (SDD-004, introduced as a placeholder in
 /// Work Package 003; live Object data in Work Package 004; Relationship
 /// mode in Work Package 005; Knowledge Candidate/Session modes in Work
 /// Package 007; Relationship Candidate/Source Material modes in Work
-/// Package 008). Automatically switches between modes based on the
-/// Connection Manager's Current Selection — Knowledge Candidate,
+/// Package 008; Evidence Region mode in Work Package 009).
+/// Automatically switches between modes based on the Connection
+/// Manager's Current Selection — Evidence Region, Knowledge Candidate,
 /// Relationship Candidate, Source Material, Object, and Relationship
 /// selection are mutually exclusive (see
 /// `FoundationRuntimeNotifier.selectObject`/`selectRelationship`/
 /// `selectKnowledgeCandidate`/`selectRelationshipCandidate`/
-/// `selectSourceMaterial`); Session mode is shown only as a fallback,
-/// when a Knowledge Curation Session exists but nothing more specific
-/// is selected. Display only — no editing here, per SDD-011 and every
-/// work package since (candidate editing happens through the
-/// Engineering Review panel instead).
+/// `selectSourceMaterial`/`selectEvidenceRegion`); Session mode is shown
+/// only as a fallback, when a Knowledge Curation Session exists but
+/// nothing more specific is selected. Display only — no editing here,
+/// per SDD-011 and every work package since (candidate/region editing
+/// happens through the Engineering Review panel/Evidence Browser
+/// instead).
 class PropertyInspectorPanel extends ConsumerWidget {
   const PropertyInspectorPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final selectedEvidenceRegion = foundation.selectedEvidenceRegion;
     final selectedCandidate = foundation.selectedCandidate;
     final selectedRelationshipCandidate = foundation.selectedRelationshipCandidate;
     final selectedSourceMaterial = foundation.selectedSourceMaterial;
@@ -63,6 +71,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
           const Divider(height: 1),
           Expanded(
             child: switch ((
+              selectedEvidenceRegion,
               selectedCandidate,
               selectedRelationshipCandidate,
               selectedSourceMaterial,
@@ -70,16 +79,40 @@ class PropertyInspectorPanel extends ConsumerWidget {
               selectedRelationship,
               knowledgeSession,
             )) {
-              (final candidate?, _, _, _, _, _) => KnowledgeCandidateProperties(candidate: candidate),
-              (_, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
+              (final region?, _, _, _, _, _, _) => EvidenceRegionProperties(
+                region: region,
+                sourceName: _sourceName(foundation.sourceMaterials, region.sourceId),
+                links: _linkedCandidates(foundation.evidenceLinks, foundation.candidates, region.id),
+              ),
+              (_, final candidate?, _, _, _, _, _) => KnowledgeCandidateProperties(
+                candidate: candidate,
+                links: _linkedRegions(
+                  foundation.evidenceLinks,
+                  foundation.evidenceRegions,
+                  foundation.sourceMaterials,
+                  candidate.id,
+                ),
+              ),
+              (_, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
                 relationship: relationship,
                 sourceName: _candidateName(foundation.candidates, relationship.sourceCandidateId),
                 targetName: _candidateName(foundation.candidates, relationship.targetCandidateId),
               ),
-              (_, _, final source?, _, _, _) => SourceMaterialProperties(source: source),
-              (_, _, _, final object?, _, _) => _ObjectProperties(object: object),
-              (_, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
-              (_, _, _, _, _, final session?) => SessionProperties(
+              (_, _, _, final source?, _, _, _) => SourceMaterialProperties(
+                source: source,
+                evidenceRegionCount: foundation.evidenceRegions
+                    .where((region) => region.sourceId == source.id)
+                    .length,
+                selectedPages:
+                    foundation.pageSelections
+                        .where((selection) => selection.sourceId == source.id)
+                        .map((selection) => selection.page)
+                        .toList()
+                      ..sort(),
+              ),
+              (_, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
+              (_, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, _, _, _, final session?) => SessionProperties(
                 session: session,
                 sourceCount: foundation.knowledgeSourceCount,
                 candidateCount: foundation.knowledgeCandidateCount,
@@ -101,6 +134,50 @@ class PropertyInspectorPanel extends ConsumerWidget {
       if (candidate.id == candidateId) return candidate.name;
     }
     return candidateId;
+  }
+
+  static String _sourceName(List<SourceMaterial> sources, String sourceId) {
+    for (final source in sources) {
+      if (source.id == sourceId) return source.originalFileName;
+    }
+    return sourceId;
+  }
+
+  static List<LinkedCandidateEntry> _linkedCandidates(
+    List<EvidenceLink> links,
+    List<KnowledgeCandidate> candidates,
+    String regionId,
+  ) {
+    final entries = <LinkedCandidateEntry>[];
+    for (final link in links) {
+      if (link.regionId != regionId) continue;
+      for (final candidate in candidates) {
+        if (candidate.id == link.candidateId) {
+          entries.add(LinkedCandidateEntry(link: link, candidate: candidate));
+          break;
+        }
+      }
+    }
+    return entries;
+  }
+
+  static List<LinkedRegionEntry> _linkedRegions(
+    List<EvidenceLink> links,
+    List<EvidenceRegion> regions,
+    List<SourceMaterial> sources,
+    String candidateId,
+  ) {
+    final entries = <LinkedRegionEntry>[];
+    for (final link in links) {
+      if (link.candidateId != candidateId) continue;
+      for (final region in regions) {
+        if (region.id == link.regionId) {
+          entries.add(LinkedRegionEntry(link: link, region: region, sourceName: _sourceName(sources, region.sourceId)));
+          break;
+        }
+      }
+    }
+    return entries;
   }
 }
 

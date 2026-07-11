@@ -129,6 +129,10 @@ class _CandidateList extends ConsumerWidget {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
     final candidates = foundation.candidates;
     final notifier = ref.read(foundationRuntimeServiceProvider.notifier);
+    final selectedRegion = foundation.selectedEvidenceRegion;
+    final linkedCandidateIds = selectedRegion == null
+        ? const <String>{}
+        : foundation.candidatesLinkedToEvidenceRegion(selectedRegion.id).map((candidate) => candidate.id).toSet();
 
     if (candidates.isEmpty) {
       return const KnowledgePlaceholder(
@@ -143,6 +147,7 @@ class _CandidateList extends ConsumerWidget {
         return KnowledgeCandidateRow(
           candidate: candidate,
           selected: foundation.selectedCandidate?.id == candidate.id,
+          linkedToSelectedEvidence: linkedCandidateIds.contains(candidate.id),
           onTap: () => notifier.selectKnowledgeCandidate(candidate),
           onAccept: () => notifier.acceptKnowledgeCandidate(candidate.id),
           onReject: () => notifier.rejectKnowledgeCandidate(candidate.id),

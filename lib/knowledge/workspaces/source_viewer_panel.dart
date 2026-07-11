@@ -10,33 +10,48 @@ import '../models/source_material.dart';
 import '../models/source_material_type.dart';
 import '../services/source_material_service.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'pdf_source_viewer.dart';
 
-/// The Source Viewer panel (Work Package 008 STUDIO-TASK-000016:
-/// "displays the original engineering source for the currently selected
-/// item"). Renders what it reasonably can — an image thumbnail, or a
-/// text/Markdown file's raw content — and otherwise shows the file's
-/// location rather than attempting to render it. "No OCR. No parsing."
-/// applies here too: nothing extracts structured meaning from a
-/// source's content, this only displays it, the same way an OS file
-/// preview pane would.
+/// The Source Viewer panel (Work Package 008 STUDIO-TASK-000016;
+/// Work Package 009 STUDIO-TASK-000019: "displays the original
+/// engineering source for the currently selected item"). PDF sources
+/// get a real, interactive viewer (`PdfSourceViewer`) — page
+/// navigation, zoom, Evidence Regions. Everything else renders what it
+/// reasonably can — an image thumbnail, or a text/Markdown file's raw
+/// content — and otherwise shows the file's location rather than
+/// attempting to render it. "No OCR. No parsing." applies throughout:
+/// nothing extracts structured meaning from a source's content, this
+/// only displays it, the same way an OS file preview pane would.
+///
+/// Watches `openSourceDocument` (Work Package 009's "Current Source
+/// Document"), **not** `selectedSourceMaterial` — the latter only
+/// drives the Property Inspector's mode and is cleared whenever
+/// something else (a Knowledge Candidate, an Evidence Region) is
+/// selected instead. If this panel watched that field, selecting a
+/// candidate to see its linked regions highlighted would close the
+/// very viewer meant to show the highlight. See
+/// `docs/EVIDENCE_MODEL.md` § Connection Manager Mapping.
 class SourceViewerPanel extends ConsumerWidget {
   const SourceViewerPanel({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final source = ref.watch(foundationRuntimeServiceProvider.select((state) => state.selectedSourceMaterial));
+    final source = ref.watch(foundationRuntimeServiceProvider.select((state) => state.openSourceDocument));
     if (source == null) {
       return const KnowledgePlaceholder(message: 'Select a source in the Import Queue to preview it here.');
     }
     if (!SourceMaterialService.exists(source)) {
       return KnowledgePlaceholder(message: 'Missing source file: "${source.originalFileName}" could not be found.');
     }
+    if (source.type == SourceMaterialType.pdf) {
+      return PdfSourceViewer(key: ValueKey('pdf-source-${source.id}'), source: source);
+    }
     return Padding(
       padding: const EdgeInsets.all(12),
       child: switch (source.type) {
         SourceMaterialType.image => _ImagePreview(source: source),
         SourceMaterialType.markdown || SourceMaterialType.text => _TextPreview(source: source),
-        SourceMaterialType.pdf || SourceMaterialType.other => _UnsupportedPreview(source: source),
+        SourceMaterialType.pdf || SourceMaterialType.other => _UnsupportedPreview(source: source), // pdf handled above
       },
     );
   }

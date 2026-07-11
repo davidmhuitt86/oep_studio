@@ -5,25 +5,30 @@ Studio Shell, STUDIO-TASK-000014 Knowledge Curation Session); extended
 in Work Package 008 (STUDIO-TASK-000015 Persistent Sessions + Session
 Browser, STUDIO-TASK-000016 Source Material Workspace,
 STUDIO-TASK-000017 Manual Relationship Authoring + Relationship View,
-STUDIO-TASK-000018 Repository Commit Preview). Validates the
+STUDIO-TASK-000018 Repository Commit Preview); extended again in Work
+Package 009 (STUDIO-TASK-000019 PDF Source Viewer, STUDIO-TASK-000020
+Evidence Regions, STUDIO-TASK-000021 Evidence Linking). Validates the
 architecture defined in SDD-013 (Knowledge Studio), SDD-014
 (Engineering Knowledge Acquisition Pipeline), SDD-015 (Engineering
 Knowledge Model), SDD-016 (Knowledge Studio User Experience), SDD-017
 (Knowledge Curation Workflow), SDD-018 (Engineering Knowledge
 Lifecycle and Provenance), SDD-019 (Engineering Object Philosophy),
 and SDD-020 (Engineering Knowledge Review System), remaining
-**Studio-only: no AI, no OCR, no repository commit** through both work
-packages.
+**Studio-only: no AI, no OCR, no repository commit** through all three
+work packages.
 
-For the persisted-file format, the full model reference, and the
-detailed architectural findings (including the
+For the persisted-file format and the Knowledge Candidate/Relationship
+Candidate/Commit Preview model reference (including the
 `KnowledgeCandidateType`/`ObjectCategory` mismatch), see
-`docs/KNOWLEDGE_SESSION_FORMAT.md`. This document covers the workspace
-layout, session lifecycle, and state ownership.
+`docs/KNOWLEDGE_SESSION_FORMAT.md`. For the Evidence Region/Evidence
+Link/Page Selection models, the PDF Source Viewer, and the Work
+Package 009 architectural findings, see `docs/EVIDENCE_MODEL.md`. This
+document covers the workspace layout, session lifecycle, and state
+ownership.
 
 > **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
-> Package 007 and remains unpopulated as of Work Package 008. Neither
-> work package's decisions depend on its contents — SDD-013's own
+> Package 007 and remains unpopulated as of Work Package 009. None of
+> these work packages' decisions depend on its contents — SDD-013's own
 > Import Pipeline section has been sufficient — but this is flagged
 > again for whoever populates SDD-014 next, since a future work package
 > implementing the acquisition pipeline itself (OCR, AI Analysis) will
@@ -70,16 +75,19 @@ docked on the right of every page via `StudioShell`
 Studio extends that shared panel with its own modes (see § State
 Ownership) rather than embedding a second copy of it.
 
-As of Work Package 008, four of the six panels carry real
+As of Work Package 009, four of the six panels carry real
 functionality:
 
 * **Import Queue** (`lib/knowledge/workspaces/import_queue_panel.dart`)
   — attach Source Material via the native file picker; browse/select/
   remove attached sources.
 * **Source Viewer** (`lib/knowledge/workspaces/source_viewer_panel.dart`)
-  — previews the selected source (image thumbnail; Markdown/Text raw
-  content; a location-only message for PDF/Other — no PDF rendering
-  package is a dependency).
+  — PDF sources get a real, interactive viewer
+  (`lib/knowledge/workspaces/pdf_source_viewer.dart`: page navigation,
+  zoom, fit, rotate, continuous scrolling, Evidence Region drawing,
+  Page Selection — see `docs/EVIDENCE_MODEL.md`). Everything else
+  renders what it reasonably can (image thumbnail; Markdown/Text raw
+  content; a location-only message for Other).
 * **Engineering Review** (`lib/knowledge/review/engineering_review_panel.dart`)
   — two tabs: Candidates (manual Knowledge Candidate creation and
   Accept/Reject/Edit/Delete) and Relationships (manual Relationship
@@ -88,7 +96,7 @@ functionality:
   — a simulated preview of what a Repository Commit would do, with a
   permanently disabled "Commit" button (Repository Commit itself is
   out of scope — see § Future Foundation Integration).
-* **Property Inspector** — six modes (see § State Ownership).
+* **Property Inspector** — seven modes (see § State Ownership).
 
 **AI Suggestions** and **Repository Matches** remain placeholder
 content (`lib/knowledge/widgets/knowledge_placeholder.dart`) — both
@@ -257,7 +265,8 @@ and portable even if the original file is later moved or deleted. See
 directory layout.
 
 The Source Viewer renders what it reasonably can from the managed copy
-(image thumbnail; Markdown/Text raw content) and otherwise shows the
+(a real PDF viewer as of Work Package 009 — see `docs/EVIDENCE_MODEL.md`;
+image thumbnail; Markdown/Text raw content) and otherwise shows the
 file's location — this is still "display," not "parse": nothing
 extracts structured meaning from a source's content.
 
@@ -303,7 +312,7 @@ the *same* Connection Manager every other Studio feature uses
 `FoundationServiceState`) — **not** a separate Knowledge-specific
 provider — even though this state is Studio-only and never touches
 Foundation. See `docs/CONNECTION_MANAGER.md` for the full state
-ownership table; as of Work Package 008:
+ownership table; as of Work Package 009:
 
 | Field | Meaning |
 |---|---|
@@ -313,22 +322,28 @@ ownership table; as of Work Package 008:
 | `relationshipCandidates` | Relationship Candidates within the active session |
 | `selectedRelationshipCandidate` | The Relationship Candidate currently selected |
 | `sourceMaterials` | Source Material attached to the active session |
-| `selectedSourceMaterial` | The Source Material currently selected (previewed) |
+| `selectedSourceMaterial` | The Source Material currently selected for the Property Inspector |
+| `openSourceDocument` | The Source Material currently open in the Source Viewer (Work Package 009's "Current Source Document") — see § Evidence below for why this is *not* the same field as `selectedSourceMaterial` |
+| `evidenceRegions` / `selectedEvidenceRegion` | Evidence Regions within the active session, and the one currently selected (Work Package 009) |
+| `evidenceLinks` / `selectedEvidenceLink` | Knowledge Candidate ↔ Evidence Region links, and the one currently highlighted in the Property Inspector (Work Package 009) |
+| `pageSelections` | Whole-page evidence markers (Work Package 009) |
+| `currentPage` | The Source Viewer's current page for `openSourceDocument`, ephemeral (Work Package 009) |
 | `reviewDecisions` | The append-only Create/Edit/Accept/Reject/Delete audit log |
 | `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
 | `commitPreview` | Derived getter — see § Commit Preview |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
-`knowledgeRelationshipCandidateCount` are getters derived from the
-lists above, not separately stored.
+`knowledgeRelationshipCandidateCount`/`knowledgeEvidenceRegionCount` are
+getters derived from the lists above, not separately stored.
 
-Selection is now **five-way mutually exclusive**: Knowledge Candidate,
-Relationship Candidate, Source Material, Object, and Relationship.
-Every `select*` method clears the other four. The Property Inspector's
-mode order (`property_inspector_panel.dart`):
+Selection is **six-way mutually exclusive**: Knowledge Candidate,
+Relationship Candidate, Source Material, Object, Relationship, and
+Evidence Region. Every `select*` method clears the other five. The
+Property Inspector's mode order (`property_inspector_panel.dart`):
 
 ```
+selectedEvidenceRegion? → Evidence Region mode
 selectedCandidate? → Knowledge Candidate mode
 selectedRelationshipCandidate? → Relationship Candidate mode
 selectedSourceMaterial? → Source Material mode
@@ -337,6 +352,13 @@ selectedRelationship? → Relationship mode
 knowledgeSession? → Session mode (fallback — no more specific selection)
 else → No Selection
 ```
+
+`openSourceDocument` is deliberately **separate** from
+`selectedSourceMaterial` and outside this mutual-exclusivity switch —
+see `docs/EVIDENCE_MODEL.md` § Connection Manager Mapping for why an
+earlier version of this state conflated the two, and why that broke
+Work Package 009's own "selecting a Knowledge Candidate highlights its
+linked Evidence Regions" requirement.
 
 `lib/knowledge/services/knowledge_session_service.dart` holds the
 Knowledge domain's validation, ID-generation, and commit-preview
@@ -353,7 +375,7 @@ logic the same way.
 Per this project's Knowledge Studio error-handling rules (invalid
 session names, duplicate candidate names, missing repository, invalid/
 missing source files, invalid relationship definitions, corrupted
-session files):
+session files, invalid PDFs, deleted source material):
 
 * **New Session / New Candidate / New Relationship Candidate dialogs**
   validate inline — an invalid submission keeps the dialog open and

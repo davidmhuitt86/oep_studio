@@ -1,7 +1,10 @@
 import '../../knowledge/models/commit_preview.dart';
+import '../../knowledge/models/evidence_link.dart';
+import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_session.dart';
+import '../../knowledge/models/page_selection.dart';
 import '../../knowledge/models/relationship_candidate.dart';
 import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/source_material.dart';
@@ -19,14 +22,16 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-008): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-009): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
 /// List, Current Relationship Candidate List, Current Commit Preview,
-/// and Current Selection (of an object, a relationship, a Knowledge
-/// Candidate, a Relationship Candidate, or a Source Material — never
-/// more than one at once). Immutable; widgets watch this through
+/// Current Source Document/Page, Current Evidence Region List, Current
+/// Evidence Link List, Current Page Selection List, and Current Selection
+/// (of an object, a relationship, a Knowledge Candidate, a Relationship
+/// Candidate, a Source Material, or an Evidence Region — never more than
+/// one at once). Immutable; widgets watch this through
 /// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
 /// directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
@@ -53,8 +58,15 @@ class FoundationServiceState {
     this.selectedRelationshipCandidate,
     this.sourceMaterials = const [],
     this.selectedSourceMaterial,
+    this.openSourceDocument,
     this.reviewDecisions = const [],
     this.knowledgeStorageError,
+    this.evidenceRegions = const [],
+    this.selectedEvidenceRegion,
+    this.evidenceLinks = const [],
+    this.selectedEvidenceLink,
+    this.pageSelections = const [],
+    this.currentPage,
   });
 
   final FoundationConnectionPhase phase;
@@ -93,7 +105,7 @@ class FoundationServiceState {
   /// The Object Explorer row currently selected, if any. Mutually
   /// exclusive with every other selection field below — the Property
   /// Inspector shows exactly one mode at a time (Work Package 005,
-  /// extended by Work Packages 007/008).
+  /// extended by Work Packages 007/008/009).
   final EngineeringObjectSummary? selectedObject;
 
   /// The Relationship Explorer row currently selected, if any (Work
@@ -142,9 +154,30 @@ class FoundationServiceState {
   /// STUDIO-TASK-000016 Current Source List).
   final List<SourceMaterial> sourceMaterials;
 
-  /// The Source Material currently selected (previewed), if any.
-  /// Mutually exclusive with every other selection field.
+  /// The Source Material currently selected for the Property Inspector,
+  /// if any. Mutually exclusive with every other selection field.
+  ///
+  /// Deliberately **separate** from [openSourceDocument] — an earlier
+  /// version of this state conflated the two, which broke Work Package
+  /// 009's own requirement that selecting a Knowledge Candidate
+  /// highlights its linked Evidence Regions *in the still-open Source
+  /// Viewer*: if selecting a candidate (which clears this field, since
+  /// it switches the Property Inspector to Candidate mode) also closed
+  /// whatever PDF was open, there would be nothing left to highlight
+  /// regions in. See `docs/EVIDENCE_MODEL.md` § Connection Manager
+  /// Mapping for the full account of that bug and this fix.
   final SourceMaterial? selectedSourceMaterial;
+
+  /// The Source Material currently open in the Source Viewer (Work
+  /// Package 009's "Current Source Document"). Set when a source is
+  /// opened from the Import Queue; **not** cleared by selecting an
+  /// Object/Relationship/Knowledge Candidate/Relationship Candidate/
+  /// Evidence Region — the Source Viewer stays open and stable while
+  /// the engineer browses other things elsewhere in the workspace
+  /// ("The engineer should never lose sight of the original evidence,"
+  /// SDD-016). Cleared when the source is removed or the session
+  /// changes.
+  final SourceMaterial? openSourceDocument;
 
   /// The append-only record of Accept/Reject/Create/Edit/Delete
   /// decisions made against this session's candidates (Work Package
@@ -159,6 +192,43 @@ class FoundationServiceState {
   /// autosave after accepting a candidate) have no dialog already open
   /// to show it in. Cleared on the next successful storage operation.
   final String? knowledgeStorageError;
+
+  /// Manually-identified rectangular Evidence Regions within
+  /// [knowledgeSession]'s Source Material (Work Package 009
+  /// STUDIO-TASK-000020 Current Evidence Region List).
+  final List<EvidenceRegion> evidenceRegions;
+
+  /// The Evidence Region currently selected, if any. Mutually exclusive
+  /// with every other selection field. Selecting a region highlights
+  /// its linked Knowledge Candidates (Work Package 009 § Source Viewer
+  /// Interaction).
+  final EvidenceRegion? selectedEvidenceRegion;
+
+  /// Knowledge Candidate ↔ Evidence Region links within
+  /// [knowledgeSession] (Work Package 009 STUDIO-TASK-000021 Current
+  /// Evidence Link List).
+  final List<EvidenceLink> evidenceLinks;
+
+  /// The Evidence Link currently highlighted within the Property
+  /// Inspector's Evidence Links list, if any (Work Package 009's
+  /// Connection Manager: "Current Evidence Link"). Unlike the other
+  /// `selected*` fields, this is *not* part of the mutually-exclusive
+  /// Property Inspector mode switch — it only makes sense alongside an
+  /// already-selected Knowledge Candidate or Evidence Region (whichever
+  /// owns the link list it's chosen from), to target the "Unlink"
+  /// action at one specific link.
+  final EvidenceLink? selectedEvidenceLink;
+
+  /// Whole-page evidence markers within [knowledgeSession]'s Source
+  /// Material (Work Package 009 STUDIO-TASK-000019 § Selection).
+  final List<PageSelection> pageSelections;
+
+  /// The Source Viewer's Current Page for whichever PDF is open in
+  /// [openSourceDocument] (Work Package 009 STUDIO-TASK-000019:
+  /// "Display: Current Page"). Ephemeral view state, not persisted —
+  /// like [searchQuery], it describes what's currently on screen, not
+  /// session content. Reset to `null` whenever the open source changes.
+  final int? currentPage;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
@@ -182,6 +252,7 @@ class FoundationServiceState {
   int get knowledgePendingCount =>
       candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.pending).length;
   int get knowledgeRelationshipCandidateCount => relationshipCandidates.length;
+  int get knowledgeEvidenceRegionCount => evidenceRegions.length;
 
   /// The Current Commit Preview (Work Package 008 STUDIO-TASK-000018),
   /// `null` when no session is active — otherwise always non-null, even
@@ -195,6 +266,39 @@ class FoundationServiceState {
       repositoryStatistics: repositoryStatistics,
     );
   }
+
+  /// Evidence Regions belonging to [sourceId]'s page [page] (Work
+  /// Package 009: the Source Viewer only ever needs a single page's
+  /// regions at a time to render its overlay).
+  List<EvidenceRegion> evidenceRegionsForPage(String sourceId, int page) =>
+      evidenceRegions.where((region) => region.sourceId == sourceId && region.page == page).toList();
+
+  /// Every Evidence Region linked to [candidateId] (Work Package 009 §
+  /// Source Viewer Interaction: selecting a Knowledge Candidate
+  /// highlights its linked regions).
+  List<EvidenceRegion> evidenceRegionsLinkedToCandidate(String candidateId) {
+    final regionIds = evidenceLinks
+        .where((link) => link.candidateId == candidateId)
+        .map((link) => link.regionId)
+        .toSet();
+    return evidenceRegions.where((region) => regionIds.contains(region.id)).toList();
+  }
+
+  /// Every Knowledge Candidate linked to [regionId] (Work Package 009 §
+  /// Source Viewer Interaction: selecting an Evidence Region highlights
+  /// its linked candidates).
+  List<KnowledgeCandidate> candidatesLinkedToEvidenceRegion(String regionId) {
+    final candidateIds = evidenceLinks
+        .where((link) => link.regionId == regionId)
+        .map((link) => link.candidateId)
+        .toSet();
+    return candidates.where((candidate) => candidateIds.contains(candidate.id)).toList();
+  }
+
+  /// How many Knowledge Candidates reference [regionId] (Work Package
+  /// 009 Evidence Browser: "Linked Candidate Count").
+  int linkedCandidateCountFor(String regionId) =>
+      evidenceLinks.where((link) => link.regionId == regionId).length;
 
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
@@ -232,9 +336,20 @@ class FoundationServiceState {
     List<SourceMaterial>? sourceMaterials,
     SourceMaterial? selectedSourceMaterial,
     bool clearSelectedSourceMaterial = false,
+    SourceMaterial? openSourceDocument,
+    bool clearOpenSourceDocument = false,
     List<ReviewDecision>? reviewDecisions,
     String? knowledgeStorageError,
     bool clearKnowledgeStorageError = false,
+    List<EvidenceRegion>? evidenceRegions,
+    EvidenceRegion? selectedEvidenceRegion,
+    bool clearSelectedEvidenceRegion = false,
+    List<EvidenceLink>? evidenceLinks,
+    EvidenceLink? selectedEvidenceLink,
+    bool clearSelectedEvidenceLink = false,
+    List<PageSelection>? pageSelections,
+    int? currentPage,
+    bool clearCurrentPage = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -267,10 +382,19 @@ class FoundationServiceState {
       selectedSourceMaterial: clearSelectedSourceMaterial
           ? null
           : (selectedSourceMaterial ?? this.selectedSourceMaterial),
+      openSourceDocument: clearOpenSourceDocument ? null : (openSourceDocument ?? this.openSourceDocument),
       reviewDecisions: reviewDecisions ?? this.reviewDecisions,
       knowledgeStorageError: clearKnowledgeStorageError
           ? null
           : (knowledgeStorageError ?? this.knowledgeStorageError),
+      evidenceRegions: evidenceRegions ?? this.evidenceRegions,
+      selectedEvidenceRegion: clearSelectedEvidenceRegion
+          ? null
+          : (selectedEvidenceRegion ?? this.selectedEvidenceRegion),
+      evidenceLinks: evidenceLinks ?? this.evidenceLinks,
+      selectedEvidenceLink: clearSelectedEvidenceLink ? null : (selectedEvidenceLink ?? this.selectedEvidenceLink),
+      pageSelections: pageSelections ?? this.pageSelections,
+      currentPage: clearCurrentPage ? null : (currentPage ?? this.currentPage),
     );
   }
 }

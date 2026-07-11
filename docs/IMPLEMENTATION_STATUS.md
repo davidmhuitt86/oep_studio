@@ -1806,3 +1806,263 @@ used, and fully removed before commit — see Verification Results.
   `'engineering-review-tab-relationships'` resolved it immediately and
   is a permanent, low-cost addition (Keys don't affect runtime
   behavior) rather than test-only scaffolding.
+
+---
+
+## Work Package 009 — Knowledge Studio (PDF Source Viewer, Evidence Regions, Evidence Linking)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000019 — PDF Source Viewer — Complete
+* STUDIO-TASK-000020 — Evidence Regions — Complete
+* STUDIO-TASK-000021 — Evidence Linking — Complete
+
+### What Exists
+
+Continues the Work Package 007/008 `lib/knowledge/` module. Adds the
+first *true* PDF viewer to Knowledge Studio (a real, interactive
+renderer, not a placeholder) plus a manual Evidence Region/Evidence
+Link/Page Selection model — all still entirely Studio-only ("No
+Foundation modifications occur"). No AI, no OCR, no Repository Commit.
+See `docs/EVIDENCE_MODEL.md` for full detail.
+
+* `lib/knowledge/workspaces/pdf_source_viewer.dart` (new) — the PDF
+  Source Viewer: page navigation, zoom in/out, fit width, fit page,
+  rotate, continuous scrolling, Current Page/Total Pages/Zoom
+  Percentage display, manual Evidence Region drawing (drag-to-create),
+  and a Page Selection toggle. Built on `pdfrx` (new dependency — see
+  Flutter Package Decisions).
+* `lib/knowledge/models/evidence_region.dart`,
+  `evidence_link.dart`, `page_selection.dart` (all new) —
+  `EvidenceRegion` (rectangle region: id/sourceId/page/x/y/width/
+  height, top-left-origin fractions of the page's own size/label/
+  notes), `EvidenceLink` (Knowledge Candidate ↔ Evidence Region join),
+  `PageSelection` (whole-page marker). See `docs/EVIDENCE_MODEL.md` §
+  Coordinate System for why fractions, not pixels or points.
+* `lib/knowledge/models/knowledge_session_record.dart` — extended with
+  `evidenceRegions`/`evidenceLinks`/`pageSelections` lists, all
+  defaulting to `[]` when absent so a pre-Work-Package-009 session file
+  still loads (confirmed by a unit test).
+* `lib/knowledge/services/knowledge_session_service.dart` — extended
+  with `validateEvidenceRegionLabel` (Evidence Browser Rename: empty
+  label rejected), `isEvidenceLinked` (idempotency check for linking),
+  and `buildDuplicate` extended to carry the three new lists over
+  unchanged when duplicating a session.
+* `lib/core/services/foundation_runtime_state.dart`/
+  `foundation_runtime_service.dart` — extended per this work package's
+  Architecture Rule ("Connection Manager coordinates state only"):
+  `evidenceRegions`/`selectedEvidenceRegion`, `evidenceLinks`/
+  `selectedEvidenceLink`, `pageSelections`, `currentPage`, and a new,
+  **separate** `openSourceDocument` field (Work Package 009's "Current
+  Source Document" — see Architectural Observations for why this
+  couldn't just reuse the existing `selectedSourceMaterial` field).
+  New notifier methods: `setCurrentPage`, `createEvidenceRegion`,
+  `renameEvidenceRegion`, `setEvidenceRegionNotes`,
+  `deleteEvidenceRegion`, `selectEvidenceRegion`/
+  `clearEvidenceRegionSelection`, `linkEvidence`/`unlinkEvidence`,
+  `selectEvidenceLink`/`clearEvidenceLinkSelection`,
+  `togglePageSelection`. Selection is now six-way mutually exclusive
+  (added Evidence Region); `deleteKnowledgeCandidate`/
+  `removeSourceMaterial` extended to cascade-delete Evidence Links/
+  Regions/Page Selections that would otherwise dangle.
+* `lib/knowledge/workspaces/evidence_browser_dialog.dart` (new) — the
+  Evidence Browser: Region Name/Page/Type ("Rectangle")/Linked
+  Candidate Count, with Rename/Delete/Navigate, scoped to one source's
+  regions.
+* `lib/knowledge/inspector/evidence_region_properties.dart`,
+  `knowledge_candidate_properties.dart` (extended),
+  `source_material_properties.dart` (extended),
+  `evidence_link_entries.dart` (new),
+  `link_evidence_dialog.dart` (new) — Property Inspector support for
+  Evidence Region (new 7th mode), Knowledge Candidate Evidence (linked
+  regions list + "Link Evidence Region" action added to the existing
+  Candidate mode), and Source Metadata (Evidence Region count and
+  selected pages added to the existing Source Material mode).
+  `lib/shared/widgets/property_inspector_panel.dart` extended to a
+  7-arm switch (Evidence Region first).
+  `lib/knowledge/review/engineering_review_panel.dart`/
+  `knowledge_candidate_row.dart` extended so selecting an Evidence
+  Region highlights its linked candidates' rows in the Candidates tab
+  (the other half of bidirectional highlighting).
+* `lib/shared/format.dart` — gained `formatLinkedCount` (Evidence
+  Browser's "Linked Candidate Count" display).
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: OEP Foundation, the
+Public C API, AI functionality, OCR functionality, and Repository
+Commit itself are all untouched. PDF text extraction/selection is not
+implemented (viewer only, per STUDIO-TASK-000019: "No parsing. No
+OCR. No extraction."). Non-rectangle Evidence Region shapes are not
+implemented — STUDIO-TASK-000020 lists only "Rectangle Regions."
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      evidence_region.dart                New
+      evidence_link.dart                  New
+      page_selection.dart                 New
+      knowledge_session_record.dart       Extended (evidenceRegions/evidenceLinks/pageSelections)
+    inspector/
+      evidence_region_properties.dart     New
+      evidence_link_entries.dart          New
+      link_evidence_dialog.dart           New
+      knowledge_candidate_properties.dart Extended (Evidence section)
+      source_material_properties.dart     Extended (Source Metadata)
+    workspaces/
+      pdf_source_viewer.dart              New
+      evidence_browser_dialog.dart        New
+docs/
+  EVIDENCE_MODEL.md                       New
+```
+
+### Flutter Package Decisions
+
+One new dependency: **`pdfrx`** (`^2.4.7`, MIT license) — see
+`docs/EVIDENCE_MODEL.md` § Flutter Package Decision for the full
+comparison against `pdfx`, `printing`, and Syncfusion's viewer, and why
+`pdfrx` was chosen (`pageOverlaysBuilder`/`viewerOverlayBuilder` for
+Evidence Region rendering; `getPdfPageHitTestResult` for region
+creation; PDFium-backed, Windows-capable, actively maintained).
+Requires Windows Developer Mode enabled for its symlink-based build
+step (confirmed already enabled on this machine); `pdfium.dll` is
+bundled alongside `oep_studio.exe` automatically.
+
+### Verification Results
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 60/60 passing: all prior tests, plus new
+  `KnowledgeSessionService` unit tests (`validateEvidenceRegionLabel`,
+  `isEvidenceLinked`) and new `knowledge_session_storage_test.dart`
+  cases (Evidence Regions/Links/Page Selections round-trip through
+  save/load exactly; a hand-written pre-Work-Package-009 `session.json`
+  with none of the three new keys present still loads with empty
+  lists, confirming backward compatibility).
+* `flutter build windows` — succeeded; `pdfium.dll` confirmed present
+  in the Release output alongside `oep_foundation_bridge.dll`.
+* **Manual verification.** As in Work Packages 007/008, this
+  environment's OS-level UI automation could not reliably drive this
+  app — `computer-use` access to the running `oep_studio.exe` process
+  was again unavailable this work package. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test`
+  (`integration_test/knowledge_studio_wp009_test.dart`, added, run
+  against the real compiled app, then deleted — `pubspec.yaml`'s
+  `integration_test` dev dependency reverted and `pubspec.lock`
+  regenerated) against a real, valid 3-page PDF fixture generated by a
+  one-off Python script (not committed) with correct xref offsets, so
+  the real `pdfrx`/PDFium engine actually parsed and rendered it — the
+  log confirms `PdfViewer: Loaded page 3 of 3`, a genuine render, not a
+  stub.
+
+  The test covered the full golden path: create a session → add a
+  Knowledge Candidate → attach the PDF (via a direct
+  `attachSourceMaterial` call through the Connection Manager, bypassing
+  the native file-picker button for the same reason Work Package 006
+  bypassed the folder-picker button — `SourceMaterialService`'s own
+  copy logic is separately covered by the permanent
+  `knowledge_session_storage_test.dart`) → confirm the PDF renders with
+  3 pages → page navigation (Next Page moves 1→2) → zoom (Zoom In
+  changes the displayed percentage) → draw an Evidence Region via a
+  real drag gesture on the rendered page (confirmed by inspecting
+  `evidenceRegions` afterward, not just the UI) → Evidence Browser
+  lists it as "Rectangle," Rename works → Navigate selects it and the
+  Property Inspector reflects the new label → Link it to the Knowledge
+  Candidate from the Region's own Property Inspector view → selecting
+  the candidate shows the linked region highlighted the other direction
+  → toggle a Page Selection → close the session and reopen it via the
+  Session Browser, confirming the Evidence Region, Evidence Link, and
+  Page Selection all survive a real disk round-trip (not just
+  in-memory state) → delete the session via the Session Browser's own
+  Delete flow (cleaning up its own test data). All assertions passed on
+  the corrected run; no test artifacts were left on disk afterward.
+
+  One interaction — tapping the small Page Selection checkbox overlay
+  drawn inside `pdfrx`'s per-page `Stack` — could not be reliably
+  driven by a synthetic `tester.tap()` in this harness (see
+  Architectural Observations for the full diagnosis, including the two
+  real bugs this same investigation *did* catch and fix). That one
+  assertion was verified via a direct `togglePageSelection` call
+  through the Connection Manager instead, the same "document the
+  limitation, use the pre-approved workaround" approach used for the
+  native file picker — the underlying state-management and persistence
+  logic is exercised identically either way; only this one on-screen
+  click affordance itself went unverified by automation.
+
+### Architectural Observations
+
+* **The Connection Manager's "Current Source Document" must be a field
+  separate from "Current Selection."** An early version of this work
+  reused Work Package 008's `selectedSourceMaterial` (which drives the
+  Property Inspector's mode) as Work Package 009's "Current Source
+  Document" too, reasoning the two concepts were the same thing in this
+  UI. They are not: every `select*` method clears
+  `selectedSourceMaterial` as part of the existing mutual-exclusivity
+  rule, so reusing that field to also mean "which PDF is open" meant
+  selecting a Knowledge Candidate silently closed the Source Viewer —
+  directly breaking this work package's own requirement that selecting
+  a candidate highlights its linked regions *in the still-open
+  viewer*. Caught during manual verification (the integration test's
+  Page Selection step found the Source Viewer reverted to its empty
+  placeholder after an earlier candidate-selection step), not design
+  review. Fixed by introducing `openSourceDocument` as an independent
+  field, set only when a source is opened from the Import Queue and
+  left untouched by every other selection method. Full account in
+  `docs/EVIDENCE_MODEL.md` § Architectural Observations.
+* **A dialog-controller-lifecycle bug — the exact one Work Package 007
+  already documented and fixed — was reintroduced in the Evidence
+  Browser's Rename dialog and caught by the integration test.** The
+  dialog initially created its `TextEditingController` in the calling
+  widget and disposed it right after `showDialog`'s `Future` resolved,
+  crashing with "A `TextEditingController` was used after being
+  disposed" — because that `Future` completes on `Navigator.pop()`,
+  before the exit animation finishes rebuilding the still-attached
+  `TextField`. Reintroduced because this dialog was written fresh
+  rather than copied from an existing one that already followed the
+  fix. Repaired the same way as before: the dialog's own
+  `ConsumerStatefulWidget`/`State` now owns and disposes the
+  controller. Recorded again here as a standing reminder for the next
+  new dialog, since it recurred once already despite being documented.
+* **A plain `GestureDetector` scoped to a small overlay widget's own
+  bounds is simpler than `pdfrx`'s `PdfOverlayInteractionRegion` for
+  tap-like interactions that don't need to compete with viewer pan/zoom
+  — but an *armed*, full-viewer, opaque `GestureDetector` (the
+  region-drawing tool) intercepts every tap in the viewer until
+  disarmed, by design (it's rendered above the page content so the drag
+  preview always stays visible).** This is correct "tool mode"
+  behavior, not a defect, but it means clicking an existing region or
+  toggling Page Selection while the drawing tool is still armed does
+  nothing — worth remembering as the first thing to check if a
+  Source-Viewer-overlay tap ever appears to silently fail, in
+  verification or in real use.
+
+### Flutter-Specific Recommendations
+
+* **`pdfrx`'s `pageOverlaysBuilder`/`viewerOverlayBuilder` callbacks are
+  invoked during a *descendant* widget's build, not synchronously
+  inside the enclosing `ConsumerState.build()` — calling `ref.watch`
+  from within them is invalid.** Capture the needed
+  `FoundationServiceState` snapshot once, in `build()` itself (stored
+  on an instance field), and have the callbacks read that stored
+  snapshot instead of calling `ref.watch`/`ref.read` for state
+  (dispatching *actions* via `ref.read(...).notifier` from inside a
+  callback remains fine, since that's never build-context-sensitive).
+* **`pdfrx`'s `PdfViewerController` is itself a `ValueListenable<Matrix4>`**
+  — wrapping the toolbar in a `ListenableBuilder(listenable: controller,
+  ...)` is the simplest way to keep Current Page/Total Pages/Zoom
+  Percentage reactive to pan and zoom, without needing a separate
+  Riverpod state field for values the controller already tracks.
+* **A widget test's `ensureVisible` is worth reaching for by default
+  for any button inside a horizontally- or vertically-scrolling
+  toolbar** — this work package's PDF toolbar has more buttons than fit
+  in the column width at the test's window size, and a bare
+  `tester.tap()` silently computed a coordinate for a button that was
+  laid out but currently scrolled outside the visible viewport, hitting
+  unrelated content instead. `ensureVisible` scrolls the container to
+  bring the target into view first.
+

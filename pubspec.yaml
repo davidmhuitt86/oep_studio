@@ -22,6 +22,9 @@ dependencies:
   # Native folder picker for the Open Repository workflow (STUDIO-TASK-000004).
   file_selector: ^1.0.3
 
+  # PDF Source Viewer (STUDIO-TASK-000019) — page rendering, navigation, zoom.
+  pdfrx: ^2.4.7
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

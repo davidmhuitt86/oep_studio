@@ -4,6 +4,7 @@ import 'dart:math';
 import '../../core/foundation/oep_api_types.dart';
 import '../../core/models/relationship_type.dart';
 import '../models/commit_preview.dart';
+import '../models/evidence_link.dart';
 import '../models/knowledge_candidate.dart';
 import '../models/knowledge_candidate_status.dart';
 import '../models/knowledge_session.dart';
@@ -183,6 +184,31 @@ abstract final class KnowledgeSessionService {
     );
   }
 
+  /// Validates an Evidence Region's label (Work Package 009
+  /// STUDIO-TASK-000020 Evidence Browser: "Support: Rename"). Throws
+  /// [KnowledgeValidationException] for an empty label — regions are
+  /// always created with an auto-generated default label (see
+  /// `FoundationRuntimeNotifier.createEvidenceRegion`), so an empty
+  /// label can only occur via Rename, not initial creation.
+  static void validateEvidenceRegionLabel(String label) {
+    if (label.trim().isEmpty) {
+      throw const KnowledgeValidationException('Region label cannot be empty.');
+    }
+  }
+
+  /// Whether a link between [candidateId] and [regionId] already exists
+  /// (Work Package 009 STUDIO-TASK-000021: "One candidate may reference
+  /// multiple regions. One region may support multiple candidates.") —
+  /// used to keep linking idempotent rather than creating duplicate
+  /// [EvidenceLink]s for the same pair.
+  static bool isEvidenceLinked({
+    required String candidateId,
+    required String regionId,
+    required List<EvidenceLink> existingLinks,
+  }) {
+    return existingLinks.any((link) => link.candidateId == candidateId && link.regionId == regionId);
+  }
+
   /// Builds the record for a duplicated session (Work Package 008
   /// Session Browser: "Duplicate") — a fresh ID/name/timestamps, the
   /// same candidates/relationship candidates/review decisions, and
@@ -222,6 +248,9 @@ abstract final class KnowledgeSessionService {
       relationshipCandidates: original.relationshipCandidates,
       sources: remappedSources,
       reviewDecisions: original.reviewDecisions,
+      evidenceRegions: original.evidenceRegions,
+      evidenceLinks: original.evidenceLinks,
+      pageSelections: original.pageSelections,
     );
   }
 }

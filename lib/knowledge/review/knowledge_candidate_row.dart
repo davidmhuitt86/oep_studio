@@ -16,6 +16,7 @@ class KnowledgeCandidateRow extends StatelessWidget {
     required this.onReject,
     required this.onEdit,
     required this.onDelete,
+    this.linkedToSelectedEvidence = false,
     super.key,
   });
 
@@ -27,10 +28,18 @@ class KnowledgeCandidateRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  /// Whether this candidate is linked to the currently-selected Evidence
+  /// Region (Work Package 009 § Source Viewer Interaction: "Selecting
+  /// Evidence Region → Highlights linked Knowledge Candidates").
+  final bool linkedToSelectedEvidence;
+
   @override
   Widget build(BuildContext context) {
+    final color = selected
+        ? StudioColors.selection
+        : (linkedToSelectedEvidence ? StudioColors.warning : null);
     return Material(
-      color: selected ? StudioColors.selection.withValues(alpha: 0.10) : Colors.transparent,
+      color: color?.withValues(alpha: 0.10) ?? Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oep_studio/core/models/relationship_type.dart';
+import 'package:oep_studio/knowledge/models/evidence_link.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_status.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_type.dart';
@@ -264,6 +265,44 @@ void main() {
       );
       expect(preview.validationIssues, isNotEmpty);
       expect(preview.validationIssues.first, contains('no longer exists'));
+    });
+  });
+
+  group('validateEvidenceRegionLabel', () {
+    test('rejects an empty label', () {
+      expect(
+        () => KnowledgeSessionService.validateEvidenceRegionLabel('   '),
+        throwsA(isA<KnowledgeValidationException>()),
+      );
+    });
+
+    test('accepts a non-empty label', () {
+      expect(() => KnowledgeSessionService.validateEvidenceRegionLabel('Torque Spec'), returnsNormally);
+    });
+  });
+
+  group('isEvidenceLinked', () {
+    final link = EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1));
+
+    test('is true for a matching candidate/region pair', () {
+      expect(
+        KnowledgeSessionService.isEvidenceLinked(candidateId: 'c1', regionId: 'r1', existingLinks: [link]),
+        isTrue,
+      );
+    });
+
+    test('is false for a different region', () {
+      expect(
+        KnowledgeSessionService.isEvidenceLinked(candidateId: 'c1', regionId: 'r2', existingLinks: [link]),
+        isFalse,
+      );
+    });
+
+    test('is false for a different candidate', () {
+      expect(
+        KnowledgeSessionService.isEvidenceLinked(candidateId: 'c2', regionId: 'r1', existingLinks: [link]),
+        isFalse,
+      );
     });
   });
 }
