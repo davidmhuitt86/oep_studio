@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/studio_colors.dart';
-import '../models/engineering_proposal.dart';
-import '../models/proposal_status.dart';
+import '../models/knowledge_candidate.dart';
+import '../models/knowledge_candidate_status.dart';
 
-/// One row in the Engineering Review panel's proposal list (Work
-/// Package 007: "Each proposal supports: Accept, Reject, Edit,
-/// Delete").
-class ProposalRow extends StatelessWidget {
-  const ProposalRow({
-    required this.proposal,
+/// One row in the Engineering Review panel's Knowledge Candidate list
+/// (Work Package 007/008: "Each proposal supports: Accept, Reject,
+/// Edit, Delete").
+class KnowledgeCandidateRow extends StatelessWidget {
+  const KnowledgeCandidateRow({
+    required this.candidate,
     required this.selected,
     required this.onTap,
     required this.onAccept,
@@ -19,7 +19,7 @@ class ProposalRow extends StatelessWidget {
     super.key,
   });
 
-  final EngineeringProposal proposal;
+  final KnowledgeCandidate candidate;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onAccept;
@@ -37,25 +37,25 @@ class ProposalRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
             children: [
-              Icon(proposal.type.icon, size: 15, color: StudioColors.textSecondary),
+              Icon(candidate.type.icon, size: 15, color: StudioColors.textSecondary),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      proposal.name,
+                      candidate.name,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
                     ),
                     Text(
-                      proposal.type.label,
+                      candidate.type.label,
                       style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
                     ),
                   ],
                 ),
               ),
-              _StatusBadge(status: proposal.status),
+              _StatusBadge(status: candidate.status),
               IconButton(
                 tooltip: 'Accept',
                 icon: const Icon(Icons.check_circle_outline, size: 16),
@@ -81,14 +81,14 @@ class ProposalRow extends StatelessWidget {
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.status});
 
-  final ProposalStatus status;
+  final KnowledgeCandidateStatus status;
 
   @override
   Widget build(BuildContext context) {
     final color = switch (status) {
-      ProposalStatus.accepted => StudioColors.success,
-      ProposalStatus.rejected => StudioColors.error,
-      ProposalStatus.pending => StudioColors.warning,
+      KnowledgeCandidateStatus.accepted => StudioColors.success,
+      KnowledgeCandidateStatus.rejected => StudioColors.error,
+      KnowledgeCandidateStatus.pending => StudioColors.warning,
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

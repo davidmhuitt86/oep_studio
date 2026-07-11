@@ -1,28 +1,42 @@
 # Knowledge Studio
 
-Implemented in Work Package 007 (STUDIO-TASK-000013 Knowledge Studio
-Shell, STUDIO-TASK-000014 Knowledge Curation Session). Validates the
-architecture defined in SDD-013 (Knowledge Studio), SDD-015
-(Engineering Knowledge Model), SDD-016 (Knowledge Studio User
-Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
-(Engineering Knowledge Lifecycle and Provenance), and SDD-019
-(Engineering Object Philosophy) with a first, deliberately narrow
-slice: **Studio-only, manually-created proposals, no AI, no OCR, no
-repository commit.**
+First implemented in Work Package 007 (STUDIO-TASK-000013 Knowledge
+Studio Shell, STUDIO-TASK-000014 Knowledge Curation Session); extended
+in Work Package 008 (STUDIO-TASK-000015 Persistent Sessions + Session
+Browser, STUDIO-TASK-000016 Source Material Workspace,
+STUDIO-TASK-000017 Manual Relationship Authoring + Relationship View,
+STUDIO-TASK-000018 Repository Commit Preview). Validates the
+architecture defined in SDD-013 (Knowledge Studio), SDD-014
+(Engineering Knowledge Acquisition Pipeline), SDD-015 (Engineering
+Knowledge Model), SDD-016 (Knowledge Studio User Experience), SDD-017
+(Knowledge Curation Workflow), SDD-018 (Engineering Knowledge
+Lifecycle and Provenance), SDD-019 (Engineering Object Philosophy),
+and SDD-020 (Engineering Knowledge Review System), remaining
+**Studio-only: no AI, no OCR, no repository commit** through both work
+packages.
 
-> **Note on SDD-014.** SDD-014 (Engineering Knowledge Acquisition
-> Pipeline) is listed among the architecture this work package
-> validates, but the document itself is currently empty (0 bytes) in
-> this repository. This work package proceeded using SDD-013's Import
-> Pipeline section (Source → OCR → Image Extraction → AI Analysis →
-> Engineering Object Detection → Relationship Detection → Engineer
-> Review → Repository Update) as the acquisition-pipeline reference
-> instead, since the OCR/AI stages that section describes are
-> explicitly out of scope for this work package regardless
-> ("No AI implementation is required. No OCR implementation is
-> required."). Flagged here for whoever populates SDD-014 next — none
-> of this work package's decisions depend on its contents, but future
-> work packages implementing the acquisition pipeline itself will.
+For the persisted-file format, the full model reference, and the
+detailed architectural findings (including the
+`KnowledgeCandidateType`/`ObjectCategory` mismatch), see
+`docs/KNOWLEDGE_SESSION_FORMAT.md`. This document covers the workspace
+layout, session lifecycle, and state ownership.
+
+> **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
+> Package 007 and remains unpopulated as of Work Package 008. Neither
+> work package's decisions depend on its contents — SDD-013's own
+> Import Pipeline section has been sufficient — but this is flagged
+> again for whoever populates SDD-014 next, since a future work package
+> implementing the acquisition pipeline itself (OCR, AI Analysis) will
+> need real content there.
+
+> **Terminology.** Work Package 008 renamed "Proposal" to "Knowledge
+> Candidate" throughout `lib/knowledge/` (`EngineeringProposal` →
+> `KnowledgeCandidate`, `ProposalType` → `KnowledgeCandidateType`,
+> `ProposalStatus` → `KnowledgeCandidateStatus`, and every related
+> file/method/field), per that work package's explicit terminology
+> direction. This document uses "Knowledge Candidate" throughout,
+> including in places describing Work Package 007 behavior that
+> predates the rename.
 
 ---
 
@@ -33,16 +47,17 @@ SDD-016's seven-panel layout as a normal Studio Primary Workspace page
 — reached via the Navigation Rail's "Knowledge Studio" item
 (`StudioDestination.knowledge`, positioned right after Dashboard),
 rendered inside the same `StudioShell` every other page uses. No
-separate window, no separate application, per Work Package 007's
-explicit Navigation requirement.
+separate window, no separate application.
 
 ```
 +----------------------------------------------------------------+
-| Session Header (name, status, counts, session actions)          |
+| Session Header (name, status, counts, session/session-browser   |
+| actions, storage-error banner)                                  |
 +------------------+------------------+---------------------------+
 | Import Queue      | Source Viewer    | AI Suggestions            |
 |------------------+------------------+---------------------------|
 | Repository Matches                   | Engineering Review        |
+|                                       | (Candidates / Relationships tabs) |
 |------------------+------------------+---------------------------|
 | Commit Summary                                                   |
 +-------------------------------------------------------------+---+
@@ -52,24 +67,33 @@ SDD-016's own "Property Inspector" panel is **not** duplicated inside
 this layout — Studio already has exactly one Property Inspector,
 docked on the right of every page via `StudioShell`
 (`lib/shared/widgets/property_inspector_panel.dart`). Knowledge
-Studio extends that shared panel with two new modes (see § State
+Studio extends that shared panel with its own modes (see § State
 Ownership) rather than embedding a second copy of it.
 
-Per STUDIO-TASK-000013's explicit scope, only two things carry real
-functionality this work package:
+As of Work Package 008, four of the six panels carry real
+functionality:
 
-* **Engineering Review** (`lib/knowledge/review/`) — manual proposal
-  creation and Accept/Reject/Edit/Delete. Shows a placeholder message
-  until a session exists.
-* **Property Inspector** — Proposal and Session modes (see below).
+* **Import Queue** (`lib/knowledge/workspaces/import_queue_panel.dart`)
+  — attach Source Material via the native file picker; browse/select/
+  remove attached sources.
+* **Source Viewer** (`lib/knowledge/workspaces/source_viewer_panel.dart`)
+  — previews the selected source (image thumbnail; Markdown/Text raw
+  content; a location-only message for PDF/Other — no PDF rendering
+  package is a dependency).
+* **Engineering Review** (`lib/knowledge/review/engineering_review_panel.dart`)
+  — two tabs: Candidates (manual Knowledge Candidate creation and
+  Accept/Reject/Edit/Delete) and Relationships (manual Relationship
+  Candidate authoring — see § Relationship Candidates below).
+* **Commit Summary** (`lib/knowledge/workspaces/commit_preview_panel.dart`)
+  — a simulated preview of what a Repository Commit would do, with a
+  permanently disabled "Commit" button (Repository Commit itself is
+  out of scope — see § Future Foundation Integration).
+* **Property Inspector** — six modes (see § State Ownership).
 
-Every other panel (Import Queue, Source Viewer, AI Suggestions,
-Repository Matches, Commit Summary) is placeholder content
-(`lib/knowledge/widgets/knowledge_placeholder.dart`), consistent with
-this codebase's existing placeholder philosophy (`PlaceholderWorkspace`,
-the Graph/Validation/Packages pages, Dashboard's "Create Repository"
-card) — a clickable, honestly-labeled placeholder rather than an
-undocumented gap.
+**AI Suggestions** and **Repository Matches** remain placeholder
+content (`lib/knowledge/widgets/knowledge_placeholder.dart`) — both
+presuppose workflows still explicitly out of scope (AI functionality;
+repository matching, which has no Public C API surface yet).
 
 `lib/knowledge/widgets/knowledge_panel.dart` (`KnowledgePanel`) is the
 titled/bordered container shared by all six panels, so they read as
@@ -78,7 +102,7 @@ one workspace rather than six unrelated widgets.
 ## Session Lifecycle
 
 `SessionStatus` (`lib/knowledge/models/session_status.dart`) implements
-Work Package 007's own Session Workflow exactly as specified:
+the Session Workflow, unchanged since Work Package 007:
 
 ```
 Created → Preparing → Reviewing → Ready to Commit
@@ -88,107 +112,226 @@ Created → Preparing → Reviewing → Ready to Commit
 
 This is deliberately **narrower** than SDD-017's full seven-stage
 Curation Lifecycle (Preparation → Analysis → Review → Validation →
-Repository Preview → Commit → Audit): this work package explicitly
-excludes AI analysis, validation, and repository commit ("Repository
-Commit is intentionally not implemented in this work package"), so
+Repository Preview → Commit → Audit): AI analysis, validation, and
+repository commit remain out of scope through Work Package 008, so
 only the Studio-only portion of SDD-017's lifecycle — everything up to
 and including engineer review, before validation/commit would occur —
 is modeled. A rough correspondence, for whoever implements the rest:
 
-| Work Package 007 `SessionStatus` | SDD-017 stage |
+| `SessionStatus` | SDD-017 stage |
 |---|---|
 | `created` | Preparation begins |
 | `preparing` | Preparation |
-| `reviewing` | Analysis + Review (this work package has no Analysis stage — proposals are manually authored, not AI-proposed) |
-| `readyToCommit` | Validation passed, awaiting Repository Preview/Commit (neither implemented yet) |
+| `reviewing` | Analysis + Review (no Analysis stage exists — candidates are manually authored, not AI-proposed) |
+| `readyToCommit` | Validation passed, awaiting Repository Preview/Commit (Commit Preview exists as of Work Package 008; Commit itself is not implemented) |
 | `cancelled` | Session abandoned before Commit |
 
-Transitions are validated by `KnowledgeSessionService.validateStatusTransition`
-(`lib/knowledge/services/knowledge_session_service.dart`): only the
-next state in the forward sequence is a legal transition (no skipping
-stages), except `cancelled`, which is reachable from any non-cancelled
-state and is terminal (cancelling an already-cancelled session, or
-advancing a cancelled one, both fail validation). The Session Header
-(`lib/knowledge/sessions/session_header.dart`) only ever offers the
-one valid forward action plus Cancel, so an engineer can't reach an
-invalid transition through the UI at all — the validation exists
-primarily as a programming-error guard and for whenever a second entry
-point to session advancement is added.
+Transitions are validated by `KnowledgeSessionService.validateStatusTransition`:
+only the next state in the forward sequence is a legal transition (no
+skipping stages), except `cancelled`, which is reachable from any
+non-cancelled state and is terminal. The Session Header only ever
+offers the one valid forward action plus Cancel, so an engineer can't
+reach an invalid transition through the UI at all.
 
-Sessions are created via `FoundationRuntimeNotifier.createKnowledgeSession`,
-which **replaces** any existing session (including a Cancelled one) —
-there is only ever one active session in this work package, matching
-"Create a new Knowledge Curation Session" being the only creation
-entry point. Session Recovery (SDD-017: Resume/Pause/Archive/
-Duplicate/Export) is not implemented — deferred along with persistence
-(Work Package 007: "Persistence is deferred").
+`KnowledgeSession` also carries an independent `archived: bool` field
+(Work Package 008), orthogonal to `SessionStatus` — see
+`docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations for
+why this is a separate field rather than a new status value.
 
-## Proposal Model
+### Persistence and the Session Browser (Work Package 008)
 
-`EngineeringProposal` (`lib/knowledge/models/engineering_proposal.dart`)
-is intentionally minimal — SDD-018's "Draft" lifecycle state ("Created
-during an active Knowledge Curation Session. Not yet committed.
-Visible only within the session."), with none of SDD-016/SDD-020's
-AI-era fields (confidence, supporting evidence, repository matches)
-since Work Package 007 has no AI or repository-matching to populate
-them:
+Sessions now **survive application restart** — every mutation to the
+active session's candidates, relationship candidates, sources, or
+status triggers an autosave (`FoundationRuntimeNotifier`'s private
+`_persistActiveSession()`) to
+`%APPDATA%/oep_studio/knowledge_sessions/<sessionId>/session.json` via
+`KnowledgeSessionStorage`. There is no separate explicit "Save" action.
+See `docs/KNOWLEDGE_SESSION_FORMAT.md` for the full file format.
+
+`FoundationRuntimeNotifier.createKnowledgeSession` still **replaces**
+any currently active session as the one *active* session — but unlike
+Work Package 007, the replaced session isn't lost; it remains on disk
+and can be reopened. The Session Browser
+(`lib/knowledge/sessions/session_browser_dialog.dart`, opened via the
+Session Header's "Sessions" button) lists every persisted session and
+supports:
+
+* **Open** — loads a session as the active one, replacing whatever was
+  active (same replacement semantics as creating a new session).
+* **Duplicate** — a fresh ID/name/timestamps, independent copies of
+  its Source Material files, candidates/relationship candidates/review
+  decisions carried over as-is; does not change which session is
+  active.
+* **Archive / Unarchive** — toggles the `archived` field.
+* **Delete** — permanent, requires an inline confirmation dialog,
+  removes the session's directory (including its Source Material
+  files) entirely.
+
+Corrupted session files (a JSON parse or structural failure) are
+listed separately in the browser with an explanation, rather than
+silently dropped or blocking the browser from opening at all.
+
+## Knowledge Candidate Model
+
+`KnowledgeCandidate` (`lib/knowledge/models/knowledge_candidate.dart`,
+renamed from `EngineeringProposal` in Work Package 008) is
+intentionally minimal — SDD-018's "Draft" lifecycle state ("Created
+during an active Knowledge Curation Session. Not yet committed.")
+until persisted, after which it survives restart but is still
+pre-commit — SDD-018's "Draft" state covers both. No AI-era fields
+(confidence, supporting evidence, repository matches) since neither
+work package has AI or repository-matching to populate them:
 
 ```dart
-class EngineeringProposal {
+class KnowledgeCandidate {
   final String id;
-  final ProposalType type;       // Component | Procedure | Specification | Image | Document
+  final KnowledgeCandidateType type;   // Component | Procedure | Specification | Image | Document
   final String name;
   final String description;
-  final ProposalStatus status;   // Pending | Accepted | Rejected
+  final KnowledgeCandidateStatus status;   // Pending | Accepted | Rejected
   final DateTime createdTime;
   final DateTime? modifiedTime;
 }
 ```
 
-`ProposalType` mirrors five of SDD-015's Layer 3 Engineering Objects —
-the subset Work Package 007 lists. `ProposalStatus` is narrower than
-SDD-020's full Decision Options (Accept/Reject/Merge/Edit/Postpone/
-Duplicate): Merge/Postpone/Duplicate all presuppose repository
-matching, which doesn't exist yet (Repository Matches is a
-placeholder), so only Accept/Reject/Pending are modeled; Edit is an
-action, not a status.
+`KnowledgeCandidateType` mirrors five of SDD-015's Layer 3 Engineering
+Objects. `KnowledgeCandidateStatus` is narrower than SDD-020's full
+Decision Options (Accept/Reject/Merge/Edit/Postpone/Duplicate):
+Merge/Postpone/Duplicate all presuppose repository matching, which
+doesn't exist yet, so only Accept/Reject/Pending are modeled; Edit is
+an action, not a status.
 
-Proposal name uniqueness is enforced per-session, case-insensitively,
-by `KnowledgeSessionService.validateProposalName` — Work Package 007
-Error Handling: "Duplicate proposal names."
+Candidate name uniqueness is enforced per-session, case-insensitively,
+by `KnowledgeSessionService.validateCandidateName`.
+
+Every Create/Edit/Accept/Reject/Delete against a candidate appends a
+`ReviewDecision` (Work Package 008) to the session's append-only
+decision history — see `docs/KNOWLEDGE_SESSION_FORMAT.md` § Review
+Decision Model.
+
+## Relationship Candidates (Work Package 008)
+
+`RelationshipCandidate` (`lib/knowledge/models/relationship_candidate.dart`)
+connects two `KnowledgeCandidate`s within the same session by ID, using
+the existing `RelationshipType` enum (`lib/core/models/relationship_type.dart`,
+already mirroring Foundation's `oep_relationship_type_t` since Work
+Package 006) rather than a Knowledge-specific taxonomy — a manually
+authored relationship candidate is still describing one of Foundation's
+six relationship kinds, just not yet committed.
+
+Unlike `KnowledgeCandidate`, a relationship candidate carries **no
+accept/reject status** — only Create/Edit/Delete, per this work
+package's Requirements list; every relationship candidate that exists
+is included in the Commit Preview.
+
+Validation (`KnowledgeSessionService.validateRelationshipCandidate`,
+blocking): a relationship cannot connect a candidate to itself, and
+both the source and target must exist among the session's candidates.
+**Duplicate relationships are warned, not blocked**
+(`isDuplicateRelationshipCandidate`) — the New/Edit Relationship
+Candidate dialog shows an inline, non-blocking warning when a
+relationship with the same source/target/type already exists, but
+still allows submission. Deleting a candidate cascades: any
+relationship candidate referencing it as source or target is deleted
+too.
+
+Authored through the Engineering Review panel's "Relationships" tab
+(`lib/knowledge/review/relationship_candidate_form_dialog.dart`),
+listed via `RelationshipCandidateListQuery`
+(`lib/knowledge/review/relationship_candidate_list_query.dart`), a
+sort/filter pipeline mirroring `RelationshipListQuery`'s Work Package
+006 shape.
+
+## Source Material (Work Package 008)
+
+`SourceMaterial` (`lib/knowledge/models/source_material.dart`) records
+engineering evidence attached to a session. Supported types, classified
+by file extension only — **no OCR, no parsing** —: PDF, Image
+(PNG/JPG/JPEG/GIF/BMP/WEBP), Markdown, Text, Other.
+
+`SourceMaterialService.attach` **copies** the picked file into the
+session's own managed `sources/` directory at attach time, rather than
+referencing the originally-picked path — a session stays self-contained
+and portable even if the original file is later moved or deleted. See
+`docs/KNOWLEDGE_SESSION_FORMAT.md` § Local Storage Format for the exact
+directory layout.
+
+The Source Viewer renders what it reasonably can from the managed copy
+(image thumbnail; Markdown/Text raw content) and otherwise shows the
+file's location — this is still "display," not "parse": nothing
+extracts structured meaning from a source's content.
+
+## Commit Preview (Work Package 008)
+
+`CommitPreview` (`lib/knowledge/models/commit_preview.dart`), computed
+on demand by `KnowledgeSessionService.computeCommitPreview` from the
+Connection Manager's current candidates/relationship candidates/
+repository statistics — never stored, since it has no independent
+existence beyond "what the current session's data would produce right
+now":
+
+* **New Objects** — accepted candidates.
+* **Rejected Candidates (excluded)** — rejected candidates, shown so
+  it's visible they were considered and excluded, not silently dropped.
+* **Relationships** — every relationship candidate (no status to
+  filter by).
+* **Modified Objects / Merged Objects** — always `0`; no
+  modify-existing or merge-with-existing workflow exists yet (both
+  presuppose repository matching).
+* **Validation Summary** — human-readable findings: any relationship
+  candidate whose source/target no longer exists (defensive; the UI
+  itself cascades deletes so this shouldn't normally occur), and a
+  count of candidates still pending review.
+* **Repository Object/Relationship Count, current → projected** — see
+  `docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations for
+  why this is an aggregate-total projection, not a fabricated
+  per-category one.
+
+The Commit Summary panel's "Commit" button is permanently disabled
+with an explanatory tooltip — Repository Commit itself is out of scope
+for Work Package 008 ("No repository modification occurs. Everything
+displayed is simulated.").
 
 ## State Ownership
 
-Per Work Package 007's Architecture Rules ("The Connection Manager
-owns session state. Widgets consume state only."), Knowledge Curation
-Session/proposal state lives in the *same* Connection Manager every
-other Studio feature uses
+Per this project's Architecture Rules ("The Connection Manager owns
+session state. Widgets consume state only. Connection Manager
+coordinates state only."), Knowledge Curation Session state lives in
+the *same* Connection Manager every other Studio feature uses
 (`lib/core/services/foundation_runtime_service.dart`/
 `foundation_runtime_state.dart`, `FoundationRuntimeNotifier`/
 `FoundationServiceState`) — **not** a separate Knowledge-specific
 provider — even though this state is Studio-only and never touches
 Foundation. See `docs/CONNECTION_MANAGER.md` for the full state
-ownership table; the Work Package 007 additions are:
+ownership table; as of Work Package 008:
 
 | Field | Meaning |
 |---|---|
-| `knowledgeSession` | The active session, `null` until one is created |
-| `proposals` | Manual proposals within the active session |
-| `selectedProposal` | The Engineering Review proposal currently selected, mutually exclusive with `selectedObject`/`selectedRelationship` |
+| `knowledgeSession` | The active session, `null` until one is created or opened |
+| `candidates` | Knowledge Candidates within the active session |
+| `selectedCandidate` | The Knowledge Candidate currently selected |
+| `relationshipCandidates` | Relationship Candidates within the active session |
+| `selectedRelationshipCandidate` | The Relationship Candidate currently selected |
+| `sourceMaterials` | Source Material attached to the active session |
+| `selectedSourceMaterial` | The Source Material currently selected (previewed) |
+| `reviewDecisions` | The append-only Create/Edit/Accept/Reject/Delete audit log |
+| `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
+| `commitPreview` | Derived getter — see § Commit Preview |
 
-`knowledgeSourceCount`/`knowledgeProposalCount`/`knowledgeAcceptedCount`/
-`knowledgeRejectedCount`/`knowledgePendingCount` are getters derived
-from `proposals`, not separately stored — avoids a second source of
-truth that could drift out of sync with the proposal list.
-`knowledgeSourceCount` is always `0`: the Import Queue is placeholder
-content, so no source-ingestion mechanism exists yet to count.
+`knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
+`knowledgeRejectedCount`/`knowledgePendingCount`/
+`knowledgeRelationshipCandidateCount` are getters derived from the
+lists above, not separately stored.
 
-Selecting a proposal, an object, or a relationship clears the other
-two — the Property Inspector shows exactly one mode at a time. The
-Property Inspector's mode order (`property_inspector_panel.dart`):
+Selection is now **five-way mutually exclusive**: Knowledge Candidate,
+Relationship Candidate, Source Material, Object, and Relationship.
+Every `select*` method clears the other four. The Property Inspector's
+mode order (`property_inspector_panel.dart`):
 
 ```
-selectedProposal? → Proposal mode
+selectedCandidate? → Knowledge Candidate mode
+selectedRelationshipCandidate? → Relationship Candidate mode
+selectedSourceMaterial? → Source Material mode
 selectedObject? → Object mode
 selectedRelationship? → Relationship mode
 knowledgeSession? → Session mode (fallback — no more specific selection)
@@ -196,60 +339,69 @@ else → No Selection
 ```
 
 `lib/knowledge/services/knowledge_session_service.dart` holds the
-Knowledge domain's validation and ID-generation rules as pure,
-stateless functions — kept separate from the notifier so "no
-engineering logic shall exist inside widgets" doesn't push that logic
-into the widget layer just because it also isn't Foundation-calling
-code that belongs in the Bridge.
+Knowledge domain's validation, ID-generation, and commit-preview
+computation as pure, stateless functions — kept separate from the
+notifier so "no engineering logic shall exist inside widgets" doesn't
+push that logic into the widget layer just because it also isn't
+Foundation-calling code that belongs in the Bridge.
+`lib/knowledge/services/knowledge_session_storage.dart` and
+`lib/knowledge/services/source_material_service.dart` hold persistence
+logic the same way.
 
 ## Error Handling
 
-Per Work Package 007 ("Handle: Invalid session names, Duplicate
-proposal names, Missing repository. Display professional validation
-messages."):
+Per this project's Knowledge Studio error-handling rules (invalid
+session names, duplicate candidate names, missing repository, invalid/
+missing source files, invalid relationship definitions, corrupted
+session files):
 
-* **New Session / New Proposal dialogs** validate inline — an invalid
-  submission keeps the dialog open and shows the message beneath the
-  fields, since the fix is local and the form data shouldn't be lost.
-* **Session status transitions** (Start Preparing/Start Review/Mark
-  Ready to Commit/Cancel Session) validate via a separate `AlertDialog`
+* **New Session / New Candidate / New Relationship Candidate dialogs**
+  validate inline — an invalid submission keeps the dialog open and
+  shows the message beneath the fields, since the fix is local and the
+  form data shouldn't be lost.
+* **Session status transitions** and **Session Browser actions**
+  (Open/Duplicate/Archive/Delete) validate via a separate `AlertDialog`
   (mirroring `showFoundationErrorDialog`'s pattern from
   `dashboard_page.dart`), since these are single-click actions with no
   form to keep open.
+* **Autosave failures** (any mutation's background persistence)
+  surface via a dismissible banner in the Session Header
+  (`knowledgeStorageError`) rather than a dialog, since most triggers
+  (e.g. accepting a candidate) have no dialog already open to show one
+  in.
 
-All validation failures throw `KnowledgeValidationException`
+All validation and persistence failures throw
+`KnowledgeValidationException`
 (`lib/knowledge/models/knowledge_validation_exception.dart`) — a
 Studio-only exception type, distinct from `FoundationBridgeException`,
-since nothing here ever reaches Foundation.
+since nothing here ever reaches Foundation. Every I/O failure in
+`KnowledgeSessionStorage`/`SourceMaterialService` is translated to this
+type — never a raw `IOException` or stack trace.
 
 ## Future Foundation Integration
 
-None of this work package's code calls the Foundation Bridge — by
-design ("No Foundation modifications occur," "This is a Studio-only
-implementation"). The natural extension points, once the corresponding
-Public C API exists:
+None of this code calls the Foundation Bridge — by design. The natural
+extension points, once the corresponding Public C API exists:
 
-* **Repository Commit** (SDD-017 Stage 6) would need a new
-  `oep_api.h` surface for atomic multi-object creation — no such
-  function exists today (Studio's Public C API is entirely read-only
-  as of Work Package 006). `SessionStatus.readyToCommit` is the
-  natural point to add a "Commit" action once it does; Commit Summary
-  is already reserved as its panel.
+* **Repository Commit** (SDD-017 Stage 6) would need a new `oep_api.h`
+  surface for atomic multi-object creation — no such function exists
+  today. `SessionStatus.readyToCommit` and the now-implemented Commit
+  Preview are the natural point to add a real "Commit" action once it
+  does.
 * **Repository Matches** (SDD-013/016/020 duplicate detection) would
   need Foundation to expose something equivalent to a fuzzy/exact
   object-name search scoped for matching rather than free-text search
   — `oep_search_objects` (Work Package 006) is close but is designed
-  for the Search Workspace's use case, not necessarily this one;
-  worth evaluating once this panel is built out rather than assumed
-  identical.
+  for the Search Workspace's use case, not necessarily this one.
 * **AI Suggestions** (SDD-013/016 AI Analysis) requires an entire
   analysis pipeline (OCR, image extraction, object detection,
   relationship detection) that doesn't exist in Foundation or Studio
-  yet — explicitly out of scope for this work package and likely
-  several more.
-* **Import Queue / Source Viewer** need a source-ingestion mechanism
-  (file parsing, OCR, page rendering) — also not yet started.
+  yet.
+* **`KnowledgeCandidateType`/`ObjectCategory` reconciliation** — see
+  `docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations. A
+  real Commit implementation will need this resolved one way or
+  another (extend one taxonomy, or define an explicit mapping with a
+  documented answer for the types that don't correspond).
 
-None of these are implemented here, per this work package's explicit
-scope and the "document it, do not implement it" rule this project has
-followed since Work Package 004.
+None of these are implemented here, per the "document it, do not
+implement it" rule this project has followed since Work Package 004.

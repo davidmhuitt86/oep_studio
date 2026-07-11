@@ -1,6 +1,11 @@
-import '../../knowledge/models/engineering_proposal.dart';
+import '../../knowledge/models/commit_preview.dart';
+import '../../knowledge/models/knowledge_candidate.dart';
+import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_session.dart';
-import '../../knowledge/models/proposal_status.dart';
+import '../../knowledge/models/relationship_candidate.dart';
+import '../../knowledge/models/review_decision.dart';
+import '../../knowledge/models/source_material.dart';
+import '../../knowledge/services/knowledge_session_service.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
@@ -14,12 +19,14 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-007): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-008): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
-/// Search Results, Current Knowledge Curation Session (Work Package 007),
-/// and Current Selection (of an object, a relationship, or a proposal —
-/// never more than one at once). Immutable; widgets watch this through
+/// Search Results, Current Knowledge Curation Session, Current Source
+/// List, Current Relationship Candidate List, Current Commit Preview,
+/// and Current Selection (of an object, a relationship, a Knowledge
+/// Candidate, a Relationship Candidate, or a Source Material — never
+/// more than one at once). Immutable; widgets watch this through
 /// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
 /// directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
@@ -40,8 +47,14 @@ class FoundationServiceState {
     this.searchQuery = '',
     this.searchResults,
     this.knowledgeSession,
-    this.proposals = const [],
-    this.selectedProposal,
+    this.candidates = const [],
+    this.selectedCandidate,
+    this.relationshipCandidates = const [],
+    this.selectedRelationshipCandidate,
+    this.sourceMaterials = const [],
+    this.selectedSourceMaterial,
+    this.reviewDecisions = const [],
+    this.knowledgeStorageError,
   });
 
   final FoundationConnectionPhase phase;
@@ -78,14 +91,14 @@ class FoundationServiceState {
   final ObjectCategory? selectedCategory;
 
   /// The Object Explorer row currently selected, if any. Mutually
-  /// exclusive with [selectedRelationship] — selecting one clears the
-  /// other, since the Property Inspector shows exactly one of Object
-  /// mode or Relationship mode (Work Package 005).
+  /// exclusive with every other selection field below — the Property
+  /// Inspector shows exactly one mode at a time (Work Package 005,
+  /// extended by Work Packages 007/008).
   final EngineeringObjectSummary? selectedObject;
 
   /// The Relationship Explorer row currently selected, if any (Work
   /// Package 005 Current Relationship Selection). Mutually exclusive
-  /// with [selectedObject].
+  /// with every other selection field.
   final RelationshipSummary? selectedRelationship;
 
   /// The Search Workspace's Current Search Query (Work Package 005).
@@ -100,21 +113,52 @@ class FoundationServiceState {
   /// occur in steady state.
   final List<SearchResult>? searchResults;
 
-  /// The active Knowledge Curation Session (Work Package 007), `null`
-  /// until one is created. Entirely in-memory — Studio-only, never
-  /// committed to Foundation (see `docs/KNOWLEDGE_STUDIO.md`).
+  /// The active Knowledge Curation Session (Work Package 007/008),
+  /// `null` until one is created or opened. Persisted locally (Work
+  /// Package 008) — Studio-only, never committed to Foundation (see
+  /// `docs/KNOWLEDGE_STUDIO.md`, `docs/KNOWLEDGE_SESSION_FORMAT.md`).
   final KnowledgeSession? knowledgeSession;
 
-  /// Manual Engineering Review proposals within [knowledgeSession]
-  /// (Work Package 007 Engineering Review). Always empty when
-  /// [knowledgeSession] is `null`; cleared whenever a new session
-  /// replaces the current one.
-  final List<EngineeringProposal> proposals;
+  /// Manual Knowledge Candidates within [knowledgeSession] (Work
+  /// Package 007/008 Engineering Review). Always empty when
+  /// [knowledgeSession] is `null`; replaced whenever a session is
+  /// created, opened, or duplicated.
+  final List<KnowledgeCandidate> candidates;
 
-  /// The Engineering Review proposal currently selected, if any.
-  /// Mutually exclusive with [selectedObject]/[selectedRelationship] —
-  /// the Property Inspector shows exactly one selection mode at a time.
-  final EngineeringProposal? selectedProposal;
+  /// The Knowledge Candidate currently selected, if any. Mutually
+  /// exclusive with every other selection field.
+  final KnowledgeCandidate? selectedCandidate;
+
+  /// Manually-authored Relationship Candidates within [knowledgeSession]
+  /// (Work Package 008 STUDIO-TASK-000017 Current Relationship
+  /// Candidate List).
+  final List<RelationshipCandidate> relationshipCandidates;
+
+  /// The Relationship Candidate currently selected, if any. Mutually
+  /// exclusive with every other selection field.
+  final RelationshipCandidate? selectedRelationshipCandidate;
+
+  /// Source Material attached to [knowledgeSession] (Work Package 008
+  /// STUDIO-TASK-000016 Current Source List).
+  final List<SourceMaterial> sourceMaterials;
+
+  /// The Source Material currently selected (previewed), if any.
+  /// Mutually exclusive with every other selection field.
+  final SourceMaterial? selectedSourceMaterial;
+
+  /// The append-only record of Accept/Reject/Create/Edit/Delete
+  /// decisions made against this session's candidates (Work Package
+  /// 008 Persist: "Review Decisions"). Not directly displayed by any
+  /// panel in this work package but persisted for audit purposes per
+  /// SDD-018 ("Repository history shall remain auditable").
+  final List<ReviewDecision> reviewDecisions;
+
+  /// The most recent session persistence (save/load/delete/duplicate)
+  /// failure, if any — surfaced as a dismissible banner in the Session
+  /// Header rather than a per-action dialog, since most triggers (e.g.
+  /// autosave after accepting a candidate) have no dialog already open
+  /// to show it in. Cleared on the next successful storage operation.
+  final String? knowledgeStorageError;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
@@ -129,16 +173,28 @@ class FoundationServiceState {
     return objects.where((object) => object.category == category).toList();
   }
 
-  /// Source material count for the active session (Work Package 007
-  /// Knowledge Curation Session display). Always `0` in this work
-  /// package — the Import Queue is placeholder content, so no source
-  /// ingestion mechanism exists yet to count.
-  int get knowledgeSourceCount => 0;
+  int get knowledgeSourceCount => sourceMaterials.length;
+  int get knowledgeCandidateCount => candidates.length;
+  int get knowledgeAcceptedCount =>
+      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.accepted).length;
+  int get knowledgeRejectedCount =>
+      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.rejected).length;
+  int get knowledgePendingCount =>
+      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.pending).length;
+  int get knowledgeRelationshipCandidateCount => relationshipCandidates.length;
 
-  int get knowledgeProposalCount => proposals.length;
-  int get knowledgeAcceptedCount => proposals.where((proposal) => proposal.status == ProposalStatus.accepted).length;
-  int get knowledgeRejectedCount => proposals.where((proposal) => proposal.status == ProposalStatus.rejected).length;
-  int get knowledgePendingCount => proposals.where((proposal) => proposal.status == ProposalStatus.pending).length;
+  /// The Current Commit Preview (Work Package 008 STUDIO-TASK-000018),
+  /// `null` when no session is active — otherwise always non-null, even
+  /// when it has nothing to show yet (an empty preview is still a
+  /// preview; "no session" is the only state with nothing to preview).
+  CommitPreview? get commitPreview {
+    if (knowledgeSession == null) return null;
+    return KnowledgeSessionService.computeCommitPreview(
+      candidates: candidates,
+      relationshipCandidates: relationshipCandidates,
+      repositoryStatistics: repositoryStatistics,
+    );
+  }
 
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
@@ -167,9 +223,18 @@ class FoundationServiceState {
     bool clearSearchResults = false,
     KnowledgeSession? knowledgeSession,
     bool clearKnowledgeSession = false,
-    List<EngineeringProposal>? proposals,
-    EngineeringProposal? selectedProposal,
-    bool clearSelectedProposal = false,
+    List<KnowledgeCandidate>? candidates,
+    KnowledgeCandidate? selectedCandidate,
+    bool clearSelectedCandidate = false,
+    List<RelationshipCandidate>? relationshipCandidates,
+    RelationshipCandidate? selectedRelationshipCandidate,
+    bool clearSelectedRelationshipCandidate = false,
+    List<SourceMaterial>? sourceMaterials,
+    SourceMaterial? selectedSourceMaterial,
+    bool clearSelectedSourceMaterial = false,
+    List<ReviewDecision>? reviewDecisions,
+    String? knowledgeStorageError,
+    bool clearKnowledgeStorageError = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -192,8 +257,20 @@ class FoundationServiceState {
       searchQuery: searchQuery ?? this.searchQuery,
       searchResults: clearSearchResults ? null : (searchResults ?? this.searchResults),
       knowledgeSession: clearKnowledgeSession ? null : (knowledgeSession ?? this.knowledgeSession),
-      proposals: proposals ?? this.proposals,
-      selectedProposal: clearSelectedProposal ? null : (selectedProposal ?? this.selectedProposal),
+      candidates: candidates ?? this.candidates,
+      selectedCandidate: clearSelectedCandidate ? null : (selectedCandidate ?? this.selectedCandidate),
+      relationshipCandidates: relationshipCandidates ?? this.relationshipCandidates,
+      selectedRelationshipCandidate: clearSelectedRelationshipCandidate
+          ? null
+          : (selectedRelationshipCandidate ?? this.selectedRelationshipCandidate),
+      sourceMaterials: sourceMaterials ?? this.sourceMaterials,
+      selectedSourceMaterial: clearSelectedSourceMaterial
+          ? null
+          : (selectedSourceMaterial ?? this.selectedSourceMaterial),
+      reviewDecisions: reviewDecisions ?? this.reviewDecisions,
+      knowledgeStorageError: clearKnowledgeStorageError
+          ? null
+          : (knowledgeStorageError ?? this.knowledgeStorageError),
     );
   }
 }

@@ -5,3 +5,18 @@ String formatDateTime(DateTime value) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${value.year}-${two(value.month)}-${two(value.day)} ${two(value.hour)}:${two(value.minute)}';
 }
+
+/// Formats a byte count as `B`/`KB`/`MB`/`GB` with one decimal place
+/// above 1 KB — used for Source Material file sizes (Work Package 008
+/// STUDIO-TASK-000016: "Display: ... Size").
+String formatFileSize(int bytes) {
+  if (bytes < 1024) return '$bytes B';
+  const units = ['KB', 'MB', 'GB'];
+  var value = bytes / 1024;
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return '${value.toStringAsFixed(1)} ${units[unitIndex]}';
+}

@@ -4,19 +4,24 @@ import '../review/engineering_review_panel.dart';
 import '../sessions/session_header.dart';
 import '../widgets/knowledge_panel.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'commit_preview_panel.dart';
+import 'import_queue_panel.dart';
+import 'source_viewer_panel.dart';
 
 /// The Knowledge Studio workspace (Work Package 007 STUDIO-TASK-000013;
-/// SDD-013, SDD-016). Registers as a Studio workspace like every other
-/// Primary Workspace page — same Navigation Rail, Connection Manager,
-/// theme, and window layout (`StudioShell`), per this work package's
-/// Navigation requirement: "No separate application shall be created."
+/// Work Package 008; SDD-013, SDD-016). Registers as a Studio workspace
+/// like every other Primary Workspace page — same Navigation Rail,
+/// Connection Manager, theme, and window layout (`StudioShell`), per
+/// this work package's Navigation requirement: "No separate application
+/// shall be created."
 ///
-/// Only the Engineering Review panel and the shared Property Inspector
-/// carry real functionality in this work package; every other panel
-/// (Import Queue, Source Viewer, AI Suggestions, Repository Matches,
-/// Commit Summary) is placeholder content, per STUDIO-TASK-000013's
-/// explicit scope: "The objective is to validate layout, navigation,
-/// resizing, docking behavior, and state management."
+/// Import Queue, Source Viewer, Engineering Review, and Commit Summary
+/// carry real functionality as of Work Package 008. AI Suggestions and
+/// Repository Matches remain placeholder content — both presuppose
+/// workflows this and the prior work package explicitly exclude ("Do
+/// not introduce AI functionality"; repository matching has no
+/// Public C API surface yet, see `docs/KNOWLEDGE_SESSION_FORMAT.md`
+/// § Architectural Observations).
 class KnowledgeStudioPage extends StatelessWidget {
   const KnowledgeStudioPage({super.key});
 
@@ -36,7 +41,7 @@ class KnowledgeStudioPage extends StatelessWidget {
                       child: KnowledgePanel(
                         title: 'Import Queue',
                         icon: Icons.upload_file_outlined,
-                        child: KnowledgePlaceholder(message: 'Source material import will appear here.'),
+                        child: ImportQueuePanel(),
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -44,7 +49,7 @@ class KnowledgeStudioPage extends StatelessWidget {
                       child: KnowledgePanel(
                         title: 'Source Viewer',
                         icon: Icons.visibility_outlined,
-                        child: KnowledgePlaceholder(message: 'The original engineering source will appear here.'),
+                        child: SourceViewerPanel(),
                       ),
                     ),
                     const VerticalDivider(width: 1),
@@ -93,10 +98,7 @@ class KnowledgeStudioPage extends StatelessWidget {
                 child: KnowledgePanel(
                   title: 'Commit Summary',
                   icon: Icons.summarize_outlined,
-                  child: const KnowledgePlaceholder(
-                    message: 'A preview of repository changes will appear here before Commit. '
-                        'Repository Commit is not implemented in this work package.',
-                  ),
+                  child: const CommitPreviewPanel(),
                 ),
               ),
             ],

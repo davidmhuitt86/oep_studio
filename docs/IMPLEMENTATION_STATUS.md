@@ -1445,3 +1445,364 @@ untouched — an explicit, user-confirmed scope decision (see below).
   a more robust way to locate a specific `TextField` in a multi-field
   form than positional `find.byType(TextField).at(n)` — worth using by
   default for any future dialog test with more than one text field.
+
+---
+
+## Work Package 008 — Knowledge Studio (persistence, sources, relationships, commit preview)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000015 — Persistent Sessions + Session Browser — Complete
+* STUDIO-TASK-000016 — Source Material Workspace — Complete
+* STUDIO-TASK-000017 — Manual Relationship Authoring + Relationship View — Complete
+* STUDIO-TASK-000018 — Repository Commit Preview — Complete
+
+### What Exists
+
+Continues the Work Package 007 `lib/knowledge/` module. Per this work
+package's explicit terminology direction, "Proposal" is renamed to
+"Knowledge Candidate" throughout `lib/knowledge/` and its two
+Connection Manager touchpoints (`EngineeringProposal` →
+`KnowledgeCandidate`, `ProposalType` → `KnowledgeCandidateType`,
+`ProposalStatus` → `KnowledgeCandidateStatus`, and every file/method/
+field name built on "proposal"). Still zero Foundation calls, zero AI,
+zero OCR, zero repository commit — Knowledge Sessions remain entirely
+Studio-local, now durable across restarts. See
+`docs/KNOWLEDGE_SESSION_FORMAT.md` for the full persisted-format,
+model, and architectural-observation detail this section summarizes.
+
+* `lib/knowledge/models/` — `KnowledgeCandidate` (renamed, unchanged
+  shape), new `RelationshipCandidate` (connects two candidates by ID,
+  reuses the existing `RelationshipType` enum from
+  `core/models/relationship_type.dart` rather than inventing a
+  parallel taxonomy — see Architectural Observations), new
+  `SourceMaterial`/`SourceMaterialType` (PDF/Image/Markdown/Text/Other,
+  classified by extension only — "No OCR. No parsing."), new
+  `ReviewDecision`/`ReviewDecisionKind` (an append-only Created/Edited/
+  Accepted/Rejected/Deleted audit log), new `CommitPreview` (see
+  STUDIO-TASK-000018 below), new `KnowledgeSessionRecord` (the complete
+  persisted unit — session + candidates + relationship candidates +
+  sources + review decisions). `KnowledgeSession` gained `lastModified`
+  (required) and `archived` (a `bool`, independent of the existing
+  `SessionStatus` workflow — see Architectural Observations) plus
+  `toJson`/`fromJson`.
+* `lib/knowledge/services/knowledge_session_storage.dart` (new) — local
+  JSON persistence: one directory per session under
+  `%APPDATA%/oep_studio/knowledge_sessions/<sessionId>/`
+  (`session.json` + a `sources/` subdirectory of copied files).
+  `save`/`load`/`listAll`/`delete`/`duplicateSourceFiles`, every I/O
+  failure translated to `KnowledgeValidationException` — never a raw
+  `IOException` or stack trace. Uses `dart:io`/`Platform.environment`
+  directly rather than adding `path_provider` (this is already a
+  Windows-only desktop target; `path_provider`'s cross-platform channel
+  code would be dead weight).
+* `lib/knowledge/services/source_material_service.dart` (new) — copies
+  a picked file into the active session's managed `sources/` directory
+  at attach time (not a reference to the original path, so a session
+  stays self-contained if the original file moves or is deleted) and
+  records its metadata; best-effort delete on removal.
+* `lib/knowledge/services/knowledge_session_service.dart` — extended
+  with `validateRelationshipCandidate` (self-reference prohibited,
+  source/target must exist — blocking), `isDuplicateRelationshipCandidate`
+  (same source/target/type already exists — non-blocking, a warning
+  only, per this work package's explicit "Duplicate relationships
+  warned" vs. "Self-reference prohibited" distinction),
+  `computeCommitPreview`, and `buildDuplicate` (Session Browser
+  "Duplicate": fresh ID/name/timestamps, candidates/relationship
+  candidates/review decisions copied as-is, sources remapped to the new
+  session's storage directory).
+* `lib/core/services/foundation_runtime_state.dart`/
+  `foundation_runtime_service.dart` — extended per this work package's
+  Architecture Rule ("Connection Manager coordinates state only"):
+  `relationshipCandidates`/`selectedRelationshipCandidate`,
+  `sourceMaterials`/`selectedSourceMaterial`, `reviewDecisions`, and
+  `knowledgeStorageError` (a dismissible autosave/Session-Browser
+  failure banner) added to `FoundationServiceState`, plus a derived
+  `commitPreview` getter. Every mutating candidate/relationship-
+  candidate/source method now autosaves via a private
+  `_persistActiveSession()` (fire-and-forget, `unawaited`) after
+  updating in-memory state — there is no separate explicit "Save"
+  action to forget to click. New session-lifecycle methods:
+  `closeKnowledgeSession` (unload without deleting), `listKnowledgeSessions`,
+  `openKnowledgeSession`, `duplicateKnowledgeSession`,
+  `setKnowledgeSessionArchived`, `deleteKnowledgeSession`. Selection is
+  now five-way mutually exclusive (Object, Relationship, Knowledge
+  Candidate, Relationship Candidate, Source Material) — every `select*`
+  method clears the other four.
+* `lib/knowledge/sessions/session_browser_dialog.dart` (new) — lists
+  every persisted session (name, status, archived badge, repository,
+  last-modified) with Open/Duplicate/Archive-Unarchive/Delete
+  (Delete requires an inline confirmation dialog); corrupted session
+  files are listed separately with an explanation rather than silently
+  dropped or blocking the browser from opening at all. Opens as a
+  dialog, not an eighth workspace panel — see Architectural
+  Observations.
+* `lib/knowledge/sessions/session_header.dart` — gained a "Sessions"
+  button (opens the Session Browser), a "Close Session" icon button,
+  and a dismissible storage-error banner; the workflow-action row
+  (advance/cancel/close) moved to its own `Wrap`-laid-out row below the
+  name/status/counts row to avoid a `RenderFlex` overflow once the
+  action set grew (see Flutter-Specific Recommendations).
+* `lib/knowledge/workspaces/import_queue_panel.dart` (new) — real
+  functionality: an "Attach Source" button (`file_selector`'s
+  `openFile()`) and a list of attached sources with type icon,
+  formatted size, and a Remove action; selecting a row updates the
+  Property Inspector.
+* `lib/knowledge/workspaces/source_viewer_panel.dart` (new) — real
+  functionality within the limits of "No OCR. No parsing.": renders an
+  image source with `Image.file`, renders a Markdown/Text source's raw
+  file content in a monospace, selectable text view, and shows a
+  location-only message for PDF/Other (no PDF-rendering package was
+  added — out of scope for this work package's minimal-dependency
+  approach). Reports "Missing source file" if the managed copy is gone.
+* `lib/knowledge/workspaces/commit_preview_panel.dart` (new) — real
+  functionality: New Objects / Rejected Candidates (excluded) /
+  Relationships / Modified Objects (always 0) / Merged Objects (always
+  0) counts, a current→projected repository object/relationship count
+  (or "unavailable" if no repository is open), a Validation Summary
+  list, and a permanently disabled "Commit" button with a tooltip
+  explaining why (Repository Commit is explicitly out of scope).
+* `lib/knowledge/review/engineering_review_panel.dart` — restructured
+  into two tabs, Candidates (unchanged Work Package 007 behavior,
+  renamed) and Relationships (new: list/New/Edit/Delete for manually-
+  authored relationship candidates, resolved source/target names via
+  `RelationshipCandidateListQuery`, mirroring `RelationshipListQuery`'s
+  Work Package 006 shape) — see Architectural Observations for why a
+  tab, not an eighth panel.
+* `lib/knowledge/inspector/` — `KnowledgeCandidateProperties` (renamed),
+  new `RelationshipCandidateProperties`, new `SourceMaterialProperties`;
+  `lib/shared/widgets/property_inspector_panel.dart`'s record-pattern
+  `switch` extended from four arms to six: Knowledge Candidate →
+  Relationship Candidate → Source Material → Object → Relationship →
+  Session → No Selection.
+* `lib/shared/format.dart` — gained `formatFileSize` (B/KB/MB/GB, one
+  decimal place above 1 KB), used by `SourceMaterialProperties` and the
+  Import Queue's source rows.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: OEP Foundation, the
+Public C API, AI functionality, OCR functionality, and Repository
+Commit itself are all untouched. `CommitPreview.modifiedObjectCount`/
+`mergedObjectCount` are always `0` — no modify-existing or
+merge-with-existing workflow exists yet (both presuppose repository
+matching, still a placeholder panel). PDF rendering is not implemented
+(location-only message). See `docs/KNOWLEDGE_SESSION_FORMAT.md` §
+Architectural Observations for the full detail on the
+`KnowledgeCandidateType`/`ObjectCategory` mismatch this uncovered.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      knowledge_candidate.dart            Renamed from engineering_proposal.dart
+      knowledge_candidate_type.dart       Renamed from proposal_type.dart
+      knowledge_candidate_status.dart     Renamed from proposal_status.dart
+      relationship_candidate.dart         New
+      source_material.dart                New
+      source_material_type.dart           New
+      review_decision.dart                New
+      commit_preview.dart                 New
+      knowledge_session_record.dart       New
+      knowledge_session.dart              Extended (lastModified, archived)
+    services/
+      knowledge_session_storage.dart      New
+      source_material_service.dart        New
+    controllers/
+      knowledge_candidate_form_controller.dart      Renamed
+      relationship_candidate_form_controller.dart   New
+    review/
+      knowledge_candidate_row.dart               Renamed
+      knowledge_candidate_form_dialog.dart        Renamed
+      relationship_candidate_row.dart             New
+      relationship_candidate_form_dialog.dart     New
+      relationship_candidate_list_query.dart      New
+    sessions/
+      session_browser_dialog.dart         New
+    inspector/
+      knowledge_candidate_properties.dart       Renamed
+      relationship_candidate_properties.dart    New
+      source_material_properties.dart           New
+    workspaces/
+      import_queue_panel.dart             New
+      source_viewer_panel.dart            New
+      commit_preview_panel.dart           New
+test/
+  knowledge_session_storage_test.dart      New
+docs/
+  KNOWLEDGE_SESSION_FORMAT.md              New
+```
+
+### Flutter Package Decisions
+
+No new permanent dependencies. Persistence uses `dart:convert`/
+`dart:io` directly (manual `toJson`/`fromJson` on every model,
+`JsonEncoder.withIndent`, `enum.name`/`EnumType.values.byName()`) —
+consistent with this project's existing no-code-gen convention.
+Source Material attachment reuses the already-present `file_selector`
+(`openFile()`, the same package `getDirectoryPath()` already uses for
+Open Repository). A temporary `integration_test` dependency was added,
+used, and fully removed before commit — see Verification Results.
+
+### Verification Results
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 53/53 passing: all prior tests, `knowledge_session_service_test.dart`
+  updated for the Candidate rename plus 8 new cases
+  (`validateRelationshipCandidate`'s self-reference/missing-endpoint
+  rules, `isDuplicateRelationshipCandidate`, `computeCommitPreview`'s
+  new-object/rejected/pending-warning/dangling-relationship logic), a
+  new `knowledge_session_storage_test.dart` (6 cases: save/load round
+  trip, missing-session and corrupted-file errors, `listAll` sort
+  order, delete, and a duplicate-session test that copies a real
+  attached source file and confirms deleting the original doesn't
+  affect the duplicate's own copy — all against the real
+  `%APPDATA%/oep_studio/knowledge_sessions` directory with a unique,
+  self-cleaning session-ID prefix, since the storage service has no
+  injectable directory override and adding one purely for testability
+  would be an unrequested abstraction), and `widget_test.dart`'s
+  Knowledge Curation Session test updated for the renamed
+  button/dialog/field labels.
+* `flutter build windows` — succeeded (both an initial verification
+  build and the final build after all fixes below).
+* **Manual verification.** As in Work Packages 006/007, this
+  environment's OS-level UI automation could not reliably drive this
+  app: `computer-use`'s `request_access` for the built `oep_studio.exe`
+  process was explicitly denied by the user when requested (the app
+  process itself is not a Start-menu-registered application this
+  environment's access model recognizes), so no screenshot/click could
+  be taken of the running app at all this time — a stricter version of
+  the AlertDialog-specific limitation Work Package 007 hit. Per this
+  work package's own pre-approved instructions, verification was
+  performed instead with a temporary `integration_test`
+  (`integration_test: {sdk: flutter}` added to `dev_dependencies`,
+  `integration_test/knowledge_studio_wp008_test.dart` written, run via
+  `flutter test integration_test/knowledge_studio_wp008_test.dart -d
+  windows` against the real compiled app, then the test file deleted
+  and the dependency reverted — `flutter pub get` confirmed
+  `pubspec.lock` returned to its pre-work-package state). The test
+  covered the full golden path: create a session (persisted
+  immediately) → add two Knowledge Candidates → accept one, leave one
+  pending → add a Relationship Candidate connecting them → Commit
+  Preview shows New Objects 1 / Relationships 1 / "1 candidate still
+  pending review" / a permanently disabled Commit button → Close
+  Session → reopen via the Session Browser (proving a real disk
+  round-trip, not just in-memory state) → the candidate and
+  relationship candidate both survive reopen → delete the session via
+  the Session Browser's own Delete flow (cleaning up its own test
+  data). All assertions passed on the corrected run; the native
+  "Attach Source" file-picker flow was not exercised this way (driving
+  an OS file dialog is exactly the class of interaction this workaround
+  exists to route around) — `SourceMaterialService`'s file-copy logic
+  is instead covered by the permanent `knowledge_session_storage_test.dart`.
+  Confirmed no session directories were left under
+  `%APPDATA%/oep_studio/knowledge_sessions` after the run.
+
+### Architectural Observations
+
+* **`KnowledgeCandidateType` (Component/Procedure/Specification/Image/
+  Document) does not map one-to-one onto Foundation's `ObjectCategory`
+  (Component/Document/Diagram/Procedure/Image/Project).** Specification
+  has no Foundation object type yet; Diagram and Project have no
+  Knowledge Candidate type yet. This blocked computing a per-category
+  projected `RepositoryStatistics` for the Commit Preview — doing so
+  would require guessing that mapping, exactly the kind of independent
+  design decision this work package prohibits when a genuine
+  architectural gap exists. `CommitPreview` instead exposes the
+  *unmodified* `currentStatistics` plus simple aggregate-total
+  projections (`projectedObjectCount`/`projectedRelationshipCount`,
+  which need no per-category mapping). Documented in full, with the
+  concrete field-by-field mismatch, in
+  `docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations —
+  flagging for architectural review rather than resolving unilaterally,
+  per this work package's explicit instruction.
+* **"Archived" was implemented as an independent `bool archived` field
+  on `KnowledgeSession`, not a new `SessionStatus` value.** A session's
+  curation-workflow stage (Created → Preparing → Reviewing → Ready to
+  Commit, or Cancelled) and whether it has been archived out of the
+  Session Browser's default view are orthogonal lifecycle dimensions —
+  mirroring how SDD-018 treats Archive for Engineering Objects ("Archive
+  does not imply deletion. Archived knowledge remains searchable").
+  Reached without needing to stop for review since SDD-018 already
+  establishes the precedent this decision follows directly.
+* **The Relationship View (STUDIO-TASK-000017) was integrated as a tab
+  inside the existing Engineering Review panel, not an eighth workspace
+  panel.** SDD-016 fixes Knowledge Studio's layout at seven panels;
+  adding an eighth would conflict with that frozen diagram, while the
+  work package's own Requirements list never actually requires a
+  *separate* panel — only that the described views/actions exist
+  somewhere. Knowledge Candidates and Relationship Candidates are both
+  "things awaiting engineering review," so sharing one panel via a tab
+  keeps them conceptually together without touching the frozen layout.
+* **The Session Browser (STUDIO-TASK-000015) opens as a dialog, not a
+  panel, for the same reason** — browsing/switching sessions is an
+  occasional action, not something that needs permanent screen space
+  competing with the seven fixed panels.
+* **The `integration_test` harness caught a real bug this session that
+  the permanent unit/widget test suite did not: `_reload()`'s
+  `setState(() => _future = future)` returned the assigned `Future`
+  from the closure, which Flutter's `setState` explicitly asserts
+  against at runtime** ("setState() callback argument returned a
+  Future"). This only triggers when `_reload()` actually runs a second
+  time within a live `State` (i.e. after some action inside the
+  already-open Session Browser, not merely on its first `initState`)
+  — exactly the kind of interaction sequence a single-open widget test
+  wouldn't exercise, but the full open→act→reload cycle the integration
+  test drove did. Fixed by giving the closure a block body
+  (`setState(() { _future = ...; })`), which returns `void` explicitly.
+  General lesson: an arrow-bodied `setState(() => someAssignment)` is a
+  latent bug whenever the assignment's right-hand side is itself a
+  non-void expression (here, a `Future`) — block-bodied `setState`
+  closures are the safer default whenever the callback does anything
+  beyond a bare field read.
+* **A `showDialog` route's underlying page keeps its widgets mounted
+  (just visually covered), which made a tooltip-based `IconButton`
+  finder ambiguous during verification** — both the Session Browser's
+  own "Delete" button and the Relationship Candidate row's "Delete"
+  button (on the *underlying*, still-mounted Engineering Review panel)
+  matched the same tooltip-based finder simultaneously. Not a Studio
+  defect — a test-authoring pitfall worth remembering: any finder used
+  while a dialog is open should be scoped to `find.descendant(of:
+  find.byType(AlertDialog), matching: ...)` whenever the same tooltip
+  or text could plausibly also exist on the page underneath.
+* **Cascading relationship-candidate deletion on candidate delete.**
+  `FoundationRuntimeNotifier.deleteKnowledgeCandidate` proactively
+  removes any Relationship Candidate that referenced the deleted
+  candidate as source or target, rather than leaving a dangling
+  reference for `computeCommitPreview`'s validation to merely flag
+  later. `computeCommitPreview` still checks for dangling references
+  defensively (in case a future code path bypasses this cascade), but
+  the UI itself never shows a relationship pointing at a candidate that
+  no longer exists.
+
+### Flutter-Specific Recommendations
+
+* **A header/toolbar `Row` that accumulates action buttons across work
+  packages should be re-measured for overflow at every addition, not
+  just when first written.** `SessionHeader`'s single `Row` (icon +
+  session summary + advance/cancel + Sessions + New Session) overflowed
+  by hundreds of pixels once this work package's "Close Session" and
+  "Sessions" buttons were added on top of Work Package 007's existing
+  set — `flutter test`'s widget test caught it immediately (a
+  `RenderFlex overflowed` assertion), but only because a widget test
+  happened to open a session and render the header; a manual visual
+  check alone could easily have missed it at a wider window size. Fixed
+  by splitting into two rows (name/status/counts + primary actions on
+  one row; workflow actions in a `Wrap` below), which degrades
+  gracefully at any width rather than requiring exact pixel-budget
+  accounting. The same fix (split into two rows, or use `Wrap`) is the
+  right first move the next time any Studio toolbar accumulates a
+  button too many.
+* **`_TabButton`-style custom tab widgets should carry an explicit
+  `Key` from the start if they'll ever need to be targeted by a test**
+  — the two-tab Engineering Review header initially had no way to
+  disambiguate its "Relationships" tab from other on-screen text/
+  `InkWell` matches without a `ValueKey`; adding
+  `ValueKey('engineering-review-tab-candidates')`/
+  `'engineering-review-tab-relationships'` resolved it immediately and
+  is a permanent, low-cost addition (Keys don't affect runtime
+  behavior) rather than test-only scaffolding.

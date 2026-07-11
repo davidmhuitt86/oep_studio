@@ -1,33 +1,49 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../knowledge/models/engineering_proposal.dart';
+import '../../knowledge/models/knowledge_candidate.dart';
+import '../../knowledge/models/knowledge_candidate_status.dart';
+import '../../knowledge/models/knowledge_candidate_type.dart';
 import '../../knowledge/models/knowledge_session.dart';
+import '../../knowledge/models/knowledge_session_record.dart';
 import '../../knowledge/models/knowledge_validation_exception.dart';
-import '../../knowledge/models/proposal_status.dart';
-import '../../knowledge/models/proposal_type.dart';
+import '../../knowledge/models/relationship_candidate.dart';
+import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/session_status.dart';
+import '../../knowledge/models/source_material.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
+import '../../knowledge/services/knowledge_session_storage.dart';
+import '../../knowledge/services/source_material_service.dart';
 import '../foundation/foundation_bridge.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
 import '../models/object_category.dart';
 import '../models/relationship_summary.dart';
+import '../models/relationship_type.dart';
 import '../models/search_scope.dart';
 import 'foundation_runtime_state.dart';
 
-/// The Studio Connection Manager (Work Packages 002-007). Owns Current
+/// The Studio Connection Manager (Work Packages 002-008). Owns Current
 /// Runtime, Current Repository, Repository Statistics, Current Object
 /// List, Current Relationship List, Current Search Query/Results,
-/// Current Knowledge Curation Session (Work Package 007), and Current
-/// Selection — see `docs/CONNECTION_MANAGER.md`. This is the only place
-/// in Studio that holds a [FoundationBridge] instance; every feature
-/// reaches Foundation through this provider, never through the Bridge
-/// directly. Knowledge Curation Session/proposal state is Studio-only
-/// (Work Package 007: "No Foundation modifications occur") but is still
-/// owned here rather than in a separate service, per that work
-/// package's Architecture Rules ("The Connection Manager owns session
-/// state").
+/// Current Knowledge Curation Session, Current Source List, Current
+/// Relationship Candidate List, Current Commit Preview (derived — see
+/// `FoundationServiceState.commitPreview`), and Current Selection — see
+/// `docs/CONNECTION_MANAGER.md`. This is the only place in Studio that
+/// holds a [FoundationBridge] instance; every feature reaches
+/// Foundation through this provider, never through the Bridge directly.
+///
+/// Knowledge Curation Session/candidate/source/relationship-candidate
+/// state is Studio-only (Work Package 007/008: "No Foundation
+/// modifications occur") but is still owned here rather than in a
+/// separate service, per the Architecture Rules both work packages
+/// restate ("The Connection Manager owns session state" / "coordinates
+/// state only"). Persistence and validation logic itself lives in
+/// `KnowledgeSessionService`/`KnowledgeSessionStorage`/
+/// `SourceMaterialService` — this notifier calls them, it doesn't
+/// reimplement them.
 class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   FoundationBridge? _bridge;
 
@@ -85,6 +101,12 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// operation (Work Package 004: "the application shall remain fully
   /// usable" if enumeration fails) — it just leaves those fields `null`,
   /// which the Repository/Object Explorer render as an empty state.
+  ///
+  /// Does not touch Knowledge Curation Session state — a session's
+  /// assigned repository (`KnowledgeSession.repositoryName`) is
+  /// independent of whichever Foundation repository happens to be open
+  /// elsewhere in Studio (Work Package 007/008: Knowledge Sessions are
+  /// Studio-only).
   void openRepository(String repositoryPath) {
     final bridge = _bridge;
     if (bridge == null) return;
@@ -193,29 +215,35 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Selects an Object Explorer row, switching the Property Inspector to
-  /// Object mode. Clears any Relationship/Proposal selection — Object,
-  /// Relationship, and Proposal selection are mutually exclusive (Work
-  /// Package 005: "The Property Inspector shall automatically switch
-  /// between Object mode and Relationship mode"; Work Package 007 adds
-  /// Proposal mode to that same rule).
+  /// Object mode. Clears every other selection field — Object,
+  /// Relationship, Knowledge Candidate, Relationship Candidate, and
+  /// Source Material selection are mutually exclusive (Work Package
+  /// 005, extended by Work Packages 007/008).
   void selectObject(EngineeringObjectSummary object) {
-    state = state.copyWith(selectedObject: object, clearSelectedRelationship: true, clearSelectedProposal: true);
+    state = state.copyWith(
+      selectedObject: object,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+    );
   }
 
   /// Clears the current object selection (Property Inspector reverts to
-  /// "No Object Selected", unless a relationship is selected).
+  /// "No Object Selected", unless something else is selected).
   void clearObjectSelection() {
     state = state.copyWith(clearSelectedObject: true);
   }
 
   /// Selects a Relationship Explorer row, switching the Property
-  /// Inspector to Relationship mode. Clears any Object/Proposal
-  /// selection.
+  /// Inspector to Relationship mode. Clears every other selection.
   void selectRelationship(RelationshipSummary relationship) {
     state = state.copyWith(
       selectedRelationship: relationship,
       clearSelectedObject: true,
-      clearSelectedProposal: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
     );
   }
 
@@ -259,12 +287,14 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(searchQuery: '', clearSearchResults: true);
   }
 
-  /// Creates a new Knowledge Curation Session (Work Package 007,
-  /// STUDIO-TASK-000014), replacing any existing one — sessions are
-  /// Studio-only and entirely in-memory, so there is nothing to persist
-  /// or close server-side. Throws [KnowledgeValidationException] for an
-  /// invalid name or missing repository, per this work package's Error
-  /// Handling rule.
+  // ---------------------------------------------------------------------
+  // Knowledge Curation Session (Work Package 007/008)
+  // ---------------------------------------------------------------------
+
+  /// Creates a new Knowledge Curation Session, replacing any currently
+  /// active one, and persists it immediately (Work Package 008
+  /// STUDIO-TASK-000015). Throws [KnowledgeValidationException] for an
+  /// invalid name or missing repository.
   void createKnowledgeSession({
     required String name,
     required String repositoryName,
@@ -272,6 +302,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     String description = '',
   }) {
     KnowledgeSessionService.validateNewSession(name: name, repositoryName: repositoryName);
+    final now = DateTime.now();
     state = state.copyWith(
       knowledgeSession: KnowledgeSession(
         id: KnowledgeSessionService.generateId('session'),
@@ -279,117 +310,497 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         repositoryName: repositoryName.trim(),
         author: author.trim(),
         description: description.trim(),
-        createdTime: DateTime.now(),
+        createdTime: now,
+        lastModified: now,
       ),
-      proposals: const [],
-      clearSelectedProposal: true,
+      candidates: const [],
+      relationshipCandidates: const [],
+      sourceMaterials: const [],
+      reviewDecisions: const [],
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearKnowledgeStorageError: true,
     );
+    unawaited(_persistActiveSession());
   }
 
   /// Advances or cancels the current session's status, per the Session
   /// Workflow (Created → Preparing → Reviewing → Ready to Commit, or →
   /// Cancelled). Throws [KnowledgeValidationException] for an invalid
-  /// transition (see `KnowledgeSessionService.validateStatusTransition`).
-  /// A no-op if no session exists.
+  /// transition. A no-op if no session exists.
   void advanceKnowledgeSession(SessionStatus to) {
     final session = state.knowledgeSession;
     if (session == null) return;
     KnowledgeSessionService.validateStatusTransition(session.status, to);
     state = state.copyWith(knowledgeSession: session.copyWith(status: to));
+    unawaited(_persistActiveSession());
   }
 
-  /// Creates a new manual Engineering Review proposal (Work Package
-  /// 007: "The engineer shall be able to create manual proposals").
-  /// Throws [KnowledgeValidationException] if no session exists yet, or
-  /// for an empty/duplicate name.
-  void addProposal({required ProposalType type, required String name, String description = ''}) {
-    if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create a Knowledge Curation Session before adding proposals.');
+  /// Closes the active session (Work Package 008: Sessions may be
+  /// "Closed") — unloads it from the Connection Manager without
+  /// deleting it from disk. The session was already durable via
+  /// autosave, so closing loses nothing.
+  void closeKnowledgeSession() {
+    state = state.copyWith(
+      clearKnowledgeSession: true,
+      candidates: const [],
+      relationshipCandidates: const [],
+      sourceMaterials: const [],
+      reviewDecisions: const [],
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearKnowledgeStorageError: true,
+    );
+  }
+
+  /// Lists every persisted session for the Session Browser (Work
+  /// Package 008 Session Browser).
+  Future<SessionBrowserListing> listKnowledgeSessions() => KnowledgeSessionStorage.listAll();
+
+  /// Opens (reopens) a previously-saved session as the active one (Work
+  /// Package 008: Sessions may be "Reopened"). Throws
+  /// [KnowledgeValidationException] — "Corrupted session files" or a
+  /// missing session — which the Session Browser shows immediately.
+  Future<void> openKnowledgeSession(String sessionId) async {
+    try {
+      final record = await KnowledgeSessionStorage.load(sessionId);
+      state = state.copyWith(
+        knowledgeSession: record.session,
+        candidates: record.candidates,
+        relationshipCandidates: record.relationshipCandidates,
+        sourceMaterials: record.sources,
+        reviewDecisions: record.reviewDecisions,
+        clearSelectedCandidate: true,
+        clearSelectedRelationshipCandidate: true,
+        clearSelectedSourceMaterial: true,
+        clearKnowledgeStorageError: true,
+      );
+    } on KnowledgeValidationException catch (error) {
+      state = state.copyWith(knowledgeStorageError: error.message);
+      rethrow;
     }
-    KnowledgeSessionService.validateProposalName(name, state.proposals);
-    final proposal = EngineeringProposal(
-      id: KnowledgeSessionService.generateId('proposal'),
+  }
+
+  /// Duplicates a persisted session — a fresh ID/name/timestamps and
+  /// its own independent copy of any Source Material files — without
+  /// changing which session is currently active (Work Package 008
+  /// Session Browser: "Duplicate"). Throws [KnowledgeValidationException]
+  /// on failure.
+  Future<void> duplicateKnowledgeSession(String sessionId) async {
+    try {
+      final original = await KnowledgeSessionStorage.load(sessionId);
+      final duplicate = KnowledgeSessionService.buildDuplicate(
+        original,
+        author: state.knowledgeSession?.author ?? original.session.author,
+      );
+      await KnowledgeSessionStorage.duplicateSourceFiles(sessionId, duplicate);
+      await KnowledgeSessionStorage.save(duplicate);
+    } on KnowledgeValidationException catch (error) {
+      state = state.copyWith(knowledgeStorageError: error.message);
+      rethrow;
+    }
+  }
+
+  /// Archives or unarchives a persisted session (Work Package 008
+  /// Session Browser: "Archive"). Updates the active session's state
+  /// too if it happens to be the one archived.
+  Future<void> setKnowledgeSessionArchived(String sessionId, {required bool archived}) async {
+    try {
+      final record = await KnowledgeSessionStorage.load(sessionId);
+      final updatedSession = record.session.copyWith(archived: archived, lastModified: DateTime.now());
+      await KnowledgeSessionStorage.save(
+        KnowledgeSessionRecord(
+          session: updatedSession,
+          candidates: record.candidates,
+          relationshipCandidates: record.relationshipCandidates,
+          sources: record.sources,
+          reviewDecisions: record.reviewDecisions,
+        ),
+      );
+      if (state.knowledgeSession?.id == sessionId) {
+        state = state.copyWith(knowledgeSession: updatedSession);
+      }
+    } on KnowledgeValidationException catch (error) {
+      state = state.copyWith(knowledgeStorageError: error.message);
+      rethrow;
+    }
+  }
+
+  /// Permanently deletes a persisted session and its Source Material
+  /// files (Work Package 008 Session Browser: "Delete ... Deletion
+  /// shall require confirmation" — confirmation is a UI concern,
+  /// handled by the Session Browser dialog before this is called).
+  Future<void> deleteKnowledgeSession(String sessionId) async {
+    try {
+      await KnowledgeSessionStorage.delete(sessionId);
+      if (state.knowledgeSession?.id == sessionId) {
+        closeKnowledgeSession();
+      }
+    } on KnowledgeValidationException catch (error) {
+      state = state.copyWith(knowledgeStorageError: error.message);
+      rethrow;
+    }
+  }
+
+  /// Saves the active session's current in-memory state to disk,
+  /// bumping [KnowledgeSession.lastModified]. Called automatically after
+  /// every mutation below — there is no separate explicit "Save" action
+  /// to forget to click (Work Package 008: "Sessions shall survive
+  /// application restart"). Failures are non-fatal: surfaced via
+  /// [FoundationServiceState.knowledgeStorageError] rather than thrown,
+  /// since most callers (e.g. accepting a candidate via an icon button)
+  /// have no dialog open to catch an exception in.
+  Future<void> _persistActiveSession() async {
+    final session = state.knowledgeSession;
+    if (session == null) return;
+    final updated = session.copyWith(lastModified: DateTime.now());
+    state = state.copyWith(knowledgeSession: updated);
+    try {
+      await KnowledgeSessionStorage.save(
+        KnowledgeSessionRecord(
+          session: updated,
+          candidates: state.candidates,
+          relationshipCandidates: state.relationshipCandidates,
+          sources: state.sourceMaterials,
+          reviewDecisions: state.reviewDecisions,
+        ),
+      );
+      if (state.knowledgeStorageError != null) {
+        state = state.copyWith(clearKnowledgeStorageError: true);
+      }
+    } on KnowledgeValidationException catch (error) {
+      state = state.copyWith(knowledgeStorageError: error.message);
+    }
+  }
+
+  void _recordDecision(String candidateId, String candidateName, ReviewDecisionKind kind) {
+    final session = state.knowledgeSession;
+    if (session == null) return;
+    state = state.copyWith(
+      reviewDecisions: [
+        ...state.reviewDecisions,
+        ReviewDecision(
+          candidateId: candidateId,
+          candidateName: candidateName,
+          kind: kind,
+          timestamp: DateTime.now(),
+          reviewer: session.author,
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Knowledge Candidates (Work Package 007/008 Engineering Review)
+  // ---------------------------------------------------------------------
+
+  /// Creates a new manual Knowledge Candidate. Throws
+  /// [KnowledgeValidationException] if no session is active, or for an
+  /// empty/duplicate name.
+  void addKnowledgeCandidate({required KnowledgeCandidateType type, required String name, String description = ''}) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding candidates.');
+    }
+    KnowledgeSessionService.validateCandidateName(name, state.candidates);
+    final candidate = KnowledgeCandidate(
+      id: KnowledgeSessionService.generateId('candidate'),
       type: type,
       name: name.trim(),
       description: description.trim(),
       createdTime: DateTime.now(),
     );
-    state = state.copyWith(proposals: [...state.proposals, proposal]);
+    state = state.copyWith(candidates: [...state.candidates, candidate]);
+    _recordDecision(candidate.id, candidate.name, ReviewDecisionKind.created);
+    unawaited(_persistActiveSession());
   }
 
-  /// Edits an existing proposal's type/name/description. Throws
+  /// Edits an existing candidate's type/name/description. Throws
   /// [KnowledgeValidationException] for an empty or duplicate name
-  /// (excluding the proposal being edited from that check).
-  void editProposal(String proposalId, {ProposalType? type, String? name, String? description}) {
+  /// (excluding the candidate being edited from that check).
+  void editKnowledgeCandidate(String candidateId, {KnowledgeCandidateType? type, String? name, String? description}) {
     if (name != null) {
-      KnowledgeSessionService.validateProposalName(name, state.proposals, excludingId: proposalId);
+      KnowledgeSessionService.validateCandidateName(name, state.candidates, excludingId: candidateId);
     }
-    EngineeringProposal? updated;
-    final proposals = <EngineeringProposal>[];
-    for (final proposal in state.proposals) {
-      if (proposal.id == proposalId) {
-        updated = proposal.copyWith(
+    KnowledgeCandidate? updated;
+    final candidates = <KnowledgeCandidate>[];
+    for (final candidate in state.candidates) {
+      if (candidate.id == candidateId) {
+        updated = candidate.copyWith(
           type: type,
           name: name?.trim(),
           description: description?.trim(),
           modifiedTime: DateTime.now(),
         );
-        proposals.add(updated);
+        candidates.add(updated);
       } else {
-        proposals.add(proposal);
+        candidates.add(candidate);
       }
     }
     state = state.copyWith(
-      proposals: proposals,
-      selectedProposal: state.selectedProposal?.id == proposalId ? updated : null,
+      candidates: candidates,
+      selectedCandidate: state.selectedCandidate?.id == candidateId ? updated : null,
     );
+    if (updated != null) _recordDecision(updated.id, updated.name, ReviewDecisionKind.edited);
+    unawaited(_persistActiveSession());
   }
 
-  /// Accepts a proposal (Work Package 007 Engineering Review: Accept).
-  void acceptProposal(String proposalId) => _setProposalStatus(proposalId, ProposalStatus.accepted);
+  /// Accepts a candidate (Engineering Review: Accept).
+  void acceptKnowledgeCandidate(String candidateId) => _setCandidateStatus(candidateId, KnowledgeCandidateStatus.accepted);
 
-  /// Rejects a proposal (Work Package 007 Engineering Review: Reject).
-  void rejectProposal(String proposalId) => _setProposalStatus(proposalId, ProposalStatus.rejected);
+  /// Rejects a candidate (Engineering Review: Reject).
+  void rejectKnowledgeCandidate(String candidateId) => _setCandidateStatus(candidateId, KnowledgeCandidateStatus.rejected);
 
-  void _setProposalStatus(String proposalId, ProposalStatus status) {
-    EngineeringProposal? updated;
-    final proposals = <EngineeringProposal>[];
-    for (final proposal in state.proposals) {
-      if (proposal.id == proposalId) {
-        updated = proposal.copyWith(status: status, modifiedTime: DateTime.now());
-        proposals.add(updated);
+  void _setCandidateStatus(String candidateId, KnowledgeCandidateStatus status) {
+    KnowledgeCandidate? updated;
+    final candidates = <KnowledgeCandidate>[];
+    for (final candidate in state.candidates) {
+      if (candidate.id == candidateId) {
+        updated = candidate.copyWith(status: status, modifiedTime: DateTime.now());
+        candidates.add(updated);
       } else {
-        proposals.add(proposal);
+        candidates.add(candidate);
       }
     }
     state = state.copyWith(
-      proposals: proposals,
-      selectedProposal: state.selectedProposal?.id == proposalId ? updated : null,
+      candidates: candidates,
+      selectedCandidate: state.selectedCandidate?.id == candidateId ? updated : null,
     );
+    if (updated != null) {
+      _recordDecision(
+        updated.id,
+        updated.name,
+        status == KnowledgeCandidateStatus.accepted ? ReviewDecisionKind.accepted : ReviewDecisionKind.rejected,
+      );
+    }
+    unawaited(_persistActiveSession());
   }
 
-  /// Deletes a proposal (Work Package 007 Engineering Review: Delete).
-  void deleteProposal(String proposalId) {
+  /// Deletes a candidate (Engineering Review: Delete). Cascades: any
+  /// Relationship Candidate referencing this candidate as source or
+  /// target is deleted too — a relationship connecting to a candidate
+  /// that no longer exists would otherwise be a dangling reference
+  /// (see `KnowledgeSessionService.computeCommitPreview`'s validation,
+  /// which checks for exactly this in case this cascade is ever
+  /// bypassed, e.g. by a future bulk-delete path).
+  void deleteKnowledgeCandidate(String candidateId) {
+    final removed = state.candidates.where((candidate) => candidate.id == candidateId);
+    final removedName = removed.isEmpty ? candidateId : removed.first.name;
+    final remainingRelationships = state.relationshipCandidates
+        .where(
+          (relationship) =>
+              relationship.sourceCandidateId != candidateId && relationship.targetCandidateId != candidateId,
+        )
+        .toList();
+    final selectedRelationshipRemoved =
+        state.selectedRelationshipCandidate != null &&
+        !remainingRelationships.any((relationship) => relationship.id == state.selectedRelationshipCandidate!.id);
     state = state.copyWith(
-      proposals: state.proposals.where((proposal) => proposal.id != proposalId).toList(),
-      clearSelectedProposal: state.selectedProposal?.id == proposalId,
+      candidates: state.candidates.where((candidate) => candidate.id != candidateId).toList(),
+      relationshipCandidates: remainingRelationships,
+      clearSelectedCandidate: state.selectedCandidate?.id == candidateId,
+      clearSelectedRelationshipCandidate: selectedRelationshipRemoved,
     );
+    _recordDecision(candidateId, removedName, ReviewDecisionKind.deleted);
+    unawaited(_persistActiveSession());
   }
 
-  /// Selects an Engineering Review proposal, switching the Property
-  /// Inspector to Proposal mode. Clears any Object/Relationship
-  /// selection.
-  void selectProposal(EngineeringProposal proposal) {
+  /// Selects a Knowledge Candidate, switching the Property Inspector to
+  /// Knowledge Candidate mode. Clears every other selection.
+  void selectKnowledgeCandidate(KnowledgeCandidate candidate) {
     state = state.copyWith(
-      selectedProposal: proposal,
+      selectedCandidate: candidate,
       clearSelectedObject: true,
       clearSelectedRelationship: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
     );
   }
 
-  /// Clears the current proposal selection.
-  void clearProposalSelection() {
-    state = state.copyWith(clearSelectedProposal: true);
+  /// Clears the current Knowledge Candidate selection.
+  void clearKnowledgeCandidateSelection() {
+    state = state.copyWith(clearSelectedCandidate: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Relationship Candidates (Work Package 008 STUDIO-TASK-000017)
+  // ---------------------------------------------------------------------
+
+  /// Creates a new manual Relationship Candidate connecting two
+  /// Knowledge Candidates. Throws [KnowledgeValidationException] if no
+  /// session is active, for a self-referencing relationship, or if
+  /// either endpoint doesn't exist among the session's candidates.
+  /// Duplicate relationships are *not* rejected here — see
+  /// [isDuplicateRelationshipCandidate], which the New/Edit dialog uses
+  /// to show a non-blocking warning instead.
+  void addRelationshipCandidate({
+    required String sourceCandidateId,
+    required String targetCandidateId,
+    required RelationshipType type,
+    String description = '',
+  }) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding relationships.');
+    }
+    KnowledgeSessionService.validateRelationshipCandidate(
+      sourceCandidateId: sourceCandidateId,
+      targetCandidateId: targetCandidateId,
+      existingCandidates: state.candidates,
+    );
+    final relationship = RelationshipCandidate(
+      id: KnowledgeSessionService.generateId('relationship'),
+      sourceCandidateId: sourceCandidateId,
+      targetCandidateId: targetCandidateId,
+      type: type,
+      description: description.trim(),
+      createdTime: DateTime.now(),
+    );
+    state = state.copyWith(relationshipCandidates: [...state.relationshipCandidates, relationship]);
+    unawaited(_persistActiveSession());
+  }
+
+  /// Edits an existing relationship candidate. Same validation as
+  /// [addRelationshipCandidate].
+  void editRelationshipCandidate(
+    String relationshipId, {
+    required String sourceCandidateId,
+    required String targetCandidateId,
+    required RelationshipType type,
+    String description = '',
+  }) {
+    KnowledgeSessionService.validateRelationshipCandidate(
+      sourceCandidateId: sourceCandidateId,
+      targetCandidateId: targetCandidateId,
+      existingCandidates: state.candidates,
+    );
+    RelationshipCandidate? updated;
+    final relationships = <RelationshipCandidate>[];
+    for (final relationship in state.relationshipCandidates) {
+      if (relationship.id == relationshipId) {
+        updated = relationship.copyWith(
+          sourceCandidateId: sourceCandidateId,
+          targetCandidateId: targetCandidateId,
+          type: type,
+          description: description.trim(),
+          modifiedTime: DateTime.now(),
+        );
+        relationships.add(updated);
+      } else {
+        relationships.add(relationship);
+      }
+    }
+    state = state.copyWith(
+      relationshipCandidates: relationships,
+      selectedRelationshipCandidate: state.selectedRelationshipCandidate?.id == relationshipId ? updated : null,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Deletes a relationship candidate.
+  void deleteRelationshipCandidate(String relationshipId) {
+    state = state.copyWith(
+      relationshipCandidates: state.relationshipCandidates
+          .where((relationship) => relationship.id != relationshipId)
+          .toList(),
+      clearSelectedRelationshipCandidate: state.selectedRelationshipCandidate?.id == relationshipId,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects a Relationship Candidate, switching the Property Inspector
+  /// to Relationship Candidate mode. Clears every other selection.
+  void selectRelationshipCandidate(RelationshipCandidate relationship) {
+    state = state.copyWith(
+      selectedRelationshipCandidate: relationship,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedSourceMaterial: true,
+    );
+  }
+
+  /// Clears the current Relationship Candidate selection.
+  void clearRelationshipCandidateSelection() {
+    state = state.copyWith(clearSelectedRelationshipCandidate: true);
+  }
+
+  /// Whether a relationship candidate with the same source, target, and
+  /// type already exists (Work Package 008: "Duplicate relationships
+  /// warned"). Pure read — delegates to `KnowledgeSessionService`.
+  bool isDuplicateRelationshipCandidate({
+    required String? sourceCandidateId,
+    required String? targetCandidateId,
+    required RelationshipType type,
+    String? excludingId,
+  }) {
+    return KnowledgeSessionService.isDuplicateRelationshipCandidate(
+      sourceCandidateId: sourceCandidateId,
+      targetCandidateId: targetCandidateId,
+      type: type,
+      existingRelationships: state.relationshipCandidates,
+      excludingId: excludingId,
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Source Material (Work Package 008 STUDIO-TASK-000016)
+  // ---------------------------------------------------------------------
+
+  /// Copies the file at [pickedFilePath] into the active session's
+  /// managed storage and attaches it as Source Material. Throws
+  /// [KnowledgeValidationException] if no session is active or the file
+  /// couldn't be copied ("Invalid source files").
+  Future<void> attachSourceMaterial(String pickedFilePath) async {
+    final session = state.knowledgeSession;
+    if (session == null) {
+      throw const KnowledgeValidationException(
+        'Create or open a Knowledge Curation Session before attaching source material.',
+      );
+    }
+    final source = await SourceMaterialService.attach(
+      sessionId: session.id,
+      pickedFilePath: pickedFilePath,
+      addedBy: session.author,
+    );
+    state = state.copyWith(sourceMaterials: [...state.sourceMaterials, source]);
+    unawaited(_persistActiveSession());
+  }
+
+  /// Detaches a source and removes its managed file copy.
+  Future<void> removeSourceMaterial(String sourceId) async {
+    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    state = state.copyWith(
+      sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
+      clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
+    );
+    if (matches.isNotEmpty) {
+      await SourceMaterialService.removeFile(matches.first);
+    }
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects a Source Material, switching the Property Inspector to
+  /// Source Material mode. Clears every other selection.
+  void selectSourceMaterial(SourceMaterial source) {
+    state = state.copyWith(
+      selectedSourceMaterial: source,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+    );
+  }
+
+  /// Clears the current Source Material selection.
+  void clearSourceMaterialSelection() {
+    state = state.copyWith(clearSelectedSourceMaterial: true);
+  }
+
+  /// Dismisses the current storage-error banner without retrying
+  /// anything (Session Header's error banner close button).
+  void clearKnowledgeStorageError() {
+    state = state.copyWith(clearKnowledgeStorageError: true);
   }
 
   void _disposeBridge() {

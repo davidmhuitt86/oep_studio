@@ -8,10 +8,14 @@ import '../models/knowledge_session.dart';
 import '../models/knowledge_validation_exception.dart';
 import '../models/session_status.dart';
 import 'new_session_dialog.dart';
+import 'session_browser_dialog.dart';
 
 /// The Knowledge Studio session header: shows the active session's
 /// name/status/counts and the controls to advance or cancel it (Work
-/// Package 007 Session Workflow), or a prompt to create one.
+/// Package 007 Session Workflow), open the Session Browser, close the
+/// active session, or create one (Work Package 008). A dismissible
+/// banner surfaces [FoundationServiceState.knowledgeStorageError] when
+/// the most recent autosave or Session Browser action failed.
 class SessionHeader extends ConsumerWidget {
   const SessionHeader({super.key});
 
@@ -21,29 +25,51 @@ class SessionHeader extends ConsumerWidget {
     final session = foundation.knowledgeSession;
     final notifier = ref.read(foundationRuntimeServiceProvider.notifier);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: const BoxDecoration(
-        color: StudioColors.surface,
-        border: Border(bottom: BorderSide(color: StudioColors.border)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.auto_awesome_outlined, size: 18, color: StudioColors.selection),
-          const SizedBox(width: 10),
-          Expanded(
-            child: session == null
-                ? const Text(
-                    'No Knowledge Curation Session',
-                    style: TextStyle(color: StudioColors.textSecondary, fontSize: 13),
-                  )
-                : _SessionSummary(session: session, foundation: foundation),
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: const BoxDecoration(
+            color: StudioColors.surface,
+            border: Border(bottom: BorderSide(color: StudioColors.border)),
           ),
-          if (session != null) ..._actions(context, notifier, session),
-          const SizedBox(width: 8),
-          OutlinedButton(onPressed: () => showNewSessionDialog(context), child: const Text('New Session')),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome_outlined, size: 18, color: StudioColors.selection),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: session == null
+                        ? const Text(
+                            'No Knowledge Curation Session',
+                            style: TextStyle(color: StudioColors.textSecondary, fontSize: 13),
+                          )
+                        : _SessionSummary(session: session, foundation: foundation),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => showSessionBrowserDialog(context),
+                    child: const Text('Sessions'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(onPressed: () => showNewSessionDialog(context), child: const Text('New Session')),
+                ],
+              ),
+              if (session != null) ...[
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 4, children: _actions(context, notifier, session)),
+              ],
+            ],
+          ),
+        ),
+        if (foundation.knowledgeStorageError != null)
+          _StorageErrorBanner(
+            message: foundation.knowledgeStorageError!,
+            onDismiss: notifier.clearKnowledgeStorageError,
+          ),
+      ],
     );
   }
 
@@ -51,22 +77,21 @@ class SessionHeader extends ConsumerWidget {
     final next = _nextStatus(session.status);
     return [
       if (next != null)
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: OutlinedButton(
-            onPressed: () => _advance(context, notifier, next),
-            child: Text(_advanceLabel(next)),
-          ),
+        OutlinedButton(
+          onPressed: () => _advance(context, notifier, next),
+          child: Text(_advanceLabel(next)),
         ),
       if (session.status != SessionStatus.cancelled)
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: OutlinedButton(
-            onPressed: () => _advance(context, notifier, SessionStatus.cancelled),
-            style: OutlinedButton.styleFrom(foregroundColor: StudioColors.error),
-            child: const Text('Cancel Session'),
-          ),
+        OutlinedButton(
+          onPressed: () => _advance(context, notifier, SessionStatus.cancelled),
+          style: OutlinedButton.styleFrom(foregroundColor: StudioColors.error),
+          child: const Text('Cancel Session'),
         ),
+      IconButton(
+        tooltip: 'Close Session',
+        icon: const Icon(Icons.close, size: 18),
+        onPressed: notifier.closeKnowledgeSession,
+      ),
     ];
   }
 
@@ -123,15 +148,48 @@ class _SessionSummary extends StatelessWidget {
         const SizedBox(width: 16),
         Flexible(
           child: Text(
-            'Proposals: ${foundation.knowledgeProposalCount}  '
+            'Candidates: ${foundation.knowledgeCandidateCount}  '
             'Accepted: ${foundation.knowledgeAcceptedCount}  '
             'Rejected: ${foundation.knowledgeRejectedCount}  '
-            'Pending: ${foundation.knowledgePendingCount}',
+            'Pending: ${foundation.knowledgePendingCount}  '
+            'Relationships: ${foundation.knowledgeRelationshipCandidateCount}  '
+            'Sources: ${foundation.knowledgeSourceCount}',
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11.5),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StorageErrorBanner extends StatelessWidget {
+  const _StorageErrorBanner({required this.message, required this.onDismiss});
+
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      color: StudioColors.error.withValues(alpha: 0.14),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, size: 15, color: StudioColors.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message, style: const TextStyle(color: StudioColors.error, fontSize: 12)),
+          ),
+          IconButton(
+            tooltip: 'Dismiss',
+            icon: const Icon(Icons.close, size: 15),
+            color: StudioColors.error,
+            onPressed: onDismiss,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -139,7 +139,7 @@ void main() {
     expect(find.text('No Repository Open'), findsNothing);
   });
 
-  testWidgets('Knowledge Curation Session: create a session, add a proposal, accept it', (
+  testWidgets('Knowledge Curation Session: create a session, add a candidate, accept it', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1280, 800);
@@ -177,26 +177,26 @@ void main() {
     expect(find.text('Created'), findsWidgets);
     expect(find.text('No Knowledge Curation Session'), findsNothing);
 
-    // Add a manual proposal.
-    await tester.tap(find.widgetWithText(OutlinedButton, 'New Proposal'));
+    // Add a manual Knowledge Candidate.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'New Candidate'));
     await tester.pumpAndSettle();
 
     await tester.enterText(findFieldLabeled('Name'), 'Timing Chain Cover');
     await tester.pump();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Add Proposal'));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Add Candidate'));
     await tester.pumpAndSettle();
 
     expect(find.text('Timing Chain Cover'), findsOneWidget);
     expect(find.text('Pending'), findsOneWidget);
 
-    // Selecting the proposal updates the Property Inspector.
+    // Selecting the candidate updates the Property Inspector.
     await tester.tap(find.text('Timing Chain Cover'));
     await tester.pumpAndSettle();
-    expect(find.text('Proposal ID'), findsOneWidget);
+    expect(find.text('Knowledge Candidate ID'), findsOneWidget);
 
     // Accept it — the status badge (Engineering Review) and the
-    // Property Inspector's Proposal mode (still showing this same,
-    // now-updated proposal) both read "Accepted".
+    // Property Inspector's Knowledge Candidate mode (still showing this
+    // same, now-updated candidate) both read "Accepted".
     await tester.tap(find.widgetWithTooltip('Accept'));
     await tester.pumpAndSettle();
     expect(find.text('Accepted'), findsNWidgets(2));

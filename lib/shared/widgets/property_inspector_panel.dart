@@ -5,21 +5,27 @@ import '../../core/models/engineering_object_summary.dart';
 import '../../core/models/relationship_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
-import '../../knowledge/inspector/proposal_properties.dart';
+import '../../knowledge/inspector/knowledge_candidate_properties.dart';
+import '../../knowledge/inspector/relationship_candidate_properties.dart';
 import '../../knowledge/inspector/session_properties.dart';
+import '../../knowledge/inspector/source_material_properties.dart';
+import '../../knowledge/models/knowledge_candidate.dart';
 import 'property_field.dart';
 
 /// The Property Inspector (SDD-004, introduced as a placeholder in
 /// Work Package 003; live Object data in Work Package 004; Relationship
-/// mode in Work Package 005; Proposal/Session modes in Work Package
-/// 007). Automatically switches between modes based on the Connection
-/// Manager's Current Selection — Proposal, Object, and Relationship
+/// mode in Work Package 005; Knowledge Candidate/Session modes in Work
+/// Package 007; Relationship Candidate/Source Material modes in Work
+/// Package 008). Automatically switches between modes based on the
+/// Connection Manager's Current Selection — Knowledge Candidate,
+/// Relationship Candidate, Source Material, Object, and Relationship
 /// selection are mutually exclusive (see
 /// `FoundationRuntimeNotifier.selectObject`/`selectRelationship`/
-/// `selectProposal`); Session mode is shown only as a fallback, when a
-/// Knowledge Curation Session exists but nothing more specific is
-/// selected. Display only — no editing here, per SDD-011 and every
-/// work package since (proposal editing happens through the
+/// `selectKnowledgeCandidate`/`selectRelationshipCandidate`/
+/// `selectSourceMaterial`); Session mode is shown only as a fallback,
+/// when a Knowledge Curation Session exists but nothing more specific
+/// is selected. Display only — no editing here, per SDD-011 and every
+/// work package since (candidate editing happens through the
 /// Engineering Review panel instead).
 class PropertyInspectorPanel extends ConsumerWidget {
   const PropertyInspectorPanel({super.key});
@@ -27,7 +33,9 @@ class PropertyInspectorPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
-    final selectedProposal = foundation.selectedProposal;
+    final selectedCandidate = foundation.selectedCandidate;
+    final selectedRelationshipCandidate = foundation.selectedRelationshipCandidate;
+    final selectedSourceMaterial = foundation.selectedSourceMaterial;
     final selectedObject = foundation.selectedObject;
     final selectedRelationship = foundation.selectedRelationship;
     final knowledgeSession = foundation.knowledgeSession;
@@ -54,17 +62,31 @@ class PropertyInspectorPanel extends ConsumerWidget {
           ),
           const Divider(height: 1),
           Expanded(
-            child: switch ((selectedProposal, selectedObject, selectedRelationship, knowledgeSession)) {
-              (final proposal?, _, _, _) => ProposalProperties(proposal: proposal),
-              (_, final object?, _, _) => _ObjectProperties(object: object),
-              (_, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
-              (_, _, _, final session?) => SessionProperties(
+            child: switch ((
+              selectedCandidate,
+              selectedRelationshipCandidate,
+              selectedSourceMaterial,
+              selectedObject,
+              selectedRelationship,
+              knowledgeSession,
+            )) {
+              (final candidate?, _, _, _, _, _) => KnowledgeCandidateProperties(candidate: candidate),
+              (_, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
+                relationship: relationship,
+                sourceName: _candidateName(foundation.candidates, relationship.sourceCandidateId),
+                targetName: _candidateName(foundation.candidates, relationship.targetCandidateId),
+              ),
+              (_, _, final source?, _, _, _) => SourceMaterialProperties(source: source),
+              (_, _, _, final object?, _, _) => _ObjectProperties(object: object),
+              (_, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, _, _, final session?) => SessionProperties(
                 session: session,
                 sourceCount: foundation.knowledgeSourceCount,
-                proposalCount: foundation.knowledgeProposalCount,
+                candidateCount: foundation.knowledgeCandidateCount,
                 acceptedCount: foundation.knowledgeAcceptedCount,
                 rejectedCount: foundation.knowledgeRejectedCount,
                 pendingCount: foundation.knowledgePendingCount,
+                relationshipCandidateCount: foundation.knowledgeRelationshipCandidateCount,
               ),
               _ => const _NoSelection(),
             },
@@ -72,6 +94,13 @@ class PropertyInspectorPanel extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  static String _candidateName(List<KnowledgeCandidate> candidates, String candidateId) {
+    for (final candidate in candidates) {
+      if (candidate.id == candidateId) return candidate.name;
+    }
+    return candidateId;
   }
 }
 
