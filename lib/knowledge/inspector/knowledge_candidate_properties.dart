@@ -10,8 +10,12 @@ import '../models/knowledge_candidate.dart';
 import '../models/knowledge_candidate_type.dart';
 import '../workspaces/procedure_builder_dialog.dart';
 import '../workspaces/specification_editor_dialog.dart';
+import 'candidate_dependency_section.dart';
+import 'candidate_provenance_section.dart';
 import 'evidence_link_entries.dart';
 import 'link_evidence_dialog.dart';
+
+enum _CandidateTab { properties, provenance, dependencies }
 
 /// Property Inspector's Knowledge Candidate mode (Work Package 007/008
 /// Property Inspector: "Display: ... Knowledge Candidate"; Work Package
@@ -19,16 +23,23 @@ import 'link_evidence_dialog.dart';
 /// Notes/Author/Tags, a Validation Status section, and — conditional on
 /// [KnowledgeCandidate.type] — a Specification fields section or a
 /// Procedure step-count summary with an "Open Procedure Builder"
-/// action).
+/// action; Work Package 011: extended with a local Properties/
+/// Provenance/Dependencies tab switch, "Extend support for: ...
+/// Provenance, Dependency information").
 ///
-/// "Specification" and "Validation Status" are sections *within* this
-/// mode rather than separate top-level Property Inspector modes — see
-/// `docs/KNOWLEDGE_CANDIDATES.md` § Architectural Observations for why:
-/// Work Package 010's Connection Manager section only adds "Current
-/// Procedure"/"Current Procedure Step" selection state, not a "Current
-/// Specification" or "Current Validation" selection, so neither has a
-/// mutually-exclusive selection driving it the way every other
-/// top-level mode does.
+/// "Specification" and "Validation Status" (Work Package 010) are
+/// sections *within* the Properties tab rather than separate top-level
+/// Property Inspector modes — see `docs/KNOWLEDGE_CANDIDATES.md` §
+/// Architectural Observations for why. Provenance and Dependencies
+/// (Work Package 011) are **tabs**, not separate top-level modes
+/// either, and not sections mixed into Properties — see
+/// `docs/KNOWLEDGE_GRAPH.md` § Property Inspector for the reasoning:
+/// neither has its own Connection Manager selection field (this work
+/// package's own Connection Manager section calls them "Current
+/// Provenance View"/"Current Dependency View" — derived getters, not
+/// selection state), but unlike Specification/Validation, both can be
+/// substantial enough content that folding them permanently into the
+/// same scroll as core fields would bury the core fields.
 ///
 /// Read-only except for the Evidence section's own Unlink buttons and
 /// "Link Evidence Region" action, and the Procedure/Specification
@@ -36,8 +47,101 @@ import 'link_evidence_dialog.dart';
 /// editing the candidate's own core fields happens through the
 /// Engineering Review panel's Edit action, not here (SDD-011: the
 /// Property Inspector never edits in place).
-class KnowledgeCandidateProperties extends ConsumerWidget {
+class KnowledgeCandidateProperties extends ConsumerStatefulWidget {
   const KnowledgeCandidateProperties({required this.candidate, required this.links, super.key});
+
+  final KnowledgeCandidate candidate;
+  final List<LinkedRegionEntry> links;
+
+  @override
+  ConsumerState<KnowledgeCandidateProperties> createState() => _KnowledgeCandidatePropertiesState();
+}
+
+class _KnowledgeCandidatePropertiesState extends ConsumerState<KnowledgeCandidateProperties> {
+  _CandidateTab _tab = _CandidateTab.properties;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _CandidateTabButton(
+                  label: 'Properties',
+                  selected: _tab == _CandidateTab.properties,
+                  onTap: () => setState(() => _tab = _CandidateTab.properties),
+                ),
+                const SizedBox(width: 6),
+                _CandidateTabButton(
+                  label: 'Provenance',
+                  selected: _tab == _CandidateTab.provenance,
+                  onTap: () => setState(() => _tab = _CandidateTab.provenance),
+                ),
+                const SizedBox(width: 6),
+                _CandidateTabButton(
+                  label: 'Dependencies',
+                  selected: _tab == _CandidateTab.dependencies,
+                  onTap: () => setState(() => _tab = _CandidateTab.dependencies),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: switch (_tab) {
+            _CandidateTab.properties => _PropertiesTab(candidate: widget.candidate, links: widget.links),
+            _CandidateTab.provenance => CandidateProvenanceSection(candidateId: widget.candidate.id),
+            _CandidateTab.dependencies => CandidateDependencySection(candidateId: widget.candidate.id),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _CandidateTabButton extends StatelessWidget {
+  const _CandidateTabButton({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? StudioColors.selection.withValues(alpha: 0.14) : Colors.transparent,
+      borderRadius: BorderRadius.circular(4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? StudioColors.selection : StudioColors.textSecondary,
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The Properties tab — this mode's original (Work Package 007–010)
+/// content, unchanged except for being extracted so
+/// [KnowledgeCandidateProperties] could gain the Provenance/
+/// Dependencies tabs (Work Package 011) around it.
+class _PropertiesTab extends ConsumerWidget {
+  const _PropertiesTab({required this.candidate, required this.links});
 
   final KnowledgeCandidate candidate;
   final List<LinkedRegionEntry> links;

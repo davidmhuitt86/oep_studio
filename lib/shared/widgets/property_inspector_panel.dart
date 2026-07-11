@@ -124,6 +124,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
                 rejectedCount: foundation.knowledgeRejectedCount,
                 pendingCount: foundation.knowledgePendingCount,
                 relationshipCandidateCount: foundation.knowledgeRelationshipCandidateCount,
+                health: foundation.sessionHealth,
               ),
               _ => const _NoSelection(),
             },

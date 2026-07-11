@@ -7,6 +7,7 @@ import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_candidate_type.dart';
+import '../../knowledge/models/knowledge_graph_node.dart';
 import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/knowledge_session_record.dart';
 import '../../knowledge/models/knowledge_validation_exception.dart';
@@ -1443,6 +1444,44 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ],
     );
     unawaited(_persistActiveSession());
+  }
+
+  // ---------------------------------------------------------------------
+  // Knowledge Session Graph (Work Package 011 STUDIO-TASK-000026)
+  // ---------------------------------------------------------------------
+
+  /// Selects whichever underlying Workspace artifact [node] represents,
+  /// dispatching to the existing `selectKnowledgeCandidate`/
+  /// `selectEvidenceRegion`/`selectSourceMaterial` method for its kind
+  /// (Work Package 011's "Current Graph Selection" — deliberately not a
+  /// new, separate selection field; see `docs/KNOWLEDGE_GRAPH.md` §
+  /// Selection Synchronization). A no-op if the underlying artifact no
+  /// longer exists (defensive — the graph is rebuilt from current state
+  /// on every frame, so this should not normally occur).
+  void selectGraphNode(KnowledgeGraphNode node) {
+    switch (node.kind) {
+      case KnowledgeGraphNodeKind.candidate:
+        for (final candidate in state.candidates) {
+          if (candidate.id == node.id) {
+            selectKnowledgeCandidate(candidate);
+            return;
+          }
+        }
+      case KnowledgeGraphNodeKind.evidenceRegion:
+        for (final region in state.evidenceRegions) {
+          if (region.id == node.id) {
+            selectEvidenceRegion(region);
+            return;
+          }
+        }
+      case KnowledgeGraphNodeKind.sourceMaterial:
+        for (final source in state.sourceMaterials) {
+          if (source.id == node.id) {
+            selectSourceMaterial(source);
+            return;
+          }
+        }
+    }
   }
 
   void _disposeBridge() {

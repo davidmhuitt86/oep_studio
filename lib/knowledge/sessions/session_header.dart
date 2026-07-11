@@ -7,6 +7,7 @@ import '../../core/theme/studio_colors.dart';
 import '../models/knowledge_session.dart';
 import '../models/knowledge_validation_exception.dart';
 import '../models/session_status.dart';
+import '../workspaces/knowledge_graph_dialog.dart';
 import 'new_session_dialog.dart';
 import 'session_browser_dialog.dart';
 
@@ -76,6 +77,10 @@ class SessionHeader extends ConsumerWidget {
   List<Widget> _actions(BuildContext context, FoundationRuntimeNotifier notifier, KnowledgeSession session) {
     final next = _nextStatus(session.status);
     return [
+      OutlinedButton(
+        onPressed: () => showKnowledgeGraphDialog(context),
+        child: const Text('Knowledge Graph'),
+      ),
       if (next != null)
         OutlinedButton(
           onPressed: () => _advance(context, notifier, next),

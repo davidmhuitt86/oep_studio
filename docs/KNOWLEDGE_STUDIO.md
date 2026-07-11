@@ -11,15 +11,18 @@ Evidence Regions, STUDIO-TASK-000021 Evidence Linking); extended again
 in Work Package 010 (STUDIO-TASK-000022 Manual Knowledge Candidate
 Authoring, STUDIO-TASK-000023 Procedure Builder, STUDIO-TASK-000024
 Specification Editor, STUDIO-TASK-000025 Knowledge Candidate
-Validation). Validates the architecture defined in SDD-013 (Knowledge
-Studio), SDD-014 (Engineering Knowledge Acquisition Pipeline), SDD-015
-(Engineering Knowledge Model), SDD-016 (Knowledge Studio User
-Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
+Validation); extended again in Work Package 011 (STUDIO-TASK-000026
+Knowledge Session Graph, STUDIO-TASK-000027 Provenance Explorer,
+STUDIO-TASK-000028 Candidate Dependency Viewer, STUDIO-TASK-000029
+Session Health Dashboard). Validates the architecture defined in
+SDD-013 (Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
+Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
+Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
 (Engineering Knowledge Lifecycle and Provenance), SDD-019 (Engineering
 Object Philosophy), SDD-020 (Engineering Knowledge Review System), and
 — as of Work Package 010 — SDD-021 (Engineering Evidence Model),
 remaining **Studio-only: no AI, no OCR, no repository commit** through
-all four work packages.
+all five work packages.
 
 For the persisted-file format and the Relationship Candidate/Commit
 Preview model reference (including the
@@ -29,11 +32,14 @@ Link/Page Selection models, the PDF Source Viewer, and the Work
 Package 009 architectural findings, see `docs/EVIDENCE_MODEL.md`. For
 the Knowledge Candidate/Procedure/Procedure Step/Specification/
 Validation model reference and the Work Package 010 architectural
-findings, see `docs/KNOWLEDGE_CANDIDATES.md`. This document covers the
-workspace layout, session lifecycle, and state ownership.
+findings, see `docs/KNOWLEDGE_CANDIDATES.md`. For the Knowledge Session
+Graph/Provenance/Dependency/Session Health model reference and the
+Work Package 011 architectural findings, see `docs/KNOWLEDGE_GRAPH.md`.
+This document covers the workspace layout, session lifecycle, and
+state ownership.
 
 > **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
-> Package 007 and remains unpopulated as of Work Package 010. None of
+> Package 007 and remains unpopulated as of Work Package 011. None of
 > these work packages' decisions depend on its contents — SDD-013's own
 > Import Pipeline section has been sufficient — but this is flagged
 > again for whoever populates SDD-014 next, since a future work package
@@ -80,6 +86,14 @@ docked on the right of every page via `StudioShell`
 (`lib/shared/widgets/property_inspector_panel.dart`). Knowledge
 Studio extends that shared panel with its own modes (see § State
 Ownership) rather than embedding a second copy of it.
+
+The Knowledge Session Graph (Work Package 011) is likewise **not** an
+eighth panel — SDD-016's seven-panel layout stays frozen. It is a
+dialog (`lib/knowledge/workspaces/knowledge_graph_dialog.dart`), opened
+via a "Knowledge Graph" button in the Session Header, the same
+dedicated-dialog precedent Work Package 010 established for the
+Procedure Builder and Specification Editor. See
+`docs/KNOWLEDGE_GRAPH.md`.
 
 As of Work Package 010, four of the six panels carry real
 functionality:
@@ -324,7 +338,7 @@ the *same* Connection Manager every other Studio feature uses
 `FoundationServiceState`) — **not** a separate Knowledge-specific
 provider — even though this state is Studio-only and never touches
 Foundation. See `docs/CONNECTION_MANAGER.md` for the full state
-ownership table; as of Work Package 010:
+ownership table; as of Work Package 011:
 
 | Field | Meaning |
 |---|---|
@@ -344,6 +358,9 @@ ownership table; as of Work Package 010:
 | `specificationDetails` | Type/Value/Unit/Notes for the active session's Specification Knowledge Candidates (Work Package 010) |
 | `openProcedure` / `selectedProcedureStep` | The Procedure Knowledge Candidate currently open in the Procedure Builder (Work Package 010's "Current Procedure" — mirrors `openSourceDocument`'s separation), and the step currently selected |
 | `candidateValidation` | Derived getter — see `docs/KNOWLEDGE_CANDIDATES.md` § Validation Model |
+| `knowledgeSessionGraph` | Derived getter (Work Package 011) — see `docs/KNOWLEDGE_GRAPH.md` § Knowledge Session Graph Model |
+| `provenanceFor(candidateId)` / `dependencyFor(candidateId)` | Derived getters (Work Package 011's "Current Provenance View"/"Current Dependency View") — see `docs/KNOWLEDGE_GRAPH.md` |
+| `sessionHealth` | Derived getter (Work Package 011's "Current Session Health") — see `docs/KNOWLEDGE_GRAPH.md` § Session Health Model |
 | `reviewDecisions` | The append-only Create/Edit/Accept/Reject/Delete audit log |
 | `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
 | `commitPreview` | Derived getter — see § Commit Preview |
@@ -382,6 +399,14 @@ introduced following that same pattern from the start, specifically to
 avoid reintroducing the bug in a new form (see
 `docs/KNOWLEDGE_CANDIDATES.md` § Architectural Observations).
 
+The Knowledge Session Graph's "Current Graph Selection" (Work Package
+011) introduces **no new selection field at all** — every node it
+renders is a Knowledge Candidate, Evidence Region, or Source Material,
+each of which already has its own `selected*` field above.
+`FoundationRuntimeNotifier.selectGraphNode` just dispatches a tapped
+node to whichever of the three existing `select*` methods matches its
+kind. See `docs/KNOWLEDGE_GRAPH.md` § Selection Synchronization.
+
 `lib/knowledge/services/knowledge_session_service.dart` holds the
 Knowledge domain's validation, ID-generation, and commit-preview
 computation as pure, stateless functions — kept separate from the
@@ -397,9 +422,10 @@ logic the same way.
 Per this project's Knowledge Studio error-handling rules (invalid
 session names, duplicate candidate names, missing repository, invalid/
 missing source files, invalid relationship definitions, corrupted
-session files, invalid PDFs, deleted source material, and — as of Work
-Package 010 — invalid specifications, invalid units, invalid procedure
-ordering):
+session files, invalid PDFs, deleted source material, invalid
+specifications, invalid units, invalid procedure ordering, and — as of
+Work Package 011 — empty sessions, missing evidence, broken graph/
+provenance/dependency references, and invalid graph nodes):
 
 * **New Session / New Candidate / New Relationship Candidate / Insert
   or Edit Step / Specification Editor dialogs** validate inline — an

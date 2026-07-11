@@ -1,3 +1,5 @@
+import '../../knowledge/models/candidate_dependency_info.dart';
+import '../../knowledge/models/candidate_provenance.dart';
 import '../../knowledge/models/candidate_validation_result.dart';
 import '../../knowledge/models/commit_preview.dart';
 import '../../knowledge/models/evidence_link.dart';
@@ -5,13 +7,19 @@ import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_session.dart';
+import '../../knowledge/models/knowledge_session_graph.dart';
 import '../../knowledge/models/page_selection.dart';
 import '../../knowledge/models/procedure_step.dart';
 import '../../knowledge/models/relationship_candidate.dart';
 import '../../knowledge/models/review_decision.dart';
+import '../../knowledge/models/session_health_metrics.dart';
 import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
+import '../../knowledge/services/dependency_service.dart';
+import '../../knowledge/services/knowledge_graph_service.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
+import '../../knowledge/services/provenance_service.dart';
+import '../../knowledge/services/session_health_service.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
 import '../models/engineering_object_summary.dart';
@@ -366,6 +374,67 @@ class FoundationServiceState {
       evidenceRegions: evidenceRegions,
       procedureSteps: procedureSteps,
       specificationDetails: specificationDetails,
+    );
+  }
+
+  /// The Knowledge Session Graph (Work Package 011 STUDIO-TASK-000026),
+  /// `null` when no session is active. Derived — see
+  /// `docs/KNOWLEDGE_GRAPH.md` § Knowledge Session Graph Model.
+  KnowledgeSessionGraph? get knowledgeSessionGraph {
+    if (knowledgeSession == null) return null;
+    return KnowledgeGraphService.buildGraph(
+      candidates: candidates,
+      relationshipCandidates: relationshipCandidates,
+      evidenceRegions: evidenceRegions,
+      evidenceLinks: evidenceLinks,
+      sourceMaterials: sourceMaterials,
+      procedureSteps: procedureSteps,
+    );
+  }
+
+  /// [candidateId]'s provenance chain (Work Package 011's "Current
+  /// Provenance View") — see `docs/KNOWLEDGE_GRAPH.md` § Provenance
+  /// Model. Never stored.
+  CandidateProvenance provenanceFor(String candidateId) {
+    return ProvenanceService.computeProvenance(
+      candidateId: candidateId,
+      evidenceLinks: evidenceLinks,
+      evidenceRegions: evidenceRegions,
+      pageSelections: pageSelections,
+      sourceMaterials: sourceMaterials,
+    );
+  }
+
+  /// [candidateId]'s dependency information (Work Package 011's
+  /// "Current Dependency View") — see `docs/KNOWLEDGE_GRAPH.md` §
+  /// Dependency Model. `null` if [candidateId] doesn't exist. Never
+  /// stored.
+  CandidateDependencyInfo? dependencyFor(String candidateId) {
+    return DependencyService.computeDependencyInfo(
+      candidateId: candidateId,
+      candidates: candidates,
+      relationshipCandidates: relationshipCandidates,
+      procedureSteps: procedureSteps,
+      evidenceLinks: evidenceLinks,
+      evidenceRegions: evidenceRegions,
+      specificationDetails: specificationDetails,
+      validation: candidateValidation,
+    );
+  }
+
+  /// The active session's Session Health metrics (Work Package 011's
+  /// "Current Session Health"), `null` when no session is active. See
+  /// `docs/KNOWLEDGE_GRAPH.md` § Session Health Model. Never stored,
+  /// never modifies session data.
+  SessionHealthMetrics? get sessionHealth {
+    if (knowledgeSession == null) return null;
+    return SessionHealthService.computeSessionHealth(
+      candidates: candidates,
+      relationshipCandidates: relationshipCandidates,
+      evidenceRegions: evidenceRegions,
+      evidenceLinks: evidenceLinks,
+      procedureSteps: procedureSteps,
+      validation: candidateValidation,
     );
   }
 

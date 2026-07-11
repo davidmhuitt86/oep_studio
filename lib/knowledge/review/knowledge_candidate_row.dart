@@ -98,25 +98,50 @@ class KnowledgeCandidateRow extends StatelessWidget {
               if (validation != null) _ValidationBadge(validation: validation!),
               const SizedBox(width: 6),
               _StatusBadge(status: candidate.status),
+              // `padding`/`constraints` shrink each button from Material's
+              // default 48x48 tap target — five full-size IconButtons plus
+              // the badges above no longer fit this row at the app's
+              // documented minimum window width (1000 logical pixels,
+              // `windows/runner/win32_window.cpp`) once Work Package 010
+              // added a fifth (Duplicate) button; caught by Work Package
+              // 011's window-resizing verification.
               IconButton(
                 tooltip: 'Accept',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                 icon: const Icon(Icons.check_circle_outline, size: 16),
                 color: StudioColors.success,
                 onPressed: onAccept,
               ),
               IconButton(
                 tooltip: 'Reject',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                 icon: const Icon(Icons.cancel_outlined, size: 16),
                 color: StudioColors.error,
                 onPressed: onReject,
               ),
-              IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 16), onPressed: onEdit),
+              IconButton(
+                tooltip: 'Edit',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                onPressed: onEdit,
+              ),
               IconButton(
                 tooltip: 'Duplicate',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                 icon: const Icon(Icons.copy_outlined, size: 16),
                 onPressed: onDuplicate,
               ),
-              IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 16), onPressed: onDelete),
+              IconButton(
+                tooltip: 'Delete',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                onPressed: onDelete,
+              ),
             ],
           ),
         ),

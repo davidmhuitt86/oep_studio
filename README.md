@@ -9,11 +9,11 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–010 are implemented: Application Shell + Dashboard,
+Work Packages 001–011 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, and — across Work Packages
-007–010 — **Knowledge Studio** (SDD-013). Repository Explorer through
+007–011 — **Knowledge Studio** (SDD-013). Repository Explorer through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -45,7 +45,15 @@ steps; a Specification Editor supports Type/Value/Unit/Notes; and
 every candidate shows a computed Validation Status (duplicate names,
 missing evidence, empty procedures, incomplete specifications, stale
 relationships/references) alongside filter/sort/duplicate in the
-Candidate List (see `docs/KNOWLEDGE_CANDIDATES.md`).
+Candidate List (see `docs/KNOWLEDGE_CANDIDATES.md`). As of Work
+Package 011, the active session can be visualized as an interactive
+Knowledge Session Graph (pan/zoom/fit/center/select, independent of
+Foundation Graph), and every Knowledge Candidate's Property Inspector
+gains Provenance (Candidate → Evidence Region → Page Selection →
+Source Material) and Dependency (referenced by/references/
+relationships/procedure and specification usage/evidence count/
+validation) tabs, alongside a Session Health Dashboard of informational
+engineering-quality metrics (see `docs/KNOWLEDGE_GRAPH.md`).
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (repository/object/relationship
 creation, editing, and deletion remain entirely unexposed via
@@ -91,5 +99,6 @@ Studio Design Documents live under `docs/`:
 * `KNOWLEDGE_SESSION_FORMAT.md` — persisted session file format, Source Material/Relationship Candidate/Commit Preview models
 * `EVIDENCE_MODEL.md` — PDF Source Viewer, Evidence Region/Evidence Link/Page Selection models
 * `KNOWLEDGE_CANDIDATES.md` — Knowledge Candidate/Procedure/Procedure Step/Specification/Validation models
+* `KNOWLEDGE_GRAPH.md` — Knowledge Session Graph/Provenance/Dependency/Session Health models
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

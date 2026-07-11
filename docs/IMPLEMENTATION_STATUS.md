@@ -2345,3 +2345,284 @@ summarized here:
   occurred this work package — the pattern was applied proactively
   rather than discovered through another failure.
 
+---
+
+## Work Package 011 — Knowledge Studio (Knowledge Session Graph, Provenance, Dependency Viewer, Session Health)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000026 — Knowledge Session Graph — Complete
+* STUDIO-TASK-000027 — Provenance Explorer — Complete
+* STUDIO-TASK-000028 — Candidate Dependency Viewer — Complete
+* STUDIO-TASK-000029 — Session Health Dashboard — Complete
+
+### What Exists
+
+Continues the Work Package 007-010 lib/knowledge/ module. Adds
+visual knowledge exploration on top of the candidate/procedure/
+specification/evidence model prior work packages built - all still
+entirely Studio-only ("No Foundation modifications occur"). No OCR, no
+AI, no Repository Commit. See docs/KNOWLEDGE_GRAPH.md for full
+detail.
+
+* lib/knowledge/models/knowledge_graph_node.dart,
+  knowledge_graph_edge.dart, knowledge_session_graph.dart (all
+  new) - KnowledgeGraphNode (candidate/evidenceRegion/sourceMaterial,
+  reusing each artifact's own existing icon), KnowledgeGraphEdge
+  (relationshipCandidate/evidenceLink/sourceContainsRegion/
+  procedureReference), KnowledgeSessionGraph (nodes + edges,
+  "completely independent of Foundation Graph").
+* lib/knowledge/services/knowledge_graph_service.dart (new) -
+  buildGraph: pure graph construction from existing session state,
+  silently omitting any edge with a broken reference (Error Handling:
+  "Broken references, Invalid graph nodes").
+* lib/knowledge/workspaces/knowledge_graph_dialog.dart (new) - the
+  Knowledge Session Graph: Pan/Zoom (InteractiveViewer, Flutter
+  framework - no new dependency), Fit All, Center Selection, Select
+  Node; a deterministic three-column layout (Source Material/Evidence
+  Region/Knowledge Candidate); a dialog opened from the Session
+  Header's new "Knowledge Graph" button (SDD-016's seven-panel layout
+  stays frozen - the same dedicated-dialog precedent Work Package 010
+  set for the Procedure Builder/Specification Editor).
+* lib/knowledge/models/candidate_provenance.dart (new) -
+  ProvenanceEntry/CandidateProvenance.
+  lib/knowledge/services/provenance_service.dart (new) -
+  computeProvenance: Candidate to Evidence Region(s) to Page Selection
+  (optional) to Source Material, derived purely from existing
+  EvidenceLink/EvidenceRegion/PageSelection/SourceMaterial data
+  - "shall not duplicate persisted data."
+  lib/knowledge/inspector/candidate_provenance_section.dart (new) -
+  the Provenance Explorer, the Property Inspector's new Provenance tab;
+  every step is tappable, navigating down the chain.
+* lib/knowledge/models/candidate_dependency_info.dart (new) -
+  DependencyRelationshipEntry/CandidateDependencyInfo.
+  lib/knowledge/services/dependency_service.dart (new) -
+  computeDependencyInfo: Referenced By/References/Relationships/
+  Procedure Usage/Specification Usage/Evidence Count/Validation Status,
+  all derived from existing candidate/relationship-candidate/procedure-
+  step/evidence-link/specification-details/validation data.
+  lib/knowledge/inspector/candidate_dependency_section.dart (new) -
+  the Candidate Dependency Viewer, the Property Inspector's new
+  Dependencies tab; every entry is tappable.
+* lib/knowledge/models/session_health_metrics.dart (new) -
+  SessionHealthMetrics (eleven metrics).
+  lib/knowledge/services/session_health_service.dart (new) -
+  computeSessionHealth: pure, informational-only, never modifies
+  session data; documents explicit formulas for "Orphaned Candidates"
+  (zero Evidence Links/Relationships/Procedure Step references in
+  either direction), "Relationship Density"
+  (relationshipCandidateCount / candidateCount), and "Average
+  Evidence Coverage" (percentage of candidates with at least one linked
+  Evidence Region) - none of which this work package's text defined a
+  formula for.
+  lib/knowledge/inspector/session_properties.dart (extended) - a new
+  Session Health section, shown as part of the existing Session-mode
+  fallback.
+* lib/knowledge/inspector/knowledge_candidate_properties.dart
+  (extended) - the Knowledge Candidate Property Inspector mode is now a
+  local Properties / Provenance / Dependencies tab switch (mirroring
+  the Engineering Review panel's own tab pattern, Work Package 007),
+  rather than a new top-level mode for either.
+  lib/core/services/foundation_runtime_state.dart - extended with
+  four derived getters: knowledgeSessionGraph, provenanceFor,
+  dependencyFor, sessionHealth (this work package's "Current Graph
+  Selection"/"Current Provenance View"/"Current Dependency View"/
+  "Current Session Health," read the same way Work Package 010 read
+  "Current Validation State" - derived, not stored).
+  lib/core/services/foundation_runtime_service.dart - one new method,
+  selectGraphNode, dispatching a tapped graph node to whichever of
+  the three existing selectKnowledgeCandidate/selectEvidenceRegion/
+  selectSourceMaterial methods matches its kind - no new selection
+  field was introduced (see Architectural Observations).
+* lib/knowledge/review/knowledge_candidate_row.dart - fixed a
+  pre-existing overflow bug (five IconButtons at Material's default
+  48x48 tap target, plus the Validation/Status badges, no longer fit
+  this row at the app's documented minimum window width once Work
+  Package 010 added a fifth button) - caught by this work package's
+  own window-resizing verification, fixed with padding: EdgeInsets.zero /
+  tighter constraints on all five buttons.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: OEP Foundation, the
+Public C API, OCR functionality, AI functionality, and Repository
+Commit itself are all untouched.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      knowledge_graph_node.dart           New
+      knowledge_graph_edge.dart           New
+      knowledge_session_graph.dart        New
+      candidate_provenance.dart           New
+      candidate_dependency_info.dart      New
+      session_health_metrics.dart         New
+    services/
+      knowledge_graph_service.dart        New
+      provenance_service.dart             New
+      dependency_service.dart             New
+      session_health_service.dart         New
+    workspaces/
+      knowledge_graph_dialog.dart         New
+    inspector/
+      candidate_provenance_section.dart   New
+      candidate_dependency_section.dart   New
+      knowledge_candidate_properties.dart Extended (Properties/Provenance/Dependencies tabs)
+      session_properties.dart             Extended (Session Health section)
+    review/
+      knowledge_candidate_row.dart        Fixed (narrow-window overflow)
+    sessions/
+      session_header.dart                 Extended ("Knowledge Graph" button)
+docs/
+  KNOWLEDGE_GRAPH.md                      New
+```
+
+### Flutter Package Decisions
+
+**No new dependency.** Per this work package's explicit guidance
+("Prefer Flutter framework widgets where practical"), the Knowledge
+Session Graph's Pan/Zoom/Fit All/Center Selection/Select Node
+requirements are all satisfiable with Flutter framework widgets alone:
+InteractiveViewer (native pan/zoom, including pinch-to-zoom and
+scroll-wheel support, driven by a TransformationController this
+widget already needs for programmatic Fit All/Center Selection),
+CustomPaint (edges), and Positioned/Material/InkWell (nodes).
+
+A graph-visualization package (e.g. graphview, flutter_graph_view
+on pub.dev) was considered and rejected: those packages exist primarily
+to provide automatic layout algorithms (force-directed, Sugiyama,
+tree) for graphs whose structure isn't known in advance. This graph's
+structure is fully known and small (bounded by one session's candidate/
+region/source counts), and this work package's own interaction
+requirements name nothing an automatic layout algorithm uniquely
+provides - a deterministic three-column layout (mirroring the
+Provenance Explorer's own Source Material to Evidence Region to
+Knowledge Candidate reading direction) is simpler to reason about,
+easier to keep visually stable across rebuilds (an automatic layout can
+reshuffle node positions on every recompute unless pinned), and adds
+zero new transitive dependencies, license review, or version-pinning
+surface for a capability Flutter's own framework already covers.
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 112/112 passing: all prior tests, plus four new
+  service test files (knowledge_graph_service_test.dart,
+  provenance_service_test.dart, dependency_service_test.dart,
+  session_health_service_test.dart) covering node/edge construction,
+  broken-reference omission, the full provenance chain (including the
+  optional Page Selection step), reference/referencedBy/relationship/
+  procedure-usage/specification-usage derivation, and every Session
+  Health formula including the orphaned/duplicate/density/coverage
+  edge cases.
+* flutter build windows - succeeded.
+* **Manual verification.** As in Work Packages 007-010, computer-use
+  was confirmed unable to target
+  build\windows\x64\runner\Release\oep_studio.exe - request_access/
+  open_application only resolve Start-menu-registered application
+  names, and the compiled .exe is neither installed nor registered
+  there. Per this work package's own pre-approved instructions,
+  verification was performed with a temporary integration_test
+  (integration_test/knowledge_graph_wp011_test.dart, added, run
+  against the real compiled app via flutter test ... -d windows, then
+  deleted - pubspec.yaml's integration_test dev dependency reverted
+  and pubspec.lock regenerated).
+
+  The test covered: create a session, attach a PDF source, author a
+  Component and a Procedure candidate, create and link an Evidence
+  Region, author a Relationship Candidate and a Procedure Step
+  reference, then open the **Knowledge Session Graph**: all four node
+  labels (two candidates, the region, the source) render, Fit All
+  runs without error; then the **Provenance tab**: the region/source
+  chain renders, with "Not selected as a page" correctly shown for the
+  region's page (no Page Selection was toggled); then the
+  **Dependencies tab**: "Referenced By" correctly lists the Procedure
+  candidate (via its step's reference), "Relationships"/"Evidence
+  Count" render; then **Session Health**: reached via the Session-mode
+  fallback, confirmed orphanedCandidateCount == 0 (both candidates are
+  connected) and evidenceRegionCount == 1 directly against the
+  Connection Manager; then **window resizing**, from 1400x900 down to
+  the app's documented minimum (1000x700) and back, asserting no
+  exception was thrown at either size; then delete the session,
+  cleaning up its own test data. All assertions passed on the corrected
+  run; no test artifacts were left on disk afterward (confirmed no
+  session directories from earlier, failed attempts remained).
+
+  **One interaction was verified via a direct Connection Manager call
+  rather than a synthetic gesture**: tapping a node chip inside the
+  graph's InteractiveViewer-transformed canvas was not reliably
+  drivable through this widget-test harness (tester.tap computed a
+  screen coordinate that hit-tested onto the edge-drawing CustomPaint
+  layer rather than the node's own InkWell, despite the node being
+  painted on top) - the same category of limitation Work Package 009
+  documented for its drag-to-create-region gesture and Work Package 010
+  documented for drag-and-drop step reordering, both also inside a
+  transformed or custom-painted surface. Verified directly against
+  FoundationRuntimeNotifier.selectGraphNode instead - the exact
+  method a node's onTap calls - which exercises the real dispatch
+  logic and proves "Selecting a node updates the Property Inspector"
+  end to end through the Connection Manager; only the on-screen
+  tap-to-hit-test wiring for this one gesture went unverified by
+  automation. The Fit All/Center Selection toolbar buttons (ordinary
+  OutlinedButtons outside the transformed canvas) were tapped and
+  verified normally.
+
+  **This verification pass also caught and fixed a real,
+  pre-existing overflow bug** unrelated to this work package's own new
+  code: KnowledgeCandidateRow (Work Package 007, extended Work
+  Package 010) overflowed at the app's documented minimum window width
+  once five full-size IconButtons plus the Validation/Status badges
+  no longer fit the row - see What Exists above and Architectural
+  Observations below.
+
+### Architectural Observations
+
+See docs/KNOWLEDGE_GRAPH.md § Architectural Observations for the
+full account - summarized here:
+
+* **This work package's Connection Manager section names four items
+  ("Current Graph Selection, Current Provenance View, Current
+  Dependency View, Current Session Health"); none required new stored
+  state.** "Current Graph Selection" is fully satisfiable by reusing
+  the three existing selectedCandidate/selectedEvidenceRegion/
+  selectedSourceMaterial fields, since every graph node kind maps
+  one-to-one onto one of the three - introducing a fourth, independent
+  selection field would have duplicated selection state and risked the
+  exact synchronization bug Work Package 009's openSourceDocument
+  mistake already demonstrated. "Current Provenance View"/"Current
+  Dependency View"/"Current Session Health" are derived getters,
+  following the precedent Work Package 010 set for "Current Validation
+  State."
+* **"Procedures connect to their Procedure Steps" does not literally
+  describe an edge between two rendered nodes** - Procedure Steps are
+  not in this work package's own node-visualization list. Read as "a
+  Procedure connects, via its steps, to whatever those steps
+  reference," drawn as a direct Procedure-Candidate-to-referenced-thing
+  edge rather than introducing a fourth, unlisted node kind for steps
+  themselves (which already have a dedicated Property Inspector mode,
+  Work Package 010, that a small graph node couldn't usefully
+  replace).
+* **A Source Material to Evidence Region edge, not named in this work
+  package's own edge list, was added anyway** - without it, every
+  Source Material node would be completely disconnected from the rest
+  of the graph, despite being explicitly listed among the things to
+  visualize. Drawn from data that already exists
+  (EvidenceRegion.sourceId); treated as filling an omission, not as
+  introducing new architecture.
+* **Session Health's "Orphaned Candidates," "Relationship Density," and
+  "Average Evidence Coverage" have no formulas in this work package's
+  text** - all three were given an explicit, documented formula (see
+  What Exists above and docs/KNOWLEDGE_GRAPH.md § Session Health
+  Model) rather than left to guesswork at display time.
+
+None of the four observations above blocked implementation - each had
+a reasonable, literal reading available and consistent precedent from
+Work Package 010 (or earlier) to apply it by; none constituted the kind
+of genuine, irreconcilable conflict this work package's instructions
+say to stop for.
+
