@@ -75,17 +75,15 @@ Nothing is accepted automatically.
 
 Every proposal shall display:
 
-Original text
-
-Original image
-
-Source page
-
-OCR text
-
-Supporting tables
-
-Related specifications
+- Source Material
+- Source Page
+- Original Text
+- Original Image
+- OCR Text (when available)
+- Supporting Tables
+- Evidence Objects
+- Evidence Regions
+- Related Specifications
 
 The engineer must always be able to answer:
 

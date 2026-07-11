@@ -62,7 +62,32 @@ Examples:
 These are machine-readable artifacts.
 
 They are not Engineering Objects.
+---
+Layer 2.5
 
+Evidence Objects
+
+Evidence Objects represent engineering evidence collected during a Knowledge Curation Session.
+
+Evidence Objects are Workspace artifacts.
+
+They are not Engineering Objects.
+
+Examples:
+
+- Source Document
+- PDF
+- Image
+- Evidence Region
+- Page Selection
+- Annotation
+- Measurement Region
+
+Evidence Objects support Engineering Knowledge.
+
+They do not become repository truth.
+
+Engineering Objects may reference Evidence Objects as supporting provenance.
 ---
 
 Layer 3

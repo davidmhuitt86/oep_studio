@@ -95,6 +95,21 @@ Capabilities:
 
 The Source Viewer is always available.
 
+Evidence Objects
+
+The Source Viewer allows engineers to create Evidence Objects.
+
+Evidence Objects may include:
+
+- Evidence Regions
+- Page Selections
+- Image Annotations
+- Future OCR Regions
+
+Evidence Objects remain local to the active Knowledge Curation Session until Repository Commit.
+
+Evidence Objects shall always preserve a reference to the original source material.
+
 The engineer should never lose sight of the original evidence.
 
 ---
@@ -338,7 +353,6 @@ Supporting evidence
 The engineer shall always understand why AI proposed an Engineering Object.
 
 ---
-
 # Repository Preview
 
 Before Commit:

@@ -1,4 +1,22 @@
 # OEP Studio
+Knowledge Studio is governed by the frozen Knowledge Architecture v1.
+
+The implementation in this work package shall conform to:
+
+- SDD-013 Knowledge Studio
+- SDD-014 Engineering Knowledge Acquisition Pipeline
+- SDD-015 Engineering Knowledge Model
+- SDD-016 Knowledge Studio User Experience
+- SDD-017 Knowledge Curation Workflow
+- SDD-018 Engineering Knowledge Lifecycle and Provenance
+- SDD-019 Engineering Object Philosophy
+- SDD-020 Engineering Knowledge Review System
+
+These documents are considered architectural specifications.
+
+Implementation shall follow them.
+
+If implementation reveals a conflict or omission, document the issue and stop for architectural review rather than introducing an independent design.
 
 # WORK PACKAGE 007
 

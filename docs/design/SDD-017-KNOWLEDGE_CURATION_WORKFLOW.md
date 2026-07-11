@@ -84,6 +84,17 @@ Examples:
 
 The system creates a new Knowledge Curation Session.
 
+During Preparation, the engineer may create Evidence Objects that identify relevant portions of the source material.
+
+Examples include:
+
+- Page selections
+- Evidence regions
+- Image annotations
+- Table selections
+
+Evidence Objects remain part of the active Knowledge Curation Session and provide traceable support for future Knowledge Candidates.
+
 Nothing enters the repository.
 
 ---

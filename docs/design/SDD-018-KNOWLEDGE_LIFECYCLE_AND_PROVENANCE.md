@@ -170,6 +170,14 @@ Repository Version
 
 No provenance information shall be discarded.
 
+Evidence Objects participate in provenance.
+
+Every Engineering Object shall be traceable to one or more Evidence Objects.
+
+Evidence Objects preserve the engineer's interpretation of source material.
+
+Original source documents remain immutable.
+
 ---
 
 # Revision History
