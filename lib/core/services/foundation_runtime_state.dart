@@ -1,3 +1,4 @@
+import '../../knowledge/models/candidate_validation_result.dart';
 import '../../knowledge/models/commit_preview.dart';
 import '../../knowledge/models/evidence_link.dart';
 import '../../knowledge/models/evidence_region.dart';
@@ -5,9 +6,11 @@ import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/page_selection.dart';
+import '../../knowledge/models/procedure_step.dart';
 import '../../knowledge/models/relationship_candidate.dart';
 import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/source_material.dart';
+import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
@@ -67,6 +70,10 @@ class FoundationServiceState {
     this.selectedEvidenceLink,
     this.pageSelections = const [],
     this.currentPage,
+    this.procedureSteps = const [],
+    this.specificationDetails = const [],
+    this.openProcedure,
+    this.selectedProcedureStep,
   });
 
   final FoundationConnectionPhase phase;
@@ -230,6 +237,32 @@ class FoundationServiceState {
   /// session content. Reset to `null` whenever the open source changes.
   final int? currentPage;
 
+  /// Procedure Steps belonging to [knowledgeSession]'s Procedure
+  /// Knowledge Candidates (Work Package 010 STUDIO-TASK-000023).
+  final List<ProcedureStep> procedureSteps;
+
+  /// Specification-type fields for [knowledgeSession]'s Specification
+  /// Knowledge Candidates (Work Package 010 STUDIO-TASK-000024).
+  final List<SpecificationDetails> specificationDetails;
+
+  /// The Procedure Knowledge Candidate currently open in the Procedure
+  /// Builder (Work Package 010's "Current Procedure"). Mirrors
+  /// [openSourceDocument]'s separation from [selectedCandidate] — the
+  /// Procedure Builder stays open while the engineer selects a step
+  /// inside it (which switches the Property Inspector to Procedure Step
+  /// mode via [selectedProcedureStep], clearing [selectedCandidate]) so
+  /// a single shared field would close the builder the moment a step is
+  /// selected, the same bug Work Package 009 already hit and fixed for
+  /// the Source Viewer. Set only by opening the Procedure Builder;
+  /// cleared only by closing it or when the session changes.
+  final KnowledgeCandidate? openProcedure;
+
+  /// The Procedure Step currently selected, if any (Work Package 010's
+  /// "Current Procedure Step") — switches the Property Inspector to
+  /// Procedure Step mode. Mutually exclusive with every other selection
+  /// field.
+  final ProcedureStep? selectedProcedureStep;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -300,6 +333,42 @@ class FoundationServiceState {
   int linkedCandidateCountFor(String regionId) =>
       evidenceLinks.where((link) => link.regionId == regionId).length;
 
+  /// How many Evidence Regions are linked to [candidateId] (Work
+  /// Package 010 Candidate List: "Linked Evidence Count").
+  int linkedEvidenceCountFor(String candidateId) =>
+      evidenceLinks.where((link) => link.candidateId == candidateId).length;
+
+  /// Procedure Steps belonging to [candidateId], in step order (Work
+  /// Package 010 STUDIO-TASK-000023).
+  List<ProcedureStep> procedureStepsFor(String candidateId) =>
+      procedureSteps.where((step) => step.candidateId == candidateId).toList();
+
+  /// The Specification-type fields for [candidateId], if any (Work
+  /// Package 010 STUDIO-TASK-000024) — `null` if [candidateId] isn't a
+  /// Specification candidate or has no details recorded yet.
+  SpecificationDetails? specificationDetailsFor(String candidateId) {
+    for (final details in specificationDetails) {
+      if (details.candidateId == candidateId) return details;
+    }
+    return null;
+  }
+
+  /// The Current Validation State (Work Package 010 Connection Manager:
+  /// "Current Validation State") — every Knowledge Candidate's computed
+  /// [CandidateValidationResult], keyed by candidate ID. Derived, like
+  /// [commitPreview] — never stored, never persisted ("Validation shall
+  /// never modify candidate data").
+  Map<String, CandidateValidationResult> get candidateValidation {
+    return KnowledgeSessionService.computeCandidateValidation(
+      candidates: candidates,
+      relationshipCandidates: relationshipCandidates,
+      evidenceLinks: evidenceLinks,
+      evidenceRegions: evidenceRegions,
+      procedureSteps: procedureSteps,
+      specificationDetails: specificationDetails,
+    );
+  }
+
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
     FoundationRuntimeState? runtimeState,
@@ -350,6 +419,12 @@ class FoundationServiceState {
     List<PageSelection>? pageSelections,
     int? currentPage,
     bool clearCurrentPage = false,
+    List<ProcedureStep>? procedureSteps,
+    List<SpecificationDetails>? specificationDetails,
+    KnowledgeCandidate? openProcedure,
+    bool clearOpenProcedure = false,
+    ProcedureStep? selectedProcedureStep,
+    bool clearSelectedProcedureStep = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -395,6 +470,10 @@ class FoundationServiceState {
       selectedEvidenceLink: clearSelectedEvidenceLink ? null : (selectedEvidenceLink ?? this.selectedEvidenceLink),
       pageSelections: pageSelections ?? this.pageSelections,
       currentPage: clearCurrentPage ? null : (currentPage ?? this.currentPage),
+      procedureSteps: procedureSteps ?? this.procedureSteps,
+      specificationDetails: specificationDetails ?? this.specificationDetails,
+      openProcedure: clearOpenProcedure ? null : (openProcedure ?? this.openProcedure),
+      selectedProcedureStep: clearSelectedProcedureStep ? null : (selectedProcedureStep ?? this.selectedProcedureStep),
     );
   }
 }

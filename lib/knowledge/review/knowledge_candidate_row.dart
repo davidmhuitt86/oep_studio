@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/studio_colors.dart';
+import '../models/candidate_validation_result.dart';
 import '../models/knowledge_candidate.dart';
 import '../models/knowledge_candidate_status.dart';
 
 /// One row in the Engineering Review panel's Knowledge Candidate list
 /// (Work Package 007/008: "Each proposal supports: Accept, Reject,
-/// Edit, Delete").
+/// Edit, Delete"; Work Package 010: "Display: ... Validation Status,
+/// Linked Evidence Count. Support: ... Duplicate").
 class KnowledgeCandidateRow extends StatelessWidget {
   const KnowledgeCandidateRow({
     required this.candidate,
@@ -16,7 +18,10 @@ class KnowledgeCandidateRow extends StatelessWidget {
     required this.onReject,
     required this.onEdit,
     required this.onDelete,
+    required this.onDuplicate,
     this.linkedToSelectedEvidence = false,
+    this.validation,
+    this.linkedEvidenceCount = 0,
     super.key,
   });
 
@@ -28,10 +33,22 @@ class KnowledgeCandidateRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  /// Work Package 010 Candidate List: "Duplicate".
+  final VoidCallback onDuplicate;
+
   /// Whether this candidate is linked to the currently-selected Evidence
   /// Region (Work Package 009 § Source Viewer Interaction: "Selecting
   /// Evidence Region → Highlights linked Knowledge Candidates").
   final bool linkedToSelectedEvidence;
+
+  /// This candidate's computed validation result (Work Package 010
+  /// STUDIO-TASK-000025), `null` only if no session's `candidateValidation`
+  /// map has an entry for it yet (should not normally occur).
+  final CandidateValidationResult? validation;
+
+  /// How many Evidence Regions are linked to this candidate (Work
+  /// Package 010 Candidate List: "Linked Evidence Count").
+  final int linkedEvidenceCount;
 
   @override
   Widget build(BuildContext context) {
@@ -57,13 +74,29 @@ class KnowledgeCandidateRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
                     ),
-                    Text(
-                      candidate.type.label,
-                      style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            candidate.type.label,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.link, size: 11, color: StudioColors.textSecondary),
+                        Text(
+                          ' $linkedEvidenceCount',
+                          style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
+              if (validation != null) _ValidationBadge(validation: validation!),
+              const SizedBox(width: 6),
               _StatusBadge(status: candidate.status),
               IconButton(
                 tooltip: 'Accept',
@@ -78,11 +111,35 @@ class KnowledgeCandidateRow extends StatelessWidget {
                 onPressed: onReject,
               ),
               IconButton(tooltip: 'Edit', icon: const Icon(Icons.edit_outlined, size: 16), onPressed: onEdit),
+              IconButton(
+                tooltip: 'Duplicate',
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                onPressed: onDuplicate,
+              ),
               IconButton(tooltip: 'Delete', icon: const Icon(Icons.delete_outline, size: 16), onPressed: onDelete),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ValidationBadge extends StatelessWidget {
+  const _ValidationBadge({required this.validation});
+
+  final CandidateValidationResult validation;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (validation.severity) {
+      ValidationSeverity.error => (Icons.error_outline, StudioColors.error),
+      ValidationSeverity.warning => (Icons.warning_amber_outlined, StudioColors.warning),
+      ValidationSeverity.ok => (Icons.check_circle_outline, StudioColors.success),
+    };
+    return Tooltip(
+      message: validation.issues.isEmpty ? 'No validation issues.' : validation.issues.join('\n'),
+      child: Icon(icon, size: 15, color: color),
     );
   }
 }

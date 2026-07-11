@@ -1,22 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:oep_studio/core/models/relationship_type.dart';
+import 'package:oep_studio/knowledge/models/candidate_validation_result.dart';
 import 'package:oep_studio/knowledge/models/evidence_link.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_status.dart';
 import 'package:oep_studio/knowledge/models/knowledge_candidate_type.dart';
 import 'package:oep_studio/knowledge/models/knowledge_validation_exception.dart';
+import 'package:oep_studio/knowledge/models/procedure_step.dart';
 import 'package:oep_studio/knowledge/models/relationship_candidate.dart';
 import 'package:oep_studio/knowledge/models/session_status.dart';
+import 'package:oep_studio/knowledge/models/specification_details.dart';
+import 'package:oep_studio/knowledge/models/specification_type.dart';
 import 'package:oep_studio/knowledge/services/knowledge_session_service.dart';
 
 KnowledgeCandidate _candidate(
   String name, {
   String? id,
   KnowledgeCandidateStatus status = KnowledgeCandidateStatus.pending,
+  KnowledgeCandidateType type = KnowledgeCandidateType.component,
 }) {
   return KnowledgeCandidate(
     id: id ?? name,
-    type: KnowledgeCandidateType.component,
+    type: type,
     name: name,
     status: status,
     createdTime: DateTime(2026, 1, 1),
@@ -303,6 +308,206 @@ void main() {
         KnowledgeSessionService.isEvidenceLinked(candidateId: 'c2', regionId: 'r1', existingLinks: [link]),
         isFalse,
       );
+    });
+  });
+
+  group('validateProcedureStepTitle', () {
+    test('rejects an empty title', () {
+      expect(
+        () => KnowledgeSessionService.validateProcedureStepTitle('  '),
+        throwsA(isA<KnowledgeValidationException>()),
+      );
+    });
+
+    test('accepts a non-empty title', () {
+      expect(() => KnowledgeSessionService.validateProcedureStepTitle('Remove cover bolts'), returnsNormally);
+    });
+  });
+
+  group('validateSpecificationDetails', () {
+    test('rejects an empty value', () {
+      expect(
+        () => KnowledgeSessionService.validateSpecificationDetails(value: '  ', unit: 'Nm'),
+        throwsA(isA<KnowledgeValidationException>()),
+      );
+    });
+
+    test('rejects an empty unit', () {
+      expect(
+        () => KnowledgeSessionService.validateSpecificationDetails(value: '25', unit: '  '),
+        throwsA(isA<KnowledgeValidationException>()),
+      );
+    });
+
+    test('accepts a non-empty value and unit', () {
+      expect(() => KnowledgeSessionService.validateSpecificationDetails(value: '25', unit: 'Nm'), returnsNormally);
+    });
+  });
+
+  group('computeCandidateValidation', () {
+    test('a candidate with no findings is ok with no issues', () {
+      final candidates = [_candidate('Timing Cover', id: 'c1')];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.ok);
+      expect(result['c1']!.issues, isEmpty);
+    });
+
+    test('flags duplicate candidate names as an error on both candidates', () {
+      final candidates = [_candidate('Timing Cover', id: 'c1'), _candidate('Timing Cover', id: 'c2')];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: const [],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.error);
+      expect(result['c2']!.severity, ValidationSeverity.error);
+    });
+
+    test('flags a candidate with no linked evidence as a warning', () {
+      final candidates = [_candidate('Timing Cover', id: 'c1')];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: const [],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.warning);
+      expect(result['c1']!.issues, contains('No evidence is linked to this candidate.'));
+    });
+
+    test('flags an empty procedure as a warning', () {
+      final candidates = [_candidate('Install Cover', id: 'c1', type: KnowledgeCandidateType.procedure)];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.warning);
+      expect(result['c1']!.issues, contains('This procedure has no steps.'));
+    });
+
+    test('flags a procedure step referencing a deleted candidate as a warning', () {
+      final candidates = [_candidate('Install Cover', id: 'c1', type: KnowledgeCandidateType.procedure)];
+      final steps = [
+        ProcedureStep(
+          id: 's1',
+          candidateId: 'c1',
+          title: 'Torque bolts',
+          referencedCandidateIds: const ['missing'],
+          createdTime: DateTime(2026, 1, 1),
+        ),
+      ];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: steps,
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.warning);
+      expect(
+        result['c1']!.issues,
+        contains('One or more procedure steps reference evidence or a candidate that no longer exists.'),
+      );
+    });
+
+    test('flags a specification with no details as an error', () {
+      final candidates = [_candidate('Head Bolt Torque', id: 'c1', type: KnowledgeCandidateType.specification)];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.error);
+      expect(result['c1']!.issues, contains('This specification is missing Type, Value, and Unit.'));
+    });
+
+    test('flags a specification with an empty value or unit as an error', () {
+      final candidates = [_candidate('Head Bolt Torque', id: 'c1', type: KnowledgeCandidateType.specification)];
+      final details = [
+        SpecificationDetails(
+          candidateId: 'c1',
+          specType: SpecificationType.torque,
+          value: '',
+          unit: '',
+          createdTime: DateTime(2026, 1, 1),
+        ),
+      ];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: details,
+      );
+      expect(result['c1']!.severity, ValidationSeverity.error);
+      expect(result['c1']!.issues, contains('Specification value is missing.'));
+      expect(result['c1']!.issues, contains('Specification unit is missing.'));
+    });
+
+    test('a complete specification has no specification-related issues', () {
+      final candidates = [_candidate('Head Bolt Torque', id: 'c1', type: KnowledgeCandidateType.specification)];
+      final details = [
+        SpecificationDetails(
+          candidateId: 'c1',
+          specType: SpecificationType.torque,
+          value: '25',
+          unit: 'Nm',
+          createdTime: DateTime(2026, 1, 1),
+        ),
+      ];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: const [],
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: details,
+      );
+      expect(result['c1']!.severity, ValidationSeverity.ok);
+    });
+
+    test('flags a relationship candidate whose endpoint no longer exists as an error', () {
+      final candidates = [_candidate('Timing Cover', id: 'c1')];
+      final relationships = [
+        RelationshipCandidate(
+          id: 'r1',
+          sourceCandidateId: 'c1',
+          targetCandidateId: 'missing',
+          type: RelationshipType.references,
+          createdTime: DateTime(2026, 1, 1),
+        ),
+      ];
+      final result = KnowledgeSessionService.computeCandidateValidation(
+        candidates: candidates,
+        relationshipCandidates: relationships,
+        evidenceLinks: [EvidenceLink(id: 'link1', candidateId: 'c1', regionId: 'r1', createdTime: DateTime(2026, 1, 1))],
+        evidenceRegions: const [],
+        procedureSteps: const [],
+        specificationDetails: const [],
+      );
+      expect(result['c1']!.severity, ValidationSeverity.error);
+      expect(result['c1']!.issues, contains('A relationship references a candidate that no longer exists.'));
     });
   });
 }

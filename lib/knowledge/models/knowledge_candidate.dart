@@ -25,6 +25,9 @@ class KnowledgeCandidate {
     required this.type,
     required this.name,
     this.description = '',
+    this.notes = '',
+    this.author = '',
+    this.tags = const [],
     this.status = KnowledgeCandidateStatus.pending,
     required this.createdTime,
     this.modifiedTime,
@@ -34,6 +37,21 @@ class KnowledgeCandidate {
   final KnowledgeCandidateType type;
   final String name;
   final String description;
+
+  /// Free-form engineering notes, separate from [description] (Work
+  /// Package 010 STUDIO-TASK-000022: "Each Knowledge Candidate shall
+  /// support: ... Notes").
+  final String notes;
+
+  /// Who authored this candidate — distinct from [KnowledgeSession.author]
+  /// (the session owner), since a session may accumulate candidates
+  /// contributed by more than one engineer.
+  final String author;
+
+  /// Free-form labels (Work Package 010: "Each Knowledge Candidate shall
+  /// support: ... Tags").
+  final List<String> tags;
+
   final KnowledgeCandidateStatus status;
   final DateTime createdTime;
   final DateTime? modifiedTime;
@@ -42,6 +60,9 @@ class KnowledgeCandidate {
     KnowledgeCandidateType? type,
     String? name,
     String? description,
+    String? notes,
+    String? author,
+    List<String>? tags,
     KnowledgeCandidateStatus? status,
     DateTime? modifiedTime,
   }) {
@@ -50,6 +71,9 @@ class KnowledgeCandidate {
       type: type ?? this.type,
       name: name ?? this.name,
       description: description ?? this.description,
+      notes: notes ?? this.notes,
+      author: author ?? this.author,
+      tags: tags ?? this.tags,
       status: status ?? this.status,
       createdTime: createdTime,
       modifiedTime: modifiedTime ?? this.modifiedTime,
@@ -63,6 +87,9 @@ class KnowledgeCandidate {
     'type': type.name,
     'name': name,
     'description': description,
+    'notes': notes,
+    'author': author,
+    'tags': tags,
     'status': status.name,
     'createdTime': createdTime.toIso8601String(),
     'modifiedTime': modifiedTime?.toIso8601String(),
@@ -72,13 +99,19 @@ class KnowledgeCandidate {
   /// (caught and translated by `KnowledgeSessionStorage`) if a required
   /// field is missing or an enum value is unrecognized — surfaced to
   /// the engineer as "Corrupted session files" (Work Package 008 Error
-  /// Handling), never a raw stack trace.
+  /// Handling), never a raw stack trace. [notes]/[author]/[tags] default
+  /// when absent so a pre-Work-Package-010 session file still loads
+  /// (Work Package 009 established this same backward-compatibility
+  /// pattern for its own new fields).
   factory KnowledgeCandidate.fromJson(Map<String, dynamic> json) {
     return KnowledgeCandidate(
       id: json['id'] as String,
       type: KnowledgeCandidateType.values.byName(json['type'] as String),
       name: json['name'] as String,
       description: json['description'] as String? ?? '',
+      notes: json['notes'] as String? ?? '',
+      author: json['author'] as String? ?? '',
+      tags: (json['tags'] as List<dynamic>?)?.map((tag) => tag as String).toList() ?? const [],
       status: KnowledgeCandidateStatus.values.byName(json['status'] as String),
       createdTime: DateTime.parse(json['createdTime'] as String),
       modifiedTime: json['modifiedTime'] == null ? null : DateTime.parse(json['modifiedTime'] as String),

@@ -3,16 +3,21 @@ import 'dart:math';
 
 import '../../core/foundation/oep_api_types.dart';
 import '../../core/models/relationship_type.dart';
+import '../models/candidate_validation_result.dart';
 import '../models/commit_preview.dart';
 import '../models/evidence_link.dart';
+import '../models/evidence_region.dart';
 import '../models/knowledge_candidate.dart';
 import '../models/knowledge_candidate_status.dart';
+import '../models/knowledge_candidate_type.dart';
 import '../models/knowledge_session.dart';
 import '../models/knowledge_session_record.dart';
 import '../models/knowledge_validation_exception.dart';
+import '../models/procedure_step.dart';
 import '../models/relationship_candidate.dart';
 import '../models/session_status.dart';
 import '../models/source_material.dart';
+import '../models/specification_details.dart';
 import 'knowledge_session_storage.dart';
 
 /// Pure validation, ID-generation, and commit-preview-computation rules
@@ -209,6 +214,147 @@ abstract final class KnowledgeSessionService {
     return existingLinks.any((link) => link.candidateId == candidateId && link.regionId == regionId);
   }
 
+  /// Validates a Procedure Step's title (Work Package 010
+  /// STUDIO-TASK-000023). Throws [KnowledgeValidationException] for an
+  /// empty title.
+  static void validateProcedureStepTitle(String title) {
+    if (title.trim().isEmpty) {
+      throw const KnowledgeValidationException('Step title cannot be empty.');
+    }
+  }
+
+  /// Validates a Specification's value and unit (Work Package 010
+  /// STUDIO-TASK-000024 Error Handling: "Invalid specifications, Invalid
+  /// units"). Throws [KnowledgeValidationException] with a professional
+  /// message for either an empty value or an empty unit.
+  static void validateSpecificationDetails({required String value, required String unit}) {
+    if (value.trim().isEmpty) {
+      throw const KnowledgeValidationException('Specification value cannot be empty.');
+    }
+    if (unit.trim().isEmpty) {
+      throw const KnowledgeValidationException('Specification unit cannot be empty.');
+    }
+  }
+
+  /// Computes a [CandidateValidationResult] for every candidate in the
+  /// session (Work Package 010 STUDIO-TASK-000025: "Display validation
+  /// status for every Knowledge Candidate."). Pure — takes a snapshot,
+  /// returns a value, never mutates [candidates] or anything else ("
+  /// Validation shall never modify candidate data"), the same
+  /// derived-not-stored discipline `computeCommitPreview` already
+  /// established.
+  ///
+  /// Checks, per candidate:
+  /// - **Duplicate candidate names**: another candidate in the session
+  ///   shares its name (case-insensitively, trimmed) — an `error`. This
+  ///   is deliberately *not* rejected at creation/duplication time the
+  ///   way [validateCandidateName] rejects it for New/Edit — the
+  ///   Candidate List's "Duplicate" action (Work Package 010) is meant
+  ///   to allow same-named copies, surfaced here instead as a
+  ///   non-blocking finding.
+  /// - **Missing evidence**: no [EvidenceLink] references this
+  ///   candidate — a `warning` ("Candidates without evidence shall
+  ///   display a validation warning").
+  /// - **Missing required fields** / **empty procedures**: a Procedure
+  ///   candidate with zero [ProcedureStep]s (`warning`); a Specification
+  ///   candidate with no [SpecificationDetails], or an empty value/unit
+  ///   (`error` — a Specification's Type/Value/Unit are its defining
+  ///   content).
+  /// - **Invalid relationships**: a [RelationshipCandidate] connecting
+  ///   this candidate to a candidate that no longer exists (`error`) —
+  ///   mirrors the dangling-reference check `computeCommitPreview`
+  ///   already performs at the session level, repeated per-candidate
+  ///   here since this method's whole purpose is a per-candidate view.
+  /// - **Orphaned procedure steps**: for a Procedure candidate, any of
+  ///   its steps referencing a Knowledge Candidate or Evidence Region
+  ///   that no longer exists (`warning`) — read as "a step whose
+  ///   reference is now orphaned", not "a step disconnected from its
+  ///   parent candidate" (the latter cannot occur through this
+  ///   notifier's own API, since deleting a candidate cascades to its
+  ///   steps the same way it already cascades to relationship
+  ///   candidates and evidence links).
+  static Map<String, CandidateValidationResult> computeCandidateValidation({
+    required List<KnowledgeCandidate> candidates,
+    required List<RelationshipCandidate> relationshipCandidates,
+    required List<EvidenceLink> evidenceLinks,
+    required List<EvidenceRegion> evidenceRegions,
+    required List<ProcedureStep> procedureSteps,
+    required List<SpecificationDetails> specificationDetails,
+  }) {
+    final candidateIds = candidates.map((candidate) => candidate.id).toSet();
+    final regionIds = evidenceRegions.map((region) => region.id).toSet();
+    final nameCounts = <String, int>{};
+    for (final candidate in candidates) {
+      final key = candidate.name.trim().toLowerCase();
+      nameCounts[key] = (nameCounts[key] ?? 0) + 1;
+    }
+
+    final results = <String, CandidateValidationResult>{};
+    for (final candidate in candidates) {
+      final issues = <String>[];
+      var severity = ValidationSeverity.ok;
+      void flag(String message, ValidationSeverity level) {
+        issues.add(message);
+        if (level == ValidationSeverity.error) {
+          severity = ValidationSeverity.error;
+        } else if (severity == ValidationSeverity.ok) {
+          severity = ValidationSeverity.warning;
+        }
+      }
+
+      final nameKey = candidate.name.trim().toLowerCase();
+      if ((nameCounts[nameKey] ?? 0) > 1) {
+        flag('Another candidate in this session has the same name.', ValidationSeverity.error);
+      }
+
+      if (!evidenceLinks.any((link) => link.candidateId == candidate.id)) {
+        flag('No evidence is linked to this candidate.', ValidationSeverity.warning);
+      }
+
+      if (candidate.type == KnowledgeCandidateType.procedure) {
+        final steps = procedureSteps.where((step) => step.candidateId == candidate.id).toList();
+        if (steps.isEmpty) {
+          flag('This procedure has no steps.', ValidationSeverity.warning);
+        } else {
+          final hasOrphanedReference = steps.any(
+            (step) =>
+                step.referencedCandidateIds.any((id) => !candidateIds.contains(id)) ||
+                step.referencedRegionIds.any((id) => !regionIds.contains(id)),
+          );
+          if (hasOrphanedReference) {
+            flag('One or more procedure steps reference evidence or a candidate that no longer exists.', ValidationSeverity.warning);
+          }
+        }
+      }
+
+      if (candidate.type == KnowledgeCandidateType.specification) {
+        final details = specificationDetails.where((entry) => entry.candidateId == candidate.id);
+        if (details.isEmpty) {
+          flag('This specification is missing Type, Value, and Unit.', ValidationSeverity.error);
+        } else {
+          final entry = details.first;
+          if (entry.value.trim().isEmpty) flag('Specification value is missing.', ValidationSeverity.error);
+          if (entry.unit.trim().isEmpty) flag('Specification unit is missing.', ValidationSeverity.error);
+        }
+      }
+
+      for (final relationship in relationshipCandidates) {
+        final involvesCandidate =
+            relationship.sourceCandidateId == candidate.id || relationship.targetCandidateId == candidate.id;
+        if (!involvesCandidate) continue;
+        final otherId = relationship.sourceCandidateId == candidate.id
+            ? relationship.targetCandidateId
+            : relationship.sourceCandidateId;
+        if (!candidateIds.contains(otherId)) {
+          flag('A relationship references a candidate that no longer exists.', ValidationSeverity.error);
+        }
+      }
+
+      results[candidate.id] = CandidateValidationResult(candidateId: candidate.id, severity: severity, issues: issues);
+    }
+    return results;
+  }
+
   /// Builds the record for a duplicated session (Work Package 008
   /// Session Browser: "Duplicate") — a fresh ID/name/timestamps, the
   /// same candidates/relationship candidates/review decisions, and
@@ -251,6 +397,8 @@ abstract final class KnowledgeSessionService {
       evidenceRegions: original.evidenceRegions,
       evidenceLinks: original.evidenceLinks,
       pageSelections: original.pageSelections,
+      procedureSteps: original.procedureSteps,
+      specificationDetails: original.specificationDetails,
     );
   }
 }

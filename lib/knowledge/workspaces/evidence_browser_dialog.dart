@@ -6,6 +6,7 @@ import '../../core/theme/studio_colors.dart';
 import '../../shared/format.dart';
 import '../models/evidence_region.dart';
 import '../models/knowledge_validation_exception.dart';
+import '../review/knowledge_candidate_form_dialog.dart';
 
 /// The Evidence Browser (Work Package 009 STUDIO-TASK-000020): "Display:
 /// Region Name, Page, Type, Linked Candidate Count. Support: Rename,
@@ -104,6 +105,16 @@ class _EvidenceBrowserDialog extends ConsumerWidget {
                             notifier.selectEvidenceRegion(region);
                             Navigator.of(context).pop();
                           },
+                        ),
+                        IconButton(
+                          tooltip: 'Create Knowledge Candidate from Region',
+                          icon: const Icon(Icons.add_box_outlined, size: 16),
+                          onPressed: () => showKnowledgeCandidateFormDialog(
+                            context,
+                            initialName: region.label,
+                            initialDescription: 'Created from Evidence Region "${region.label}" (page ${region.page}) of "$sourceName".',
+                            linkToRegionId: region.id,
+                          ),
                         ),
                         IconButton(
                           tooltip: 'Rename',

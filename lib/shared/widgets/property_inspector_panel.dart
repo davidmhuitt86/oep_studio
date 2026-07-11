@@ -8,6 +8,7 @@ import '../../core/theme/studio_colors.dart';
 import '../../knowledge/inspector/evidence_link_entries.dart';
 import '../../knowledge/inspector/evidence_region_properties.dart';
 import '../../knowledge/inspector/knowledge_candidate_properties.dart';
+import '../../knowledge/inspector/procedure_step_properties.dart';
 import '../../knowledge/inspector/relationship_candidate_properties.dart';
 import '../../knowledge/inspector/session_properties.dart';
 import '../../knowledge/inspector/source_material_properties.dart';
@@ -42,6 +43,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
     final selectedEvidenceRegion = foundation.selectedEvidenceRegion;
     final selectedCandidate = foundation.selectedCandidate;
+    final selectedProcedureStep = foundation.selectedProcedureStep;
     final selectedRelationshipCandidate = foundation.selectedRelationshipCandidate;
     final selectedSourceMaterial = foundation.selectedSourceMaterial;
     final selectedObject = foundation.selectedObject;
@@ -73,18 +75,19 @@ class PropertyInspectorPanel extends ConsumerWidget {
             child: switch ((
               selectedEvidenceRegion,
               selectedCandidate,
+              selectedProcedureStep,
               selectedRelationshipCandidate,
               selectedSourceMaterial,
               selectedObject,
               selectedRelationship,
               knowledgeSession,
             )) {
-              (final region?, _, _, _, _, _, _) => EvidenceRegionProperties(
+              (final region?, _, _, _, _, _, _, _) => EvidenceRegionProperties(
                 region: region,
                 sourceName: _sourceName(foundation.sourceMaterials, region.sourceId),
                 links: _linkedCandidates(foundation.evidenceLinks, foundation.candidates, region.id),
               ),
-              (_, final candidate?, _, _, _, _, _) => KnowledgeCandidateProperties(
+              (_, final candidate?, _, _, _, _, _, _) => KnowledgeCandidateProperties(
                 candidate: candidate,
                 links: _linkedRegions(
                   foundation.evidenceLinks,
@@ -93,12 +96,13 @@ class PropertyInspectorPanel extends ConsumerWidget {
                   candidate.id,
                 ),
               ),
-              (_, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
+              (_, _, final step?, _, _, _, _, _) => ProcedureStepProperties(step: step),
+              (_, _, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
                 relationship: relationship,
                 sourceName: _candidateName(foundation.candidates, relationship.sourceCandidateId),
                 targetName: _candidateName(foundation.candidates, relationship.targetCandidateId),
               ),
-              (_, _, _, final source?, _, _, _) => SourceMaterialProperties(
+              (_, _, _, _, final source?, _, _, _) => SourceMaterialProperties(
                 source: source,
                 evidenceRegionCount: foundation.evidenceRegions
                     .where((region) => region.sourceId == source.id)
@@ -110,9 +114,9 @@ class PropertyInspectorPanel extends ConsumerWidget {
                         .toList()
                       ..sort(),
               ),
-              (_, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
-              (_, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
-              (_, _, _, _, _, _, final session?) => SessionProperties(
+              (_, _, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
+              (_, _, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, _, _, _, _, final session?) => SessionProperties(
                 session: session,
                 sourceCount: foundation.knowledgeSourceCount,
                 candidateCount: foundation.knowledgeCandidateCount,

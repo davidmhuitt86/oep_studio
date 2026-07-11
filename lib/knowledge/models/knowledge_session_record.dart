@@ -3,9 +3,11 @@ import 'evidence_region.dart';
 import 'knowledge_candidate.dart';
 import 'knowledge_session.dart';
 import 'page_selection.dart';
+import 'procedure_step.dart';
 import 'relationship_candidate.dart';
 import 'review_decision.dart';
 import 'source_material.dart';
+import 'specification_details.dart';
 
 /// The complete persisted unit for one Knowledge Curation Session —
 /// what `session.json` holds (`docs/KNOWLEDGE_SESSION_FORMAT.md`) and
@@ -25,6 +27,8 @@ class KnowledgeSessionRecord {
     this.evidenceRegions = const [],
     this.evidenceLinks = const [],
     this.pageSelections = const [],
+    this.procedureSteps = const [],
+    this.specificationDetails = const [],
   });
 
   final KnowledgeSession session;
@@ -45,6 +49,15 @@ class KnowledgeSessionRecord {
   /// Selection).
   final List<PageSelection> pageSelections;
 
+  /// Procedure Steps belonging to this session's Procedure Knowledge
+  /// Candidates (Work Package 010 STUDIO-TASK-000023).
+  final List<ProcedureStep> procedureSteps;
+
+  /// Specification-type-fields for this session's Specification
+  /// Knowledge Candidates, one entry per Specification candidate (Work
+  /// Package 010 STUDIO-TASK-000024).
+  final List<SpecificationDetails> specificationDetails;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -55,6 +68,8 @@ class KnowledgeSessionRecord {
     'evidenceRegions': evidenceRegions.map((region) => region.toJson()).toList(),
     'evidenceLinks': evidenceLinks.map((link) => link.toJson()).toList(),
     'pageSelections': pageSelections.map((selection) => selection.toJson()).toList(),
+    'procedureSteps': procedureSteps.map((step) => step.toJson()).toList(),
+    'specificationDetails': specificationDetails.map((details) => details.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -69,6 +84,8 @@ class KnowledgeSessionRecord {
     final evidenceRegionsJson = json['evidenceRegions'] as List<dynamic>? ?? const [];
     final evidenceLinksJson = json['evidenceLinks'] as List<dynamic>? ?? const [];
     final pageSelectionsJson = json['pageSelections'] as List<dynamic>? ?? const [];
+    final procedureStepsJson = json['procedureSteps'] as List<dynamic>? ?? const [];
+    final specificationDetailsJson = json['specificationDetails'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -89,6 +106,12 @@ class KnowledgeSessionRecord {
       ],
       pageSelections: [
         for (final entry in pageSelectionsJson) PageSelection.fromJson(entry as Map<String, dynamic>),
+      ],
+      procedureSteps: [
+        for (final entry in procedureStepsJson) ProcedureStep.fromJson(entry as Map<String, dynamic>),
+      ],
+      specificationDetails: [
+        for (final entry in specificationDetailsJson) SpecificationDetails.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

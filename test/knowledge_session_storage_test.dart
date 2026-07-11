@@ -11,7 +11,10 @@ import 'package:oep_studio/knowledge/models/knowledge_session.dart';
 import 'package:oep_studio/knowledge/models/knowledge_session_record.dart';
 import 'package:oep_studio/knowledge/models/knowledge_validation_exception.dart';
 import 'package:oep_studio/knowledge/models/page_selection.dart';
+import 'package:oep_studio/knowledge/models/procedure_step.dart';
 import 'package:oep_studio/knowledge/models/review_decision.dart';
+import 'package:oep_studio/knowledge/models/specification_details.dart';
+import 'package:oep_studio/knowledge/models/specification_type.dart';
 import 'package:oep_studio/knowledge/services/knowledge_session_service.dart';
 import 'package:oep_studio/knowledge/services/knowledge_session_storage.dart';
 import 'package:oep_studio/knowledge/services/source_material_service.dart';
@@ -205,6 +208,85 @@ void main() {
       expect(loaded.evidenceRegions, isEmpty);
       expect(loaded.evidenceLinks, isEmpty);
       expect(loaded.pageSelections, isEmpty);
+    });
+  });
+
+  group('procedure/specification round trip', () {
+    test('Procedure Steps and Specification Details survive save/load', () async {
+      final record = makeRecord(
+        candidates: [
+          KnowledgeCandidate(
+            id: 'c1',
+            type: KnowledgeCandidateType.procedure,
+            name: 'Install Cover',
+            createdTime: DateTime(2026, 1, 1),
+          ),
+          KnowledgeCandidate(
+            id: 'c2',
+            type: KnowledgeCandidateType.specification,
+            name: 'Cover Bolt Torque',
+            createdTime: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+      final withProcedureAndSpec = KnowledgeSessionRecord(
+        session: record.session,
+        candidates: record.candidates,
+        procedureSteps: [
+          ProcedureStep(
+            id: 'step1',
+            candidateId: 'c1',
+            title: 'Remove old gasket',
+            description: 'Scrape residue from mating surface.',
+            referencedCandidateIds: const ['c2'],
+            createdTime: DateTime(2026, 1, 1),
+          ),
+        ],
+        specificationDetails: [
+          SpecificationDetails(
+            candidateId: 'c2',
+            specType: SpecificationType.torque,
+            value: '25',
+            unit: 'Nm',
+            createdTime: DateTime(2026, 1, 1),
+          ),
+        ],
+      );
+
+      await KnowledgeSessionStorage.save(withProcedureAndSpec);
+      final loaded = await KnowledgeSessionStorage.load(record.session.id);
+
+      expect(loaded.procedureSteps, hasLength(1));
+      expect(loaded.procedureSteps.single.title, 'Remove old gasket');
+      expect(loaded.procedureSteps.single.referencedCandidateIds, ['c2']);
+      expect(loaded.specificationDetails, hasLength(1));
+      expect(loaded.specificationDetails.single.specType, SpecificationType.torque);
+      expect(loaded.specificationDetails.single.value, '25');
+      expect(loaded.specificationDetails.single.unit, 'Nm');
+    });
+
+    test('a session saved before Work Package 010 (no procedure/specification fields) still loads', () async {
+      final record = makeRecord();
+      final directory = KnowledgeSessionStorage.sessionDirectory(record.session.id);
+      await directory.create(recursive: true);
+      // Simulates a pre-WP010 session.json with no procedureSteps/
+      // specificationDetails keys at all.
+      await File('${directory.path}${Platform.pathSeparator}session.json').writeAsString(
+        '{"formatVersion":1,"session":${jsonEncode(record.session.toJson())},'
+        '"candidates":[{"id":"c1","type":"component","name":"Timing Cover","description":"",'
+        '"status":"pending","createdTime":"2026-01-01T00:00:00.000"}],'
+        '"relationshipCandidates":[],"sources":[],"reviewDecisions":[],'
+        '"evidenceRegions":[],"evidenceLinks":[],"pageSelections":[]}',
+      );
+
+      final loaded = await KnowledgeSessionStorage.load(record.session.id);
+      expect(loaded.procedureSteps, isEmpty);
+      expect(loaded.specificationDetails, isEmpty);
+      // The pre-WP010 candidate (no notes/author/tags keys) must still
+      // load, defaulting those fields rather than throwing.
+      expect(loaded.candidates.single.notes, isEmpty);
+      expect(loaded.candidates.single.author, isEmpty);
+      expect(loaded.candidates.single.tags, isEmpty);
     });
   });
 

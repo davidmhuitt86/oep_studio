@@ -2066,3 +2066,282 @@ bundled alongside `oep_studio.exe` automatically.
   unrelated content instead. `ensureVisible` scrolls the container to
   bring the target into view first.
 
+---
+
+## Work Package 010 — Knowledge Studio (Manual Candidate Authoring, Procedure Builder, Specification Editor, Validation)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000022 — Manual Knowledge Candidate Authoring — Complete
+* STUDIO-TASK-000023 — Procedure Builder — Complete
+* STUDIO-TASK-000024 — Specification Editor — Complete
+* STUDIO-TASK-000025 — Knowledge Candidate Validation — Complete
+
+### What Exists
+
+Continues the Work Package 007–009 `lib/knowledge/` module. Transforms
+Knowledge Studio into a complete manual engineering authoring
+environment on top of the evidence model Work Package 009 built — all
+still entirely Studio-only ("No Foundation modifications occur"). No
+AI, no OCR, no automatic extraction, no Repository Commit. See
+`docs/KNOWLEDGE_CANDIDATES.md` for full detail.
+
+* `lib/knowledge/models/knowledge_candidate_type.dart` — expanded from
+  five to ten types (added Tool, Material, Fluid, Warning,
+  Measurement). `lib/knowledge/models/knowledge_candidate.dart` — added
+  `notes`/`author`/`tags` fields, all defaulting on load (`''`/`''`/
+  `[]`) so a pre-Work-Package-010 candidate JSON entry still loads.
+* `lib/knowledge/models/procedure_step.dart` (new) — `ProcedureStep`
+  (id/candidateId/title/description/notes/referencedCandidateIds/
+  referencedRegionIds), a separate `candidateId`-keyed list rather than
+  embedded on the candidate, ordered by array position (no explicit
+  `order` field).
+* `lib/knowledge/models/specification_type.dart`,
+  `specification_details.dart` (both new) — `SpecificationType` (the
+  seven types this work package's Requirements list), `SpecificationDetails`
+  (candidateId 1:1/specType/value/unit/notes) — "Linked Evidence" reuses
+  the existing Work Package 009 `EvidenceLink` mechanism rather than a
+  new field.
+* `lib/knowledge/models/candidate_validation_result.dart` (new) —
+  `ValidationSeverity` (ok/warning/error), `CandidateValidationResult`
+  (candidateId/severity/issues) — never persisted, computed on demand.
+* `lib/knowledge/models/knowledge_session_record.dart` — extended with
+  `procedureSteps`/`specificationDetails` lists, both defaulting to
+  `[]` when absent so a pre-Work-Package-010 session file still loads
+  (confirmed by a unit test).
+* `lib/knowledge/services/knowledge_session_service.dart` — extended
+  with `validateProcedureStepTitle` (empty title rejected),
+  `validateSpecificationDetails` (empty value/unit rejected — Error
+  Handling: "Invalid specifications, Invalid units"),
+  `computeCandidateValidation` (the six validation rules — see
+  `docs/KNOWLEDGE_CANDIDATES.md` § Validation Model — pure, takes a
+  snapshot, returns a value, never mutates candidate data), and
+  `buildDuplicate` extended to carry the two new lists over unchanged.
+* `lib/core/services/foundation_runtime_state.dart`/
+  `foundation_runtime_service.dart` — extended per this work package's
+  Architecture Rule ("Connection Manager coordinates state only"):
+  `procedureSteps`/`specificationDetails`, a new, **separate**
+  `openProcedure` field (mirroring `openSourceDocument`'s pattern from
+  the start — see Architectural Observations) and
+  `selectedProcedureStep`, and a derived `candidateValidation` getter
+  (this work package's "Current Validation State"). New notifier
+  methods: `addKnowledgeCandidate` now returns the created candidate;
+  `duplicateKnowledgeCandidate` (deliberately bypasses name-uniqueness
+  validation); `openProcedureBuilder`/`closeProcedureBuilder`;
+  `addProcedureStep`/`updateProcedureStep`/`deleteProcedureStep`/
+  `duplicateProcedureStep`/`reorderProcedureStep`/
+  `setProcedureStepReferences`; `selectProcedureStep`/
+  `clearProcedureStepSelection`; `setSpecificationDetails`. Selection is
+  now seven-way mutually exclusive (added Procedure Step);
+  `deleteKnowledgeCandidate` extended to cascade-delete Procedure Steps
+  and Specification Details that would otherwise dangle.
+* `lib/knowledge/workspaces/procedure_builder_dialog.dart` (new) — the
+  Procedure Builder: ordered steps with automatic numbering, Insert/
+  Delete/Duplicate/drag-and-drop reordering (`ReorderableListView`),
+  each step's own edit dialog with Knowledge Candidate/Evidence Region
+  reference checklists.
+* `lib/knowledge/workspaces/specification_editor_dialog.dart` (new) —
+  the Specification Editor: Type/Value/Unit/Notes, plus a Linked
+  Evidence list reusing the existing Evidence Linking UI mechanism.
+* `lib/knowledge/inspector/knowledge_candidate_properties.dart`
+  (extended) — Notes/Author/Tags fields, a Validation Status section,
+  and conditional Specification fields / a Procedure step-count summary
+  with "Open Procedure Builder"/"Open Specification Editor" actions.
+  `lib/knowledge/inspector/procedure_step_properties.dart` (new) — the
+  Property Inspector's one new top-level mode (Procedure Step).
+  `lib/shared/widgets/property_inspector_panel.dart` extended to an
+  8-arm switch (Procedure Step added after Knowledge Candidate).
+* `lib/knowledge/review/knowledge_candidate_row.dart` (extended) —
+  Validation Status icon (tooltip lists every issue), Linked Evidence
+  Count, and a Duplicate action.
+  `lib/knowledge/review/knowledge_candidate_list_query.dart` (new) —
+  filter (type/status/name substring) and sort (name/type/status/
+  validation severity) for the Candidate List, mirroring
+  `RelationshipCandidateListQuery`'s Work Package 008 design.
+  `lib/knowledge/review/engineering_review_panel.dart`'s `_CandidateList`
+  converted to a `ConsumerStatefulWidget` holding the query, with
+  filter/sort controls above the list (mirroring `ObjectsPage`'s Work
+  Package 004 pattern).
+* `lib/knowledge/review/knowledge_candidate_form_dialog.dart`/
+  `controllers/knowledge_candidate_form_controller.dart` — extended
+  with Notes/Author/Tags fields, and `initialName`/`initialDescription`/
+  `initialType`/`linkToRegionId` parameters supporting the "create from
+  Source Material/Page Selection/Evidence Region" entry points added to
+  `evidence_browser_dialog.dart`, `import_queue_panel.dart`, and
+  `source_material_properties.dart`.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: OEP Foundation, the
+Public C API, AI functionality, OCR functionality, automatic
+extraction, and Repository Commit itself are all untouched. A
+generalized "Evidence Object" link type unifying Source Material/Page
+Selection/Evidence Region under SDD-021's fuller hierarchy is not
+implemented — see Architectural Observations.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      procedure_step.dart                 New
+      specification_type.dart             New
+      specification_details.dart          New
+      candidate_validation_result.dart    New
+      knowledge_candidate.dart            Extended (notes/author/tags)
+      knowledge_candidate_type.dart       Extended (10 types)
+      knowledge_session_record.dart       Extended (procedureSteps/specificationDetails)
+    inspector/
+      procedure_step_properties.dart      New
+      knowledge_candidate_properties.dart Extended (Notes/Author/Tags, Validation, Specification/Procedure sections)
+      source_material_properties.dart     Extended (Create from Page Selection)
+    review/
+      knowledge_candidate_list_query.dart New
+      knowledge_candidate_row.dart        Extended (Validation Status, Linked Evidence Count, Duplicate)
+      knowledge_candidate_form_dialog.dart Extended (Notes/Author/Tags, prefill params)
+      engineering_review_panel.dart       Extended (filter/sort UI)
+    workspaces/
+      procedure_builder_dialog.dart       New
+      specification_editor_dialog.dart    New
+      evidence_browser_dialog.dart        Extended (Create from Region)
+      import_queue_panel.dart             Extended (Create from Source Material)
+docs/
+  KNOWLEDGE_CANDIDATES.md                 New
+```
+
+### Flutter Package Decisions
+
+No new dependencies. `ReorderableListView` (Flutter framework,
+`package:flutter/material.dart`) implements the Procedure Builder's
+drag-and-drop reordering — its `onReorderItem` callback (the
+non-deprecated replacement for `onReorder`, available in this
+project's Flutter 3.44.6) already adjusts `newIndex` for the removed
+item, matching `reorderProcedureStep`'s own index semantics exactly.
+
+### Verification Results
+
+* `flutter analyze` — no issues found.
+* `flutter test` — 85/85 passing: all prior tests, plus new
+  `KnowledgeSessionService` unit tests (`validateProcedureStepTitle`,
+  `validateSpecificationDetails`, and nine `computeCandidateValidation`
+  cases covering every rule in isolation), a new
+  `knowledge_candidate_list_query_test.dart` (sort/filter, mirroring
+  `object_list_query_test.dart`'s shape), and new
+  `knowledge_session_storage_test.dart` cases (Procedure Steps/
+  Specification Details round-trip through save/load exactly; a
+  hand-written pre-Work-Package-010 `session.json` — missing the two
+  new keys, and with a pre-Work-Package-010 candidate entry missing
+  `notes`/`author`/`tags` — still loads with empty defaults, confirming
+  backward compatibility).
+* `flutter build windows` — succeeded.
+* **Manual verification.** As in Work Packages 007–009, `computer-use`
+  could not target `build\windows\x64\runner\Release\oep_studio.exe` —
+  confirmed this work package by attempting `request_access`/
+  `open_application` against it, both of which only resolve
+  Start-menu-registered application names, and the compiled `.exe` is
+  neither installed nor registered there. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test`
+  (`integration_test/knowledge_studio_wp010_test.dart`, added, run
+  against the real compiled app via `flutter test ... -d windows`, then
+  deleted — `pubspec.yaml`'s `integration_test` dev dependency reverted
+  and `pubspec.lock` regenerated) against a real, valid single-page PDF
+  fixture generated by a one-off script (not committed) with correct
+  xref offsets, so the real `pdfrx`/PDFium engine actually opened it
+  (log: `PdfDocument initial load: ... (57 ms)`).
+
+  The test covered: create a session → attach a PDF source → open it
+  in the Source Viewer → create an Evidence Region directly through the
+  Connection Manager (the drag-to-create gesture itself was already
+  thoroughly verified in Work Package 009 and isn't new here) → open
+  the Evidence Browser → **"Create Knowledge Candidate from Region"**
+  → the New Candidate dialog opens pre-filled with the region's label
+  → submit → confirm (via the Connection Manager, not just the UI) that
+  the new candidate is actually linked to that region via a real
+  `EvidenceLink` → manually author a Procedure-type and a
+  Specification-type candidate through the New Candidate dialog's Type
+  dropdown, with Notes/Author/Tags filled in and confirmed on the
+  candidate afterward → Candidate List filter (name substring narrows
+  the list, clearing restores it) → Duplicate a candidate (direct
+  notifier call — see below) and confirm both copies flip to
+  `error`-severity duplicate-name validation, with the duplicate
+  additionally missing the original's Evidence Link → open the
+  **Procedure Builder**: Insert two steps, Duplicate a step, Delete a
+  step, tap a step to select it (confirming the Property Inspector's
+  Procedure Step mode reflects it), close, and confirm the Property
+  Inspector's step count updated → open the **Specification Editor**:
+  submitting an empty Value is rejected inline with "Specification
+  value cannot be empty." without closing the dialog, then a valid
+  Value/Unit saves and is confirmed via the Connection Manager →
+  confirm final Validation Status for every candidate touched (the
+  complete Specification and the non-empty Procedure both read
+  `warning`, not `error`, for missing evidence only; the duplicate-named
+  candidates both read `error`) → close and reopen the session,
+  confirming Procedure Steps, Specification Details, and candidate
+  Notes/Author/Tags all survive a real disk round-trip → delete the
+  session, cleaning up its own test data. All assertions passed; no
+  test artifacts were left on disk afterward (two sessions from earlier,
+  failed attempts at this same test were found and removed manually
+  before the final commit).
+
+  Two interactions were verified via a direct Connection Manager call
+  rather than a synthetic gesture, for the same reasons Work Package
+  009 documented for its own one exception: **drag-and-drop step
+  reordering** (`ReorderableListView` drag gestures are not reliably
+  drivable through this widget-test harness) was verified via
+  `reorderProcedureStep` directly — the same state mutation
+  `onReorderItem` invokes — and the Candidate List's **Duplicate**
+  button tap itself went untested in favor of calling
+  `duplicateKnowledgeCandidate` directly, since by that point in the
+  test a second candidate shared its target's name and an unambiguous
+  tap target could not be located without added complexity that
+  wouldn't have exercised any additional logic (`onDuplicate`'s
+  `onPressed` is a one-line call to the same method).
+
+### Architectural Observations
+
+See `docs/KNOWLEDGE_CANDIDATES.md` § Architectural Observations for
+the full account of both open questions this work package surfaced —
+summarized here:
+
+* **"Create Knowledge Candidates from Source Material / Page Selection
+  / Evidence Region" does not fully reconcile with SDD-021's
+  four-layer Evidence Object hierarchy, and this work package's own
+  Requirements text does not resolve the gap.** Implemented as three UI
+  entry points into the same New Candidate dialog; only the Evidence
+  Region path also creates a real `EvidenceLink` (reusing the Work
+  Package 009 mechanism exactly as-is), since `EvidenceLink` has no
+  schema for referencing a Source Material or Page Selection and
+  extending it to a generalized SDD-021 "Evidence Object" reference
+  would be a genuine, independent architectural decision with
+  cascading effects on the Evidence Browser and the persisted file
+  format. This is the same discrepancy flagged, unresolved, at the end
+  of Work Package 009's own completion report (an untracked, then-Draft
+  SDD-021 outside that work package's authorized scope) — now that
+  SDD-021 is frozen and in-scope, this work package applied the most
+  literal, non-breaking reading of its own Requirements text (three
+  entry points, not a schema rebuild) rather than treating the
+  discrepancy as a hard blocker, since a reasonable reading was
+  available. **Flagged for architectural review**, not resolved here.
+* **The Property Inspector's "extend support for" list names four
+  items (Knowledge Candidate, Procedure Step, Specification, Validation
+  Status); only Procedure Step became a new mutually-exclusive mode.**
+  Resolved by cross-referencing this work package's own Connection
+  Manager section, whose four-item list ("Current Knowledge Candidate,
+  Current Procedure, Current Procedure Step, Current Validation State")
+  has no "Current Specification" or "Current Validation" *selection*
+  field — confirming Specification and Validation Status belong as
+  sections within Knowledge Candidate mode, not independent modes.
+* **`openProcedure` was introduced as real Connection Manager state
+  from the start, deliberately mirroring `openSourceDocument`'s
+  pattern, specifically to avoid reintroducing the exact bug Work
+  Package 009 spent significant effort diagnosing and fixing** (an
+  earlier "current document/procedure" field conflated with a
+  mutually-exclusive selection field, so selecting anything else
+  silently lost track of what was "open"). No new instance of that bug
+  occurred this work package — the pattern was applied proactively
+  rather than discovered through another failure.
+

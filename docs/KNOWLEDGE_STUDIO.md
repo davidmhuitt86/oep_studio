@@ -7,27 +7,33 @@ Browser, STUDIO-TASK-000016 Source Material Workspace,
 STUDIO-TASK-000017 Manual Relationship Authoring + Relationship View,
 STUDIO-TASK-000018 Repository Commit Preview); extended again in Work
 Package 009 (STUDIO-TASK-000019 PDF Source Viewer, STUDIO-TASK-000020
-Evidence Regions, STUDIO-TASK-000021 Evidence Linking). Validates the
-architecture defined in SDD-013 (Knowledge Studio), SDD-014
-(Engineering Knowledge Acquisition Pipeline), SDD-015 (Engineering
-Knowledge Model), SDD-016 (Knowledge Studio User Experience), SDD-017
-(Knowledge Curation Workflow), SDD-018 (Engineering Knowledge
-Lifecycle and Provenance), SDD-019 (Engineering Object Philosophy),
-and SDD-020 (Engineering Knowledge Review System), remaining
-**Studio-only: no AI, no OCR, no repository commit** through all three
-work packages.
+Evidence Regions, STUDIO-TASK-000021 Evidence Linking); extended again
+in Work Package 010 (STUDIO-TASK-000022 Manual Knowledge Candidate
+Authoring, STUDIO-TASK-000023 Procedure Builder, STUDIO-TASK-000024
+Specification Editor, STUDIO-TASK-000025 Knowledge Candidate
+Validation). Validates the architecture defined in SDD-013 (Knowledge
+Studio), SDD-014 (Engineering Knowledge Acquisition Pipeline), SDD-015
+(Engineering Knowledge Model), SDD-016 (Knowledge Studio User
+Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
+(Engineering Knowledge Lifecycle and Provenance), SDD-019 (Engineering
+Object Philosophy), SDD-020 (Engineering Knowledge Review System), and
+— as of Work Package 010 — SDD-021 (Engineering Evidence Model),
+remaining **Studio-only: no AI, no OCR, no repository commit** through
+all four work packages.
 
-For the persisted-file format and the Knowledge Candidate/Relationship
-Candidate/Commit Preview model reference (including the
+For the persisted-file format and the Relationship Candidate/Commit
+Preview model reference (including the
 `KnowledgeCandidateType`/`ObjectCategory` mismatch), see
 `docs/KNOWLEDGE_SESSION_FORMAT.md`. For the Evidence Region/Evidence
 Link/Page Selection models, the PDF Source Viewer, and the Work
-Package 009 architectural findings, see `docs/EVIDENCE_MODEL.md`. This
-document covers the workspace layout, session lifecycle, and state
-ownership.
+Package 009 architectural findings, see `docs/EVIDENCE_MODEL.md`. For
+the Knowledge Candidate/Procedure/Procedure Step/Specification/
+Validation model reference and the Work Package 010 architectural
+findings, see `docs/KNOWLEDGE_CANDIDATES.md`. This document covers the
+workspace layout, session lifecycle, and state ownership.
 
 > **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
-> Package 007 and remains unpopulated as of Work Package 009. None of
+> Package 007 and remains unpopulated as of Work Package 010. None of
 > these work packages' decisions depend on its contents — SDD-013's own
 > Import Pipeline section has been sufficient — but this is flagged
 > again for whoever populates SDD-014 next, since a future work package
@@ -75,12 +81,13 @@ docked on the right of every page via `StudioShell`
 Studio extends that shared panel with its own modes (see § State
 Ownership) rather than embedding a second copy of it.
 
-As of Work Package 009, four of the six panels carry real
+As of Work Package 010, four of the six panels carry real
 functionality:
 
 * **Import Queue** (`lib/knowledge/workspaces/import_queue_panel.dart`)
   — attach Source Material via the native file picker; browse/select/
-  remove attached sources.
+  remove attached sources; each source row also offers "Create
+  Knowledge Candidate from Source Material" (Work Package 010).
 * **Source Viewer** (`lib/knowledge/workspaces/source_viewer_panel.dart`)
   — PDF sources get a real, interactive viewer
   (`lib/knowledge/workspaces/pdf_source_viewer.dart`: page navigation,
@@ -89,14 +96,17 @@ functionality:
   renders what it reasonably can (image thumbnail; Markdown/Text raw
   content; a location-only message for Other).
 * **Engineering Review** (`lib/knowledge/review/engineering_review_panel.dart`)
-  — two tabs: Candidates (manual Knowledge Candidate creation and
-  Accept/Reject/Edit/Delete) and Relationships (manual Relationship
-  Candidate authoring — see § Relationship Candidates below).
+  — two tabs: Candidates (manual Knowledge Candidate creation across
+  ten types, Accept/Reject/Edit/Duplicate/Delete, filter/sort, and
+  Validation Status/Linked Evidence Count display — see
+  `docs/KNOWLEDGE_CANDIDATES.md`) and Relationships (manual
+  Relationship Candidate authoring — see § Relationship Candidates
+  below).
 * **Commit Summary** (`lib/knowledge/workspaces/commit_preview_panel.dart`)
   — a simulated preview of what a Repository Commit would do, with a
   permanently disabled "Commit" button (Repository Commit itself is
   out of scope — see § Future Foundation Integration).
-* **Property Inspector** — seven modes (see § State Ownership).
+* **Property Inspector** — eight modes (see § State Ownership).
 
 **AI Suggestions** and **Repository Matches** remain placeholder
 content (`lib/knowledge/widgets/knowledge_placeholder.dart`) — both
@@ -187,35 +197,37 @@ intentionally minimal — SDD-018's "Draft" lifecycle state ("Created
 during an active Knowledge Curation Session. Not yet committed.")
 until persisted, after which it survives restart but is still
 pre-commit — SDD-018's "Draft" state covers both. No AI-era fields
-(confidence, supporting evidence, repository matches) since neither
-work package has AI or repository-matching to populate them:
+(confidence, supporting evidence, repository matches) since none of
+these work packages have AI or repository-matching to populate them.
 
-```dart
-class KnowledgeCandidate {
-  final String id;
-  final KnowledgeCandidateType type;   // Component | Procedure | Specification | Image | Document
-  final String name;
-  final String description;
-  final KnowledgeCandidateStatus status;   // Pending | Accepted | Rejected
-  final DateTime createdTime;
-  final DateTime? modifiedTime;
-}
-```
+As of Work Package 010, `KnowledgeCandidateType` covers ten types
+(Component, Procedure, Specification, Tool, Material, Fluid, Warning,
+Measurement, Image, Document), and the candidate itself carries
+`notes`/`author`/`tags` alongside description — see
+`docs/KNOWLEDGE_CANDIDATES.md` § Knowledge Candidate Model for the
+full field reference, the "create from Source Material/Page
+Selection/Evidence Region" entry points, and the Duplicate action.
+That document also covers the Procedure/Procedure Step model
+(STUDIO-TASK-000023), the Specification model (STUDIO-TASK-000024),
+and the Validation model (STUDIO-TASK-000025) in full.
 
-`KnowledgeCandidateType` mirrors five of SDD-015's Layer 3 Engineering
-Objects. `KnowledgeCandidateStatus` is narrower than SDD-020's full
-Decision Options (Accept/Reject/Merge/Edit/Postpone/Duplicate):
-Merge/Postpone/Duplicate all presuppose repository matching, which
-doesn't exist yet, so only Accept/Reject/Pending are modeled; Edit is
-an action, not a status.
+`KnowledgeCandidateStatus` is narrower than SDD-020's full Decision
+Options (Accept/Reject/Merge/Edit/Postpone/Duplicate):
+Merge/Postpone presuppose repository matching, which doesn't exist
+yet, so only Accept/Reject/Pending are modeled as a *status*; Edit and
+Duplicate (Work Package 010) are actions, not statuses.
 
 Candidate name uniqueness is enforced per-session, case-insensitively,
-by `KnowledgeSessionService.validateCandidateName`.
+at creation/edit time by `KnowledgeSessionService.validateCandidateName`
+— but **not** by the Duplicate action, which deliberately allows
+same-named copies, surfaced instead as a non-blocking validation
+finding (`docs/KNOWLEDGE_CANDIDATES.md` § Validation Model).
 
 Every Create/Edit/Accept/Reject/Delete against a candidate appends a
 `ReviewDecision` (Work Package 008) to the session's append-only
 decision history — see `docs/KNOWLEDGE_SESSION_FORMAT.md` § Review
-Decision Model.
+Decision Model. Duplicate also appends a `created` decision, for the
+newly-created copy.
 
 ## Relationship Candidates (Work Package 008)
 
@@ -312,7 +324,7 @@ the *same* Connection Manager every other Studio feature uses
 `FoundationServiceState`) — **not** a separate Knowledge-specific
 provider — even though this state is Studio-only and never touches
 Foundation. See `docs/CONNECTION_MANAGER.md` for the full state
-ownership table; as of Work Package 009:
+ownership table; as of Work Package 010:
 
 | Field | Meaning |
 |---|---|
@@ -328,6 +340,10 @@ ownership table; as of Work Package 009:
 | `evidenceLinks` / `selectedEvidenceLink` | Knowledge Candidate ↔ Evidence Region links, and the one currently highlighted in the Property Inspector (Work Package 009) |
 | `pageSelections` | Whole-page evidence markers (Work Package 009) |
 | `currentPage` | The Source Viewer's current page for `openSourceDocument`, ephemeral (Work Package 009) |
+| `procedureSteps` | Procedure Steps within the active session's Procedure Knowledge Candidates (Work Package 010) |
+| `specificationDetails` | Type/Value/Unit/Notes for the active session's Specification Knowledge Candidates (Work Package 010) |
+| `openProcedure` / `selectedProcedureStep` | The Procedure Knowledge Candidate currently open in the Procedure Builder (Work Package 010's "Current Procedure" — mirrors `openSourceDocument`'s separation), and the step currently selected |
+| `candidateValidation` | Derived getter — see `docs/KNOWLEDGE_CANDIDATES.md` § Validation Model |
 | `reviewDecisions` | The append-only Create/Edit/Accept/Reject/Delete audit log |
 | `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
 | `commitPreview` | Derived getter — see § Commit Preview |
@@ -337,14 +353,16 @@ ownership table; as of Work Package 009:
 `knowledgeRelationshipCandidateCount`/`knowledgeEvidenceRegionCount` are
 getters derived from the lists above, not separately stored.
 
-Selection is **six-way mutually exclusive**: Knowledge Candidate,
-Relationship Candidate, Source Material, Object, Relationship, and
-Evidence Region. Every `select*` method clears the other five. The
-Property Inspector's mode order (`property_inspector_panel.dart`):
+Selection is **seven-way mutually exclusive**: Knowledge Candidate,
+Relationship Candidate, Source Material, Object, Relationship,
+Evidence Region, and — as of Work Package 010 — Procedure Step. Every
+`select*` method clears the other six. The Property Inspector's mode
+order (`property_inspector_panel.dart`):
 
 ```
 selectedEvidenceRegion? → Evidence Region mode
-selectedCandidate? → Knowledge Candidate mode
+selectedCandidate? → Knowledge Candidate mode (Specification fields + Validation Status shown as sections when applicable — Work Package 010)
+selectedProcedureStep? → Procedure Step mode (Work Package 010)
 selectedRelationshipCandidate? → Relationship Candidate mode
 selectedSourceMaterial? → Source Material mode
 selectedObject? → Object mode
@@ -353,12 +371,16 @@ knowledgeSession? → Session mode (fallback — no more specific selection)
 else → No Selection
 ```
 
-`openSourceDocument` is deliberately **separate** from
-`selectedSourceMaterial` and outside this mutual-exclusivity switch —
-see `docs/EVIDENCE_MODEL.md` § Connection Manager Mapping for why an
-earlier version of this state conflated the two, and why that broke
-Work Package 009's own "selecting a Knowledge Candidate highlights its
-linked Evidence Regions" requirement.
+`openSourceDocument` and `openProcedure` are deliberately **separate**
+from the mutually-exclusive selection fields — see
+`docs/EVIDENCE_MODEL.md` § Connection Manager Mapping for the full
+account of why an earlier version of `openSourceDocument` conflated it
+with `selectedSourceMaterial`, and why that broke Work Package 009's
+own "selecting a Knowledge Candidate highlights its linked Evidence
+Regions" requirement; `openProcedure` (Work Package 010) was
+introduced following that same pattern from the start, specifically to
+avoid reintroducing the bug in a new form (see
+`docs/KNOWLEDGE_CANDIDATES.md` § Architectural Observations).
 
 `lib/knowledge/services/knowledge_session_service.dart` holds the
 Knowledge domain's validation, ID-generation, and commit-preview
@@ -375,12 +397,17 @@ logic the same way.
 Per this project's Knowledge Studio error-handling rules (invalid
 session names, duplicate candidate names, missing repository, invalid/
 missing source files, invalid relationship definitions, corrupted
-session files, invalid PDFs, deleted source material):
+session files, invalid PDFs, deleted source material, and — as of Work
+Package 010 — invalid specifications, invalid units, invalid procedure
+ordering):
 
-* **New Session / New Candidate / New Relationship Candidate dialogs**
-  validate inline — an invalid submission keeps the dialog open and
-  shows the message beneath the fields, since the fix is local and the
-  form data shouldn't be lost.
+* **New Session / New Candidate / New Relationship Candidate / Insert
+  or Edit Step / Specification Editor dialogs** validate inline — an
+  invalid submission keeps the dialog open and shows the message
+  beneath the fields, since the fix is local and the form data
+  shouldn't be lost. Duplicate candidate names are the one case
+  *deliberately not* rejected here (Work Package 010's Candidate List
+  "Duplicate" action) — see § Knowledge Candidate Model.
 * **Session status transitions** and **Session Browser actions**
   (Open/Duplicate/Archive/Delete) validate via a separate `AlertDialog`
   (mirroring `showFoundationErrorDialog`'s pattern from

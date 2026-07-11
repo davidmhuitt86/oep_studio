@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../models/knowledge_candidate_type.dart';
 import '../widgets/knowledge_placeholder.dart';
 import 'knowledge_candidate_form_dialog.dart';
+import 'knowledge_candidate_list_query.dart';
 import 'knowledge_candidate_row.dart';
 import 'relationship_candidate_form_dialog.dart';
 import 'relationship_candidate_list_query.dart';
@@ -121,40 +123,124 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-class _CandidateList extends ConsumerWidget {
+class _CandidateList extends ConsumerStatefulWidget {
   const _CandidateList();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CandidateList> createState() => _CandidateListState();
+}
+
+class _CandidateListState extends ConsumerState<_CandidateList> {
+  KnowledgeCandidateListQuery _query = const KnowledgeCandidateListQuery();
+
+  @override
+  Widget build(BuildContext context) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
-    final candidates = foundation.candidates;
     final notifier = ref.read(foundationRuntimeServiceProvider.notifier);
     final selectedRegion = foundation.selectedEvidenceRegion;
     final linkedCandidateIds = selectedRegion == null
         ? const <String>{}
         : foundation.candidatesLinkedToEvidenceRegion(selectedRegion.id).map((candidate) => candidate.id).toSet();
+    final validation = foundation.candidateValidation;
+    final candidates = _query.apply(foundation.candidates, validation: validation);
 
-    if (candidates.isEmpty) {
-      return const KnowledgePlaceholder(
-        message: 'No Knowledge Candidates yet. Use "New Candidate" to manually propose an Engineering Object.',
-      );
-    }
-    return ListView.separated(
-      itemCount: candidates.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final candidate = candidates[index];
-        return KnowledgeCandidateRow(
-          candidate: candidate,
-          selected: foundation.selectedCandidate?.id == candidate.id,
-          linkedToSelectedEvidence: linkedCandidateIds.contains(candidate.id),
-          onTap: () => notifier.selectKnowledgeCandidate(candidate),
-          onAccept: () => notifier.acceptKnowledgeCandidate(candidate.id),
-          onReject: () => notifier.rejectKnowledgeCandidate(candidate.id),
-          onEdit: () => showKnowledgeCandidateFormDialog(context, existing: candidate),
-          onDelete: () => notifier.deleteKnowledgeCandidate(candidate.id),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: TextField(
+                    onChanged: (value) => setState(
+                      () => _query = value.isEmpty ? _query.copyWith(clearTextFilter: true) : _query.copyWith(textFilter: value),
+                    ),
+                    style: const TextStyle(fontSize: 12, color: StudioColors.textPrimary),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search, size: 15),
+                      hintText: 'Filter by name…',
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<KnowledgeCandidateType?>(
+                    value: _query.typeFilter,
+                    dropdownColor: StudioColors.surfaceRaised,
+                    style: const TextStyle(fontSize: 12, color: StudioColors.textPrimary),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('All Types')),
+                      for (final type in KnowledgeCandidateType.values)
+                        DropdownMenuItem(value: type, child: Text(type.label)),
+                    ],
+                    onChanged: (type) => setState(
+                      () => _query = type == null ? _query.copyWith(clearTypeFilter: true) : _query.copyWith(typeFilter: type),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<KnowledgeCandidateSortField>(
+                    value: _query.sortField,
+                    dropdownColor: StudioColors.surfaceRaised,
+                    style: const TextStyle(fontSize: 12, color: StudioColors.textPrimary),
+                    items: const [
+                      DropdownMenuItem(value: KnowledgeCandidateSortField.name, child: Text('Sort: Name')),
+                      DropdownMenuItem(value: KnowledgeCandidateSortField.type, child: Text('Sort: Type')),
+                      DropdownMenuItem(value: KnowledgeCandidateSortField.status, child: Text('Sort: Status')),
+                      DropdownMenuItem(
+                        value: KnowledgeCandidateSortField.validation,
+                        child: Text('Sort: Validation'),
+                      ),
+                    ],
+                    onChanged: (field) {
+                      if (field != null) setState(() => _query = _query.copyWith(sortField: field));
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: candidates.isEmpty
+              ? const KnowledgePlaceholder(
+                  message: 'No Knowledge Candidates yet. Use "New Candidate" to manually propose an Engineering Object.',
+                )
+              : ListView.separated(
+                  itemCount: candidates.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final candidate = candidates[index];
+                    return KnowledgeCandidateRow(
+                      candidate: candidate,
+                      selected: foundation.selectedCandidate?.id == candidate.id,
+                      linkedToSelectedEvidence: linkedCandidateIds.contains(candidate.id),
+                      validation: validation[candidate.id],
+                      linkedEvidenceCount: foundation.linkedEvidenceCountFor(candidate.id),
+                      onTap: () => notifier.selectKnowledgeCandidate(candidate),
+                      onAccept: () => notifier.acceptKnowledgeCandidate(candidate.id),
+                      onReject: () => notifier.rejectKnowledgeCandidate(candidate.id),
+                      onEdit: () => showKnowledgeCandidateFormDialog(context, existing: candidate),
+                      onDuplicate: () => notifier.duplicateKnowledgeCandidate(candidate.id),
+                      onDelete: () => notifier.deleteKnowledgeCandidate(candidate.id),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }

@@ -11,10 +11,13 @@ import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/knowledge_session_record.dart';
 import '../../knowledge/models/knowledge_validation_exception.dart';
 import '../../knowledge/models/page_selection.dart';
+import '../../knowledge/models/procedure_step.dart';
 import '../../knowledge/models/relationship_candidate.dart';
 import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/session_status.dart';
 import '../../knowledge/models/source_material.dart';
+import '../../knowledge/models/specification_details.dart';
+import '../../knowledge/models/specification_type.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../../knowledge/services/knowledge_session_storage.dart';
 import '../../knowledge/services/source_material_service.dart';
@@ -232,6 +235,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -251,6 +255,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -327,6 +332,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       evidenceRegions: const [],
       evidenceLinks: const [],
       pageSelections: const [],
+      procedureSteps: const [],
+      specificationDetails: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -335,6 +342,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceLink: true,
       clearCurrentPage: true,
       clearKnowledgeStorageError: true,
+      clearOpenProcedure: true,
+      clearSelectedProcedureStep: true,
     );
     unawaited(_persistActiveSession());
   }
@@ -365,6 +374,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       evidenceRegions: const [],
       evidenceLinks: const [],
       pageSelections: const [],
+      procedureSteps: const [],
+      specificationDetails: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -373,6 +384,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceLink: true,
       clearCurrentPage: true,
       clearKnowledgeStorageError: true,
+      clearOpenProcedure: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -396,6 +409,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         evidenceRegions: record.evidenceRegions,
         evidenceLinks: record.evidenceLinks,
         pageSelections: record.pageSelections,
+        procedureSteps: record.procedureSteps,
+        specificationDetails: record.specificationDetails,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -404,6 +419,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearSelectedEvidenceLink: true,
         clearCurrentPage: true,
         clearKnowledgeStorageError: true,
+        clearOpenProcedure: true,
+        clearSelectedProcedureStep: true,
       );
     } on KnowledgeValidationException catch (error) {
       state = state.copyWith(knowledgeStorageError: error.message);
@@ -448,6 +465,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           evidenceRegions: record.evidenceRegions,
           evidenceLinks: record.evidenceLinks,
           pageSelections: record.pageSelections,
+          procedureSteps: record.procedureSteps,
+          specificationDetails: record.specificationDetails,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -499,6 +518,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           evidenceRegions: state.evidenceRegions,
           evidenceLinks: state.evidenceLinks,
           pageSelections: state.pageSelections,
+          procedureSteps: state.procedureSteps,
+          specificationDetails: state.specificationDetails,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -532,8 +553,18 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
 
   /// Creates a new manual Knowledge Candidate. Throws
   /// [KnowledgeValidationException] if no session is active, or for an
-  /// empty/duplicate name.
-  void addKnowledgeCandidate({required KnowledgeCandidateType type, required String name, String description = ''}) {
+  /// empty/duplicate name. Returns the created candidate so callers that
+  /// need its ID immediately (e.g. "Create Knowledge Candidate from
+  /// Evidence Region", Work Package 010) don't have to re-derive it from
+  /// [FoundationServiceState.candidates].
+  KnowledgeCandidate addKnowledgeCandidate({
+    required KnowledgeCandidateType type,
+    required String name,
+    String description = '',
+    String notes = '',
+    String author = '',
+    List<String> tags = const [],
+  }) {
     if (state.knowledgeSession == null) {
       throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding candidates.');
     }
@@ -543,17 +574,30 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       type: type,
       name: name.trim(),
       description: description.trim(),
+      notes: notes.trim(),
+      author: author.trim(),
+      tags: tags,
       createdTime: DateTime.now(),
     );
     state = state.copyWith(candidates: [...state.candidates, candidate]);
     _recordDecision(candidate.id, candidate.name, ReviewDecisionKind.created);
     unawaited(_persistActiveSession());
+    return candidate;
   }
 
-  /// Edits an existing candidate's type/name/description. Throws
-  /// [KnowledgeValidationException] for an empty or duplicate name
-  /// (excluding the candidate being edited from that check).
-  void editKnowledgeCandidate(String candidateId, {KnowledgeCandidateType? type, String? name, String? description}) {
+  /// Edits an existing candidate's type/name/description/notes/author/
+  /// tags. Throws [KnowledgeValidationException] for an empty or
+  /// duplicate name (excluding the candidate being edited from that
+  /// check).
+  void editKnowledgeCandidate(
+    String candidateId, {
+    KnowledgeCandidateType? type,
+    String? name,
+    String? description,
+    String? notes,
+    String? author,
+    List<String>? tags,
+  }) {
     if (name != null) {
       KnowledgeSessionService.validateCandidateName(name, state.candidates, excludingId: candidateId);
     }
@@ -565,6 +609,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           type: type,
           name: name?.trim(),
           description: description?.trim(),
+          notes: notes?.trim(),
+          author: author?.trim(),
+          tags: tags,
           modifiedTime: DateTime.now(),
         );
         candidates.add(updated);
@@ -578,6 +625,40 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     );
     if (updated != null) _recordDecision(updated.id, updated.name, ReviewDecisionKind.edited);
     unawaited(_persistActiveSession());
+  }
+
+  /// Duplicates a candidate (Work Package 010 Candidate List:
+  /// "Duplicate"). Deliberately does **not** call
+  /// [KnowledgeSessionService.validateCandidateName] — unlike New/Edit,
+  /// the Candidate List's Duplicate action is meant to allow same-named
+  /// copies, surfaced afterward as a non-blocking duplicate-name finding
+  /// in [FoundationServiceState.candidateValidation] rather than
+  /// rejected outright. A no-op returning `null` if [candidateId]
+  /// doesn't exist.
+  KnowledgeCandidate? duplicateKnowledgeCandidate(String candidateId) {
+    KnowledgeCandidate? original;
+    for (final candidate in state.candidates) {
+      if (candidate.id == candidateId) {
+        original = candidate;
+        break;
+      }
+    }
+    if (original == null) return null;
+    final now = DateTime.now();
+    final copy = KnowledgeCandidate(
+      id: KnowledgeSessionService.generateId('candidate'),
+      type: original.type,
+      name: original.name,
+      description: original.description,
+      notes: original.notes,
+      author: original.author,
+      tags: original.tags,
+      createdTime: now,
+    );
+    state = state.copyWith(candidates: [...state.candidates, copy]);
+    _recordDecision(copy.id, copy.name, ReviewDecisionKind.created);
+    unawaited(_persistActiveSession());
+    return copy;
   }
 
   /// Accepts a candidate (Engineering Review: Accept).
@@ -635,13 +716,27 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final remainingLinks = state.evidenceLinks.where((link) => link.candidateId != candidateId).toList();
     final selectedLinkRemoved =
         state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
+    // Work Package 010: a Procedure's steps and a Specification's
+    // details are meaningless once their owning candidate is gone —
+    // cascaded the same way Evidence Links already are above.
+    final remainingSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
+    final selectedStepRemoved =
+        state.selectedProcedureStep != null && !remainingSteps.any((step) => step.id == state.selectedProcedureStep!.id);
+    final openProcedureRemoved = state.openProcedure?.id == candidateId;
+    final remainingSpecificationDetails = state.specificationDetails
+        .where((details) => details.candidateId != candidateId)
+        .toList();
     state = state.copyWith(
       candidates: state.candidates.where((candidate) => candidate.id != candidateId).toList(),
       relationshipCandidates: remainingRelationships,
       evidenceLinks: remainingLinks,
+      procedureSteps: remainingSteps,
+      specificationDetails: remainingSpecificationDetails,
       clearSelectedCandidate: state.selectedCandidate?.id == candidateId,
       clearSelectedRelationshipCandidate: selectedRelationshipRemoved,
       clearSelectedEvidenceLink: selectedLinkRemoved,
+      clearSelectedProcedureStep: selectedStepRemoved || openProcedureRemoved,
+      clearOpenProcedure: openProcedureRemoved,
     );
     _recordDecision(candidateId, removedName, ReviewDecisionKind.deleted);
     unawaited(_persistActiveSession());
@@ -657,6 +752,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -760,6 +856,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -869,6 +966,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedEvidenceLink: true,
       clearCurrentPage: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -1013,6 +1111,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceLink: true,
+      clearSelectedProcedureStep: true,
     );
   }
 
@@ -1105,6 +1204,244 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ],
       );
     }
+    unawaited(_persistActiveSession());
+  }
+
+  // ---------------------------------------------------------------------
+  // Procedure Builder (Work Package 010 STUDIO-TASK-000023)
+  // ---------------------------------------------------------------------
+
+  /// Opens the Procedure Builder for [candidateId] (Work Package 010's
+  /// "Current Procedure"). Mirrors [selectSourceMaterial]/
+  /// [openSourceDocument]'s split — [FoundationServiceState.openProcedure]
+  /// stays set independent of [FoundationServiceState.selectedCandidate]
+  /// so the docked Property Inspector can keep reflecting whichever step
+  /// is selected inside the (non-blocking) Procedure Builder dialog.
+  /// Throws [KnowledgeValidationException] if [candidateId] doesn't
+  /// exist or isn't a Procedure candidate.
+  void openProcedureBuilder(String candidateId) {
+    KnowledgeCandidate? candidate;
+    for (final entry in state.candidates) {
+      if (entry.id == candidateId) {
+        candidate = entry;
+        break;
+      }
+    }
+    if (candidate == null || candidate.type != KnowledgeCandidateType.procedure) {
+      throw const KnowledgeValidationException('Only a Procedure candidate can be opened in the Procedure Builder.');
+    }
+    state = state.copyWith(openProcedure: candidate);
+  }
+
+  /// Closes the Procedure Builder (Work Package 010).
+  void closeProcedureBuilder() {
+    state = state.copyWith(clearOpenProcedure: true, clearSelectedProcedureStep: true);
+  }
+
+  /// Appends a new step to [candidateId]'s Procedure (Work Package 010:
+  /// "Insert step"). Throws [KnowledgeValidationException] for an empty
+  /// title.
+  ProcedureStep addProcedureStep({
+    required String candidateId,
+    required String title,
+    String description = '',
+    String notes = '',
+  }) {
+    KnowledgeSessionService.validateProcedureStepTitle(title);
+    final step = ProcedureStep(
+      id: KnowledgeSessionService.generateId('step'),
+      candidateId: candidateId,
+      title: title.trim(),
+      description: description.trim(),
+      notes: notes.trim(),
+      createdTime: DateTime.now(),
+    );
+    state = state.copyWith(procedureSteps: [...state.procedureSteps, step]);
+    unawaited(_persistActiveSession());
+    return step;
+  }
+
+  /// Edits a step's title/description/notes. Throws
+  /// [KnowledgeValidationException] for an empty title.
+  void updateProcedureStep(String stepId, {String? title, String? description, String? notes}) {
+    if (title != null) KnowledgeSessionService.validateProcedureStepTitle(title);
+    ProcedureStep? updated;
+    final steps = <ProcedureStep>[];
+    for (final step in state.procedureSteps) {
+      if (step.id == stepId) {
+        updated = step.copyWith(
+          title: title?.trim(),
+          description: description?.trim(),
+          notes: notes?.trim(),
+          modifiedTime: DateTime.now(),
+        );
+        steps.add(updated);
+      } else {
+        steps.add(step);
+      }
+    }
+    state = state.copyWith(
+      procedureSteps: steps,
+      selectedProcedureStep: state.selectedProcedureStep?.id == stepId ? updated : null,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Sets which Knowledge Candidates/Evidence Regions a step references
+  /// (Work Package 010: "Each step may reference: Knowledge Candidates
+  /// [and] Evidence Regions").
+  void setProcedureStepReferences(
+    String stepId, {
+    List<String>? referencedCandidateIds,
+    List<String>? referencedRegionIds,
+  }) {
+    ProcedureStep? updated;
+    final steps = <ProcedureStep>[];
+    for (final step in state.procedureSteps) {
+      if (step.id == stepId) {
+        updated = step.copyWith(
+          referencedCandidateIds: referencedCandidateIds,
+          referencedRegionIds: referencedRegionIds,
+          modifiedTime: DateTime.now(),
+        );
+        steps.add(updated);
+      } else {
+        steps.add(step);
+      }
+    }
+    state = state.copyWith(
+      procedureSteps: steps,
+      selectedProcedureStep: state.selectedProcedureStep?.id == stepId ? updated : null,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Deletes a step (Work Package 010: "Delete step").
+  void deleteProcedureStep(String stepId) {
+    state = state.copyWith(
+      procedureSteps: state.procedureSteps.where((step) => step.id != stepId).toList(),
+      clearSelectedProcedureStep: state.selectedProcedureStep?.id == stepId,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Duplicates a step, inserting the copy immediately after the
+  /// original within its candidate's step order (Work Package 010:
+  /// "Duplicate step"). A no-op returning `null` if [stepId] doesn't
+  /// exist.
+  ProcedureStep? duplicateProcedureStep(String stepId) {
+    final candidateSteps = <ProcedureStep>[];
+    ProcedureStep? original;
+    String? candidateId;
+    for (final step in state.procedureSteps) {
+      if (step.id == stepId) {
+        original = step;
+        candidateId = step.candidateId;
+      }
+    }
+    if (original == null || candidateId == null) return null;
+    final now = DateTime.now();
+    final copy = ProcedureStep(
+      id: KnowledgeSessionService.generateId('step'),
+      candidateId: candidateId,
+      title: original.title,
+      description: original.description,
+      notes: original.notes,
+      referencedCandidateIds: original.referencedCandidateIds,
+      referencedRegionIds: original.referencedRegionIds,
+      createdTime: now,
+    );
+    for (final step in state.procedureSteps) {
+      if (step.candidateId != candidateId) continue;
+      candidateSteps.add(step);
+    }
+    final insertAt = candidateSteps.indexWhere((step) => step.id == stepId) + 1;
+    candidateSteps.insert(insertAt, copy);
+    final otherSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
+    state = state.copyWith(procedureSteps: [...otherSteps, ...candidateSteps]);
+    unawaited(_persistActiveSession());
+    return copy;
+  }
+
+  /// Moves a step to [newIndex] within its candidate's step order (Work
+  /// Package 010: "Drag-and-drop reordering"). Throws
+  /// [KnowledgeValidationException] for an out-of-range [newIndex] (Work
+  /// Package 010 Error Handling: "Invalid procedure ordering") — array
+  /// position is this model's only ordering signal, so an out-of-range
+  /// target is the one way an invalid ordering can be requested.
+  void reorderProcedureStep(String stepId, int newIndex) {
+    ProcedureStep? target;
+    for (final step in state.procedureSteps) {
+      if (step.id == stepId) target = step;
+    }
+    if (target == null) return;
+    final candidateId = target.candidateId;
+    final candidateSteps = state.procedureSteps.where((step) => step.candidateId == candidateId).toList();
+    if (newIndex < 0 || newIndex >= candidateSteps.length) {
+      throw const KnowledgeValidationException('Cannot move a step outside the procedure\'s step list.');
+    }
+    candidateSteps.removeWhere((step) => step.id == stepId);
+    candidateSteps.insert(newIndex, target);
+    final otherSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
+    state = state.copyWith(procedureSteps: [...otherSteps, ...candidateSteps]);
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects a Procedure Step, switching the Property Inspector to
+  /// Procedure Step mode. Clears every other selection, but — like
+  /// [selectSourceMaterial] leaving [openSourceDocument] untouched —
+  /// does *not* clear [FoundationServiceState.openProcedure], so the
+  /// Procedure Builder stays open while its own step selection changes.
+  void selectProcedureStep(ProcedureStep step) {
+    state = state.copyWith(
+      selectedProcedureStep: step,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
+    );
+  }
+
+  /// Clears the current Procedure Step selection.
+  void clearProcedureStepSelection() {
+    state = state.copyWith(clearSelectedProcedureStep: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Specifications (Work Package 010 STUDIO-TASK-000024)
+  // ---------------------------------------------------------------------
+
+  /// Creates or replaces [candidateId]'s [SpecificationDetails] (Work
+  /// Package 010: "Each Specification supports: Type, Value, Unit,
+  /// Notes"). Throws [KnowledgeValidationException] for an empty value
+  /// or unit (Error Handling: "Invalid specifications, Invalid units").
+  void setSpecificationDetails({
+    required String candidateId,
+    required SpecificationType specType,
+    required String value,
+    required String unit,
+    String notes = '',
+  }) {
+    KnowledgeSessionService.validateSpecificationDetails(value: value, unit: unit);
+    final existing = state.specificationDetails.where((entry) => entry.candidateId == candidateId);
+    final now = DateTime.now();
+    final details = SpecificationDetails(
+      candidateId: candidateId,
+      specType: specType,
+      value: value.trim(),
+      unit: unit.trim(),
+      notes: notes.trim(),
+      createdTime: existing.isEmpty ? now : existing.first.createdTime,
+      modifiedTime: existing.isEmpty ? null : now,
+    );
+    state = state.copyWith(
+      specificationDetails: [
+        ...state.specificationDetails.where((entry) => entry.candidateId != candidateId),
+        details,
+      ],
+    );
     unawaited(_persistActiveSession());
   }
 
