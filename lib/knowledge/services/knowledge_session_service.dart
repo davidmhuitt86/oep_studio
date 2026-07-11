@@ -379,6 +379,13 @@ abstract final class KnowledgeSessionService {
       // "duplicating one shouldn't either" when nothing actually
       // changed. See `docs/OCR_PIPELINE.md` § OCR Cache.
       ocrPageResults: original.ocrPageResults,
+      // Same reasoning as ocrPageResults directly above: each entity's
+      // own sourceFingerprint still matches the duplicate's byte-
+      // identical copied files, so re-extraction is unnecessary, and
+      // carrying accepted/ignored entities over unchanged means a
+      // duplicate's already-accepted entities correctly still point at
+      // the same (also duplicated-unchanged) Knowledge Candidate.
+      engineeringEntities: original.engineeringEntities,
     );
   }
 }

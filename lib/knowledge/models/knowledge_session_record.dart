@@ -1,4 +1,5 @@
 import 'commit_report.dart';
+import 'engineering_entity.dart';
 import 'evidence_link.dart';
 import 'evidence_region.dart';
 import 'knowledge_candidate.dart';
@@ -33,6 +34,7 @@ class KnowledgeSessionRecord {
     this.specificationDetails = const [],
     this.commitReports = const [],
     this.ocrPageResults = const [],
+    this.engineeringEntities = const [],
   });
 
   final KnowledgeSession session;
@@ -73,6 +75,13 @@ class KnowledgeSessionRecord {
   /// `docs/OCR_PIPELINE.md` § OCR Cache.
   final List<OcrPageResult> ocrPageResults;
 
+  /// Engineering Entities extracted from this session's OCR results
+  /// (Work Package 014 STUDIO-TASK-000038) — "Entities are suggestions
+  /// only," persisted alongside their review status
+  /// ([EngineeringEntityStatus]) so an engineer's Accept/Ignore
+  /// decisions survive a restart the same way `ReviewDecision`s do.
+  final List<EngineeringEntity> engineeringEntities;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -87,6 +96,7 @@ class KnowledgeSessionRecord {
     'specificationDetails': specificationDetails.map((details) => details.toJson()).toList(),
     'commitReports': commitReports.map((report) => report.toJson()).toList(),
     'ocrPageResults': ocrPageResults.map((result) => result.toJson()).toList(),
+    'engineeringEntities': engineeringEntities.map((entity) => entity.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -105,6 +115,7 @@ class KnowledgeSessionRecord {
     final specificationDetailsJson = json['specificationDetails'] as List<dynamic>? ?? const [];
     final commitReportsJson = json['commitReports'] as List<dynamic>? ?? const [];
     final ocrPageResultsJson = json['ocrPageResults'] as List<dynamic>? ?? const [];
+    final engineeringEntitiesJson = json['engineeringEntities'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -137,6 +148,9 @@ class KnowledgeSessionRecord {
       ],
       ocrPageResults: [
         for (final entry in ocrPageResultsJson) OcrPageResult.fromJson(entry as Map<String, dynamic>),
+      ],
+      engineeringEntities: [
+        for (final entry in engineeringEntitiesJson) EngineeringEntity.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

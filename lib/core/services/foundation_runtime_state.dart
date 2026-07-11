@@ -3,6 +3,9 @@ import '../../knowledge/models/candidate_provenance.dart';
 import '../../knowledge/models/candidate_validation_result.dart';
 import '../../knowledge/models/commit_plan.dart';
 import '../../knowledge/models/commit_report.dart';
+import '../../knowledge/models/engineering_entity.dart';
+import '../../knowledge/models/engineering_pattern.dart';
+import '../../knowledge/models/entity_validation_result.dart';
 import '../../knowledge/models/evidence_link.dart';
 import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
@@ -20,6 +23,8 @@ import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/services/commit_plan_service.dart';
 import '../../knowledge/services/dependency_service.dart';
+import '../../knowledge/services/entity_validation_service.dart';
+import '../../knowledge/services/engineering_pattern_library.dart';
 import '../../knowledge/services/knowledge_graph_service.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../../knowledge/services/provenance_service.dart';
@@ -37,15 +42,15 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-013): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-014): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
 /// List, Current Relationship Candidate List, Current Commit Plan,
 /// Current Commit Report, Current Source Document/Page, Current Evidence
 /// Region List, Current Evidence Link List, Current Page Selection List,
-/// OCR state/OCR overlay visibility (Work Package 013), and Current
-/// Selection
+/// OCR state/OCR overlay visibility (Work Package 013), Current
+/// Entity/Pattern/Validation (Work Package 014), and Current Selection
 /// (of an object, a relationship, a Knowledge Candidate, a Relationship
 /// Candidate, a Source Material, or an Evidence Region — never more than
 /// one at once). Immutable; widgets watch this through
@@ -93,6 +98,8 @@ class FoundationServiceState {
     this.ocrProcessingStatus = const {},
     this.ocrOverlayVisible = true,
     this.ocrErrorMessage,
+    this.engineeringEntities = const [],
+    this.selectedEntity,
   });
 
   final FoundationConnectionPhase phase;
@@ -324,6 +331,19 @@ class FoundationServiceState {
   /// and does not stop the rest of the document from processing.
   final String? ocrErrorMessage;
 
+  /// Engineering Entities extracted from this session's OCR results
+  /// (Work Package 014 STUDIO-TASK-000038), persisted alongside their
+  /// review status. "Entities are suggestions only" — never an
+  /// Engineering Object, never a Knowledge Candidate, until an engineer
+  /// explicitly accepts one. See `docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+  final List<EngineeringEntity> engineeringEntities;
+
+  /// The Engineering Entity currently selected, if any (Work Package
+  /// 014 Connection Manager: "Current Entity") — switches the Property
+  /// Inspector to Engineering Entity mode. Mutually exclusive with
+  /// every other selection field.
+  final EngineeringEntity? selectedEntity;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -527,6 +547,38 @@ class FoundationServiceState {
     return successful.map((result) => result.averageConfidence).reduce((a, b) => a + b) / successful.length;
   }
 
+  /// [sourceId]'s extracted Engineering Entities, sorted by page then
+  /// character position (Work Package 014 — the Entity Review
+  /// Workspace's own natural reading order, and the reason no separate
+  /// sort-by-position UI control is needed for the default view).
+  List<EngineeringEntity> engineeringEntitiesForSource(String sourceId) {
+    final entities = engineeringEntities.where((entity) => entity.sourceId == sourceId).toList()
+      ..sort((a, b) {
+        final pageCompare = a.page.compareTo(b.page);
+        return pageCompare != 0 ? pageCompare : a.characterStart.compareTo(b.characterStart);
+      });
+    return entities;
+  }
+
+  /// The Current Validation State for every extracted Engineering
+  /// Entity (Work Package 014 Connection Manager: "Current
+  /// Validation"), keyed by entity id. Derived — see
+  /// `EntityValidationService`; "No automatic correction" extends to
+  /// "no automatic caching that could go stale."
+  Map<String, EntityValidationResult> get entityValidation =>
+      EntityValidationService.computeValidation(entities: engineeringEntities);
+
+  /// The `EngineeringPattern` that produced [entityId]'s entity, if any
+  /// (Work Package 014 Connection Manager: "Current Pattern") —
+  /// resolved from the static `EngineeringPatternLibrary` by the
+  /// entity's own recorded `matchedPatternId`, never re-derived by
+  /// re-matching.
+  EngineeringPattern? patternFor(String entityId) {
+    final matches = engineeringEntities.where((entity) => entity.id == entityId);
+    if (matches.isEmpty) return null;
+    return EngineeringPatternLibrary.byId(matches.first.matchedPatternId);
+  }
+
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
     FoundationRuntimeState? runtimeState,
@@ -589,6 +641,9 @@ class FoundationServiceState {
     bool? ocrOverlayVisible,
     String? ocrErrorMessage,
     bool clearOcrErrorMessage = false,
+    List<EngineeringEntity>? engineeringEntities,
+    EngineeringEntity? selectedEntity,
+    bool clearSelectedEntity = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -643,6 +698,8 @@ class FoundationServiceState {
       ocrProcessingStatus: ocrProcessingStatus ?? this.ocrProcessingStatus,
       ocrOverlayVisible: ocrOverlayVisible ?? this.ocrOverlayVisible,
       ocrErrorMessage: clearOcrErrorMessage ? null : (ocrErrorMessage ?? this.ocrErrorMessage),
+      engineeringEntities: engineeringEntities ?? this.engineeringEntities,
+      selectedEntity: clearSelectedEntity ? null : (selectedEntity ?? this.selectedEntity),
     );
   }
 }

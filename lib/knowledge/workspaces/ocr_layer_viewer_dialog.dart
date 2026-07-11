@@ -15,6 +15,7 @@ import '../models/source_material.dart';
 import '../models/source_material_type.dart';
 import '../services/ocr_search_service.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'entity_review_workspace_dialog.dart';
 
 /// The OCR Layer Viewer (Work Package 013 STUDIO-TASK-000035): "Display:
 /// Original page, OCR overlay, Confidence heat map, Toggle overlay.
@@ -28,14 +29,22 @@ import '../widgets/knowledge_placeholder.dart';
 /// Session Graph) already set for a substantial new interactive surface.
 /// Opened per Source Material — "OCR augments Source Material only,"
 /// there is no session-wide or cross-document view here.
-Future<void> showOcrLayerViewerDialog(BuildContext context, {required SourceMaterial source}) {
-  return showDialog<void>(context: context, builder: (context) => _OcrLayerViewerDialog(source: source));
+Future<void> showOcrLayerViewerDialog(BuildContext context, {required SourceMaterial source, int? initialPage}) {
+  return showDialog<void>(
+    context: context,
+    builder: (context) => _OcrLayerViewerDialog(source: source, initialPage: initialPage),
+  );
 }
 
 class _OcrLayerViewerDialog extends ConsumerStatefulWidget {
-  const _OcrLayerViewerDialog({required this.source});
+  const _OcrLayerViewerDialog({required this.source, this.initialPage});
 
   final SourceMaterial source;
+
+  /// Opens directly on this page instead of page 1 — used by the
+  /// Entity Review Workspace's "Navigate to source" (Work Package 014
+  /// STUDIO-TASK-000039).
+  final int? initialPage;
 
   @override
   ConsumerState<_OcrLayerViewerDialog> createState() => _OcrLayerViewerDialogState();
@@ -44,7 +53,7 @@ class _OcrLayerViewerDialog extends ConsumerStatefulWidget {
 class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
   static const _displayWidth = 860.0;
 
-  int _currentPage = 1;
+  late int _currentPage = widget.initialPage ?? 1;
   bool _heatMapEnabled = false;
   final _searchController = TextEditingController();
   List<OcrSearchMatch> _matches = const [];
@@ -104,6 +113,13 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
     }
   }
 
+  // Tracks the last Engineering Entity this viewer auto-navigated to,
+  // so a selection made in the Entity Review Workspace ("Navigate to
+  // source," Work Package 014 STUDIO-TASK-000039) is followed exactly
+  // once rather than on every rebuild — mirrors `PdfSourceViewer`'s own
+  // `_lastNavigatedRegionId` pattern for Evidence Regions.
+  String? _lastNavigatedEntityId;
+
   @override
   Widget build(BuildContext context) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
@@ -114,6 +130,22 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
     final resultsForCurrentPage = results.where((r) => r.page == _currentPage);
     final currentResult = resultsForCurrentPage.isEmpty ? null : resultsForCurrentPage.first;
     final currentMatch = _currentMatchIndex == null ? null : _matches[_currentMatchIndex!];
+
+    final selectedEntity = foundation.selectedEntity;
+    if (selectedEntity != null &&
+        selectedEntity.sourceId == widget.source.id &&
+        selectedEntity.id != _lastNavigatedEntityId) {
+      _lastNavigatedEntityId = selectedEntity.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _currentPage = selectedEntity.page);
+        if (widget.source.type == SourceMaterialType.pdf && _pdfController.isReady) {
+          _pdfController.goToPage(pageNumber: selectedEntity.page);
+        }
+      });
+    } else if (selectedEntity == null) {
+      _lastNavigatedEntityId = null;
+    }
 
     return Dialog(
       backgroundColor: StudioColors.surfaceRaised,
@@ -133,6 +165,11 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: StudioColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Extract Entities',
+                    icon: const Icon(Icons.rule_outlined, size: 18),
+                    onPressed: () => showEntityReviewWorkspaceDialog(context, source: widget.source),
                   ),
                   IconButton(
                     tooltip: 'Close',
@@ -194,6 +231,7 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
                       : const {},
                   displayWidth: _displayWidth,
                   pdfController: _pdfController,
+                  initialPage: widget.initialPage,
                 ),
               },
             ),
@@ -354,6 +392,7 @@ class _PageView extends StatelessWidget {
     required this.highlightedWordIndices,
     required this.displayWidth,
     required this.pdfController,
+    this.initialPage,
   });
 
   final SourceMaterial source;
@@ -365,6 +404,12 @@ class _PageView extends StatelessWidget {
   final double displayWidth;
   final PdfViewerController pdfController;
 
+  /// STUDIO-TASK-000039's "Navigate to source" — opens the viewer
+  /// directly on this page (only honored on first load, like `pdfrx`'s
+  /// own `initialPageNumber`; explicit page changes afterward go
+  /// through [pdfController] instead).
+  final int? initialPage;
+
   @override
   Widget build(BuildContext context) {
     if (source.type == SourceMaterialType.pdf) {
@@ -372,6 +417,7 @@ class _PageView extends StatelessWidget {
         source.localPath,
         key: ValueKey('ocr-pdf-viewer-${source.id}'),
         controller: pdfController,
+        initialPageNumber: initialPage ?? 1,
         params: PdfViewerParams(
           pageOverlaysBuilder: (context, pageRectInViewer, pdfPage) {
             if (pdfPage.pageNumber != page || !overlayVisible || result == null) return const [];

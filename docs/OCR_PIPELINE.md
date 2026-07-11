@@ -18,6 +18,13 @@ anticipated this extension — its own "Future Expansion" section names
 to existing session files," which this work package's persistence
 design honors (see § OCR Cache).
 
+Work Package 014 (Engineering Entity Extraction) builds one layer on
+top of this OCR text: deterministic regex pattern matching recognizes
+engineering values (torque specs, part numbers, voltages, and eleven
+more) inside already-OCR'd text, using the exact same line-grouping and
+cache-fingerprint conventions this document describes. See
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+
 ---
 
 ## OCR Architecture

@@ -3136,3 +3136,227 @@ one phrase) and none constituted the kind of genuine, irreconcilable
 architectural conflict this work package's instructions say to stop
 for.
 
+## Work Package 014 — Knowledge Studio (Engineering Entity Extraction)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000038 — Entity Extraction Engine — Complete
+* STUDIO-TASK-000039 — Entity Review Workspace — Complete
+* STUDIO-TASK-000040 — Pattern Library — Complete
+* STUDIO-TASK-000041 — Entity Validation — Complete
+
+### What Exists
+
+Continues the Work Package 007-013 `lib/knowledge/` module - Engineering
+Entities are Workspace artifacts extracted from OCR evidence, one layer
+above OCR text (SDD-015 Layer 2), never a Knowledge Candidate until
+explicit engineer acceptance. Full detail in
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+
+* `lib/knowledge/models/engineering_entity_type.dart` (new) - 14-value
+  enum (Torque/Voltage/Resistance/Pressure/Temperature/Dimension/
+  Fastener Size/Part Number/Tool Reference/Fluid Specification/Fuse
+  Rating/Connector Identifier/Wire Color/Wire Gauge), each carrying a
+  label, icon, and default `KnowledgeCandidateType`.
+* `lib/knowledge/models/engineering_entity_status.dart` (new) -
+  `pending`/`accepted`/`ignored`, deliberately distinct vocabulary from
+  `KnowledgeCandidateStatus`'s `pending`/`accepted`/`rejected`.
+* `lib/knowledge/models/engineering_entity.dart` (new) - the entity
+  model: id/type/matched pattern id/extracted text/normalized value/
+  source id/page/bounding box/confidence/character range/source
+  fingerprint/extracted time/status/created-candidate id.
+* `lib/knowledge/models/engineering_pattern.dart` (new) - a pure data
+  class (id/type/label/regex/normalize function), no UI dependency.
+* `lib/knowledge/models/entity_validation_result.dart` (new) - reuses
+  `ValidationSeverity` from `candidate_validation_result.dart`.
+* `lib/knowledge/services/engineering_pattern_library.dart` (new) - the
+  static, data-driven pattern list; 17 patterns covering all 14 entity
+  types.
+* `lib/knowledge/services/engineering_entity_extraction_service.dart`
+  (new, pure) - line-scoped regex matching over OCR text, with
+  page-level cache reuse (preserves accept/ignore status) mirroring
+  `OcrCacheService`'s own fingerprint-reuse contract.
+* `lib/knowledge/services/entity_validation_service.dart` (new, pure) -
+  duplicate/malformed-unit/impossible-value/low-confidence detection.
+* `lib/knowledge/models/knowledge_session_record.dart` - extended with
+  `engineeringEntities`, backward-compatible default `[]`.
+* `lib/knowledge/services/knowledge_session_service.dart` -
+  `buildDuplicate` carries `engineeringEntities` over unchanged (same
+  content-hash-survives-file-copy reasoning as `ocrPageResults`).
+* `lib/core/services/foundation_runtime_state.dart` - `engineeringEntities`
+  (persisted), `selectedEntity` (the ninth mutually-exclusive selection
+  field - added to all 7 pre-existing `select*` methods), plus
+  `engineeringEntitiesForSource`/`entityValidation`/`patternFor` derived
+  getters.
+* `lib/core/services/foundation_runtime_service.dart` -
+  `extractEntitiesForSource` (throws if no OCR evidence exists yet),
+  `selectEntity`/`clearEntitySelection`, `acceptEntity` (creates a
+  Knowledge Candidate via the existing `addKnowledgeCandidate`),
+  `ignoreEntity`; `engineeringEntities` wired through
+  create/close/open/archive/persist/duplicate, and cascaded on
+  `removeSourceMaterial`.
+* `lib/knowledge/workspaces/entity_review_workspace_dialog.dart` (new) -
+  the Entity Review Workspace: type/status filter, sort, search,
+  per-row Accept/Ignore/Navigate-to-Source.
+* `lib/knowledge/workspaces/ocr_layer_viewer_dialog.dart` - a new
+  "Extract Entities" toolbar button; extended with an `initialPage`
+  parameter and a `selectedEntity`-watching auto-navigate effect for
+  "Navigate to Source."
+* `lib/knowledge/inspector/engineering_entity_properties.dart` (new) -
+  the Property Inspector's Engineering Entity mode (Entity fields,
+  Pattern Match section, Source Context section, Validation section).
+* `lib/shared/widgets/property_inspector_panel.dart` - the
+  mutually-exclusive selection switch extended from 8 to 9 cases.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: no AI, no LLMs, no
+machine learning, no automatic engineering interpretation beyond
+deterministic pattern matching. Pattern editing/authoring through the
+UI does not exist - the pattern library is a static, code-defined list
+("Patterns shall be configurable" is read as an internal/data-driven
+design property, not a UI requirement this work package's own task list
+names). `oep_foundation`/the Public C API are untouched.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      engineering_entity_type.dart          New
+      engineering_entity_status.dart        New
+      engineering_entity.dart               New
+      engineering_pattern.dart              New
+      entity_validation_result.dart         New
+      knowledge_session_record.dart         Extended (engineeringEntities)
+    services/
+      engineering_pattern_library.dart      New
+      engineering_entity_extraction_service.dart  New
+      entity_validation_service.dart        New
+      knowledge_session_service.dart        Extended (buildDuplicate)
+    workspaces/
+      entity_review_workspace_dialog.dart   New
+      ocr_layer_viewer_dialog.dart           Extended (Extract Entities button, initialPage, navigate effect)
+    inspector/
+      engineering_entity_properties.dart    New
+  core/
+    services/
+      foundation_runtime_state.dart         Extended (entity state + getters)
+      foundation_runtime_service.dart       Extended (extractEntitiesForSource etc.)
+  shared/
+    widgets/
+      property_inspector_panel.dart         Extended (Engineering Entity mode)
+docs/
+  ENGINEERING_ENTITY_EXTRACTION.md          New
+```
+
+### Package Decisions
+
+**No new dependencies.** Pattern matching uses Dart's built-in `RegExp`;
+everything else builds on models and services already present from
+Work Package 013 (`OcrPageResult`/`OcrWord`) and earlier
+(`ValidationSeverity`, `addKnowledgeCandidate`).
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 194/194 passing: all prior tests, plus three new test
+  files (`engineering_pattern_library_test.dart` - pattern coverage for
+  all 14 types plus a determinism check; `engineering_entity_extraction_service_test.dart` -
+  line-spanning extraction, confidence/bounding-box averaging math,
+  cache-reuse-preserves-status, stale-fingerprint-drops-and-refreshes,
+  failed-OCR-page-produces-nothing, cross-source isolation;
+  `entity_validation_service_test.dart` - duplicate detection, per-type
+  impossible-value ranges, malformed/empty values, low-confidence
+  flagging).
+* flutter build windows - succeeded.
+* **Manual verification against real engineering documents.** A
+  synthetic-but-realistic 3-page PDF service manual (torque
+  specifications, a fastener size, a part number, an electrical
+  reference section, an oil-change procedure) was generated with
+  `reportlab`, mirroring Work Package 013's own fixture precedent (not
+  committed). Ground truth was established by rendering the PDF to PNG
+  (`pymupdf`) and running the installed `tesseract 5.4.0.20240606` CLI
+  directly against each page before any Studio code touched them,
+  confirming clean OCR text (with one genuine, real-world OCR misread
+  noted below).
+
+  As in Work Packages 007-013, `computer-use` was confirmed unable to
+  target the compiled `oep_studio.exe`. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test` (added, run against the real compiled
+  app via `flutter test ... -d windows`, then deleted - `pubspec.yaml`'s
+  `integration_test` dev dependency reverted and `pubspec.lock`
+  regenerated), attaching the fixture directly through
+  `FoundationRuntimeNotifier.attachSourceMaterial` (bypassing the native
+  file picker, this project's established precedent).
+
+  The test drove: create a session, attach the PDF fixture, open the
+  OCR Layer Viewer (real Tesseract OCR across all 3 pages), open the
+  Entity Review Workspace (real extraction against the real OCR text),
+  confirm real pattern matches (`"24 Nm"`, `"90915-YZZD4"`, `"12 V"`,
+  `"35 ft-lb"`), confirm a genuine cross-page duplicate (`"35 ft-lb"`
+  appears verbatim on both page 1 and page 3 of the fixture) was
+  correctly flagged by the Validation model, filter by type, search by
+  text, Accept an entity (confirming a Knowledge Candidate was created
+  with the expected type/name), Ignore an entity (confirming OCR
+  evidence was untouched), Navigate to Source (confirming the OCR
+  Layer Viewer jumped to the entity's page), and finally close and
+  reopen the session (confirming accept/ignore status and the created
+  Candidate link both survive a full session reload).
+
+  **Issues found and fixed during this pass:**
+  1. A real regex bug in the Resistance pattern, caught by this work
+     package's own unit tests before manual verification began (not a
+     manual-verification catch): the pattern ended in `\b` immediately
+     after the `Ω` symbol, which is not an ASCII word character, so
+     `\b` never matched at end-of-string/before whitespace - the
+     pattern silently never matched `"4.7kΩ"` at all. Fixed by
+     replacing the trailing `\b` with `(?!\w)`. See
+     `docs/ENGINEERING_ENTITY_EXTRACTION.md` § Pattern Library.
+  2. Two integration-test-script-only issues (not Studio defects): the
+     "OCR Layer Viewer" toolbar button was tapped before `pdfrx`'s
+     asynchronous native rendering had actually mounted it, and two
+     per-row action buttons (Ignore, Navigate to Source) were targeted
+     by list index rather than by row content - `ListView.separated`
+     only builds on-screen items, so an index-based finder silently
+     mis-targets. Fixed by polling for the toolbar's presence before
+     tapping, and by targeting each row's own `InkWell` ancestor by its
+     displayed normalized value instead of an index.
+  3. A genuine, non-synthetic OCR-noise finding, not a bug: the same
+     installed Tesseract engine misread "4.7kOhms" as "4.7kKOhms" (an
+     inserted `K`) on the real rendered fixture page - the Resistance
+     pattern correctly did not match this garbled text, since no
+     pattern exists (or should exist) for a `"kK"` unit prefix. Recorded
+     as the expected, correct behavior of "entity extraction operates
+     only on OCR evidence," not something to special-case around.
+
+### Architectural Observations
+
+See `docs/ENGINEERING_ENTITY_EXTRACTION.md` § Architectural Observations
+for the full account - summarized here:
+
+* **"Initial Pattern Categories" (11) vs. "Detect" (14) - resolved as a
+  non-exhaustive-subset reading, not a hard cap.** All 14 entity types
+  named by STUDIO-TASK-000038's "Detect" list are implemented.
+* **`defaultCandidateType` mapping is grounded in SDD-015's own
+  Specification/Component Model text**, not invented independently.
+* **A real regex bug** (the Resistance pattern's `\b`-after-`Ω` issue)
+  was caught by unit tests, not manual verification - the inverse of
+  Work Package 013's CRLF finding, reinforcing that both verification
+  paths catch different classes of bug.
+* **A real OCR-noise finding** (a genuine Tesseract misread preventing
+  one pattern match) was observed during manual verification and
+  correctly did not produce a false match - recorded as an inherent,
+  expected limitation of pattern-matching-on-OCR-output, not resolved
+  by adding fuzzy matching, which would trade away determinism for a
+  narrow accuracy gain.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available and none constituted the kind of
+genuine, irreconcilable architectural conflict this work package's
+instructions say to stop for.
+

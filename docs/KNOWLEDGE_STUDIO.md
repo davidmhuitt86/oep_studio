@@ -21,7 +21,10 @@ STUDIO-TASK-000033 Commit Report, including Property Inspector Commit
 Plan/Commit Report support); extended again in Work Package 013
 (STUDIO-TASK-000034 OCR Pipeline, STUDIO-TASK-000035 OCR Layer Viewer,
 STUDIO-TASK-000036 Searchable Documents, STUDIO-TASK-000037 OCR
-Session Cache). Validates the architecture defined in SDD-013
+Session Cache); extended again in Work Package 014 (STUDIO-TASK-000038
+Entity Extraction Engine, STUDIO-TASK-000039 Entity Review Workspace,
+STUDIO-TASK-000040 Pattern Library, STUDIO-TASK-000041 Entity
+Validation). Validates the architecture defined in SDD-013
 (Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
 Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
 Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
@@ -34,6 +37,10 @@ into the open Foundation repository — see `docs/REPOSITORY_COMMIT.md`)
 and OCR (Work Package 013 — a real, local Tesseract OCR pipeline that
 augments Source Material with searchable text and positional data,
 never Knowledge Candidates, never Foundation — see `docs/OCR_PIPELINE.md`).
+Work Package 014's Engineering Entity Extraction stays within this same
+no-AI boundary: deterministic regex pattern matching over OCR text,
+never a Knowledge Candidate until explicit engineer acceptance — see
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
 
 For the persisted-file format and the Relationship Candidate model
 reference (including the `KnowledgeCandidateType`/`ObjectCategory`
@@ -49,7 +56,10 @@ model reference and the Work Package 011 architectural findings, see
 Transaction Model/Commit Report reference and the Work Package 012
 architectural findings, see `docs/REPOSITORY_COMMIT.md`. For the OCR
 architecture/cache/overlay/search/confidence model reference and the
-Work Package 013 architectural findings, see `docs/OCR_PIPELINE.md`.
+Work Package 013 architectural findings, see `docs/OCR_PIPELINE.md`. For
+the Engineering Entity/Pattern/Validation model reference and the Work
+Package 014 architectural findings, see
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
 This document covers the workspace layout, session lifecycle, and
 state ownership.
 
@@ -395,19 +405,26 @@ ownership table; as of Work Package 011:
 | `ocrProcessingStatus` | Per-source OCR processing state, ephemeral (Work Package 013's "OCR state") — see `docs/OCR_PIPELINE.md` |
 | `ocrOverlayVisible` | Whether the OCR Layer Viewer's overlay is shown, ephemeral (Work Package 013's "OCR overlay visibility") |
 | `ocrErrorMessage` | The most recent pipeline-level OCR failure, if any (Work Package 013), mirroring `knowledgeStorageError` |
+| `engineeringEntities` | Engineering Entities extracted from this session's OCR results, persisted (Work Package 014) — see `docs/ENGINEERING_ENTITY_EXTRACTION.md` |
+| `selectedEntity` | The Engineering Entity currently selected (Work Package 014) |
+| `engineeringEntitiesForSource(sourceId)` | Derived getter, sorted by page then character start (Work Package 014) |
+| `entityValidation` | Derived getter (Work Package 014) — see `docs/ENGINEERING_ENTITY_EXTRACTION.md` § Validation Model |
+| `patternFor(entityId)` | Derived getter — the `EngineeringPattern` that produced an entity, looked up by its recorded id (Work Package 014) |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
 `knowledgeRelationshipCandidateCount`/`knowledgeEvidenceRegionCount` are
 getters derived from the lists above, not separately stored.
 
-Selection is **seven-way mutually exclusive**: Knowledge Candidate,
-Relationship Candidate, Source Material, Object, Relationship,
-Evidence Region, and — as of Work Package 010 — Procedure Step. Every
-`select*` method clears the other six. The Property Inspector's mode
+Selection is **nine-way mutually exclusive**: Engineering Entity (Work
+Package 014), Knowledge Candidate, Relationship Candidate, Source
+Material, Object, Relationship, Evidence Region, Procedure Step (Work
+Package 010), and — the ninth — nothing selected at all. Every
+`select*` method clears the other eight. The Property Inspector's mode
 order (`property_inspector_panel.dart`):
 
 ```
+selectedEntity? → Engineering Entity mode (Work Package 014)
 selectedEvidenceRegion? → Evidence Region mode
 selectedCandidate? → Knowledge Candidate mode (Specification fields + Validation Status shown as sections when applicable — Work Package 010)
 selectedProcedureStep? → Procedure Step mode (Work Package 010)

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../knowledge/models/engineering_entity.dart';
+import '../../knowledge/models/engineering_entity_status.dart';
 import '../../knowledge/models/evidence_link.dart';
 import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
@@ -22,6 +24,8 @@ import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/models/specification_type.dart';
 import '../../knowledge/services/commit_transaction_service.dart';
+import '../../knowledge/services/engineering_entity_extraction_service.dart';
+import '../../knowledge/services/engineering_pattern_library.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../../knowledge/services/knowledge_session_storage.dart';
 import '../../knowledge/services/ocr_pipeline_service.dart';
@@ -242,6 +246,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -262,6 +267,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -344,6 +350,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrPageResults: const [],
       ocrProcessingStatus: const {},
       ocrOverlayVisible: true,
+      engineeringEntities: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -355,6 +362,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearOpenProcedure: true,
       clearSelectedProcedureStep: true,
       clearOcrErrorMessage: true,
+      clearSelectedEntity: true,
     );
     unawaited(_persistActiveSession());
   }
@@ -391,6 +399,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrPageResults: const [],
       ocrProcessingStatus: const {},
       ocrOverlayVisible: true,
+      engineeringEntities: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -402,6 +411,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearOpenProcedure: true,
       clearSelectedProcedureStep: true,
       clearOcrErrorMessage: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -431,6 +441,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ocrPageResults: record.ocrPageResults,
         ocrProcessingStatus: const {},
         ocrOverlayVisible: true,
+        engineeringEntities: record.engineeringEntities,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -442,6 +453,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearOpenProcedure: true,
         clearSelectedProcedureStep: true,
         clearOcrErrorMessage: true,
+        clearSelectedEntity: true,
       );
     } on KnowledgeValidationException catch (error) {
       state = state.copyWith(knowledgeStorageError: error.message);
@@ -490,6 +502,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           specificationDetails: record.specificationDetails,
           commitReports: record.commitReports,
           ocrPageResults: record.ocrPageResults,
+          engineeringEntities: record.engineeringEntities,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -545,6 +558,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           specificationDetails: state.specificationDetails,
           commitReports: state.commitReports,
           ocrPageResults: state.ocrPageResults,
+          engineeringEntities: state.engineeringEntities,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -778,6 +792,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -882,6 +897,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -951,6 +967,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
     final remainingOcrProcessingStatus = Map<String, OcrProcessingStatus>.from(state.ocrProcessingStatus)
       ..remove(sourceId);
+    final selectedEntityRemoved = state.selectedEntity != null && state.selectedEntity!.sourceId == sourceId;
     state = state.copyWith(
       sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
       evidenceRegions: remainingRegions,
@@ -961,11 +978,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       // Regions/Page Selections already are above.
       ocrPageResults: state.ocrPageResults.where((result) => result.sourceId != sourceId).toList(),
       ocrProcessingStatus: remainingOcrProcessingStatus,
+      // Work Package 014: an Engineering Entity extracted from this
+      // source's OCR is meaningless once the source itself is gone —
+      // same cascade, one layer further.
+      engineeringEntities: state.engineeringEntities.where((entity) => entity.sourceId != sourceId).toList(),
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
       clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
       clearCurrentPage: state.openSourceDocument?.id == sourceId,
       clearSelectedEvidenceRegion: selectedRegionRemoved,
       clearSelectedEvidenceLink: selectedLinkRemoved,
+      clearSelectedEntity: selectedEntityRemoved,
     );
     if (matches.isNotEmpty) {
       await SourceMaterialService.removeFile(matches.first);
@@ -999,6 +1021,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceLink: true,
       clearCurrentPage: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -1144,6 +1167,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceLink: true,
       clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -1433,6 +1457,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
+      clearSelectedEntity: true,
     );
   }
 
@@ -1659,6 +1684,117 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// (mirrors [clearKnowledgeStorageError]).
   void clearOcrErrorMessage() {
     state = state.copyWith(clearOcrErrorMessage: true);
+  }
+
+  // ---------------------------------------------------------------------
+  // Engineering Entity Extraction (Work Package 014)
+  // ---------------------------------------------------------------------
+
+  /// Extracts (or reuses already-extracted) Engineering Entities for
+  /// [sourceId] (STUDIO-TASK-000038). Pure, synchronous, in-memory —
+  /// unlike [runOcrForSource], nothing here calls an external process,
+  /// so there is no "processing" status to track and no `Future` to
+  /// await. Throws [KnowledgeValidationException] if no session is
+  /// active, [sourceId] doesn't exist, or [sourceId] has no successful
+  /// OCR results yet ("Entity extraction operates only on OCR
+  /// evidence" — this work package's own Architecture Rule).
+  void extractEntitiesForSource(String sourceId) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException(
+        'Create or open a Knowledge Curation Session before extracting engineering entities.',
+      );
+    }
+    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This source could not be found.');
+    }
+    final ocrResults = state.ocrResultsForSource(sourceId);
+    if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
+      throw const KnowledgeValidationException('Run OCR on this source before extracting engineering entities.');
+    }
+    final updated = EngineeringEntityExtractionService.extractForSource(
+      source: matches.first,
+      ocrResults: state.ocrPageResults,
+      existingEntities: state.engineeringEntities,
+    );
+    state = state.copyWith(
+      engineeringEntities: [
+        ...state.engineeringEntities.where((entity) => entity.sourceId != sourceId),
+        ...updated,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects an Engineering Entity, switching the Property Inspector to
+  /// Engineering Entity mode. Clears every other selection.
+  void selectEntity(EngineeringEntity entity) {
+    state = state.copyWith(
+      selectedEntity: entity,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
+    );
+  }
+
+  /// Clears the current Engineering Entity selection.
+  void clearEntitySelection() {
+    state = state.copyWith(clearSelectedEntity: true);
+  }
+
+  /// Accepts an entity (STUDIO-TASK-000039: "Acceptance shall create a
+  /// Knowledge Candidate") — the *only* path from an Engineering Entity
+  /// to a Knowledge Candidate; nothing creates one automatically.
+  /// Returns the newly-created candidate. Throws
+  /// [KnowledgeValidationException] if the entity doesn't exist, was
+  /// already accepted, or (via [addKnowledgeCandidate]) if its
+  /// normalized value collides with an existing candidate's name.
+  KnowledgeCandidate acceptEntity(String entityId) {
+    final matches = state.engineeringEntities.where((entity) => entity.id == entityId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This entity could not be found.');
+    }
+    final entity = matches.first;
+    if (entity.isAccepted) {
+      throw const KnowledgeValidationException('This entity has already been accepted.');
+    }
+    final sourceMatches = state.sourceMaterials.where((source) => source.id == entity.sourceId);
+    final sourceName = sourceMatches.isEmpty ? entity.sourceId : sourceMatches.first.originalFileName;
+    final patternLabel = EngineeringPatternLibrary.byId(entity.matchedPatternId)?.label ?? entity.matchedPatternId;
+    final candidate = addKnowledgeCandidate(
+      type: entity.type.defaultCandidateType,
+      name: entity.normalizedValue,
+      description: 'Extracted from "$sourceName", page ${entity.page} (${entity.type.label}).',
+      notes: 'Matched pattern: $patternLabel. Extracted text: "${entity.extractedText}".',
+    );
+    state = state.copyWith(
+      engineeringEntities: [
+        for (final existing in state.engineeringEntities)
+          if (existing.id == entityId)
+            existing.copyWith(status: EngineeringEntityStatus.accepted, createdCandidateId: candidate.id)
+          else
+            existing,
+      ],
+    );
+    unawaited(_persistActiveSession());
+    return candidate;
+  }
+
+  /// Ignores an entity (STUDIO-TASK-000039: "Ignoring shall never
+  /// delete OCR evidence") — only this entity's own status changes;
+  /// [FoundationServiceState.ocrPageResults] is never touched.
+  void ignoreEntity(String entityId) {
+    state = state.copyWith(
+      engineeringEntities: [
+        for (final entity in state.engineeringEntities)
+          if (entity.id == entityId) entity.copyWith(status: EngineeringEntityStatus.ignored) else entity,
+      ],
+    );
+    unawaited(_persistActiveSession());
   }
 
   void _disposeBridge() {

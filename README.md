@@ -9,11 +9,11 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–013 are implemented: Application Shell + Dashboard,
+Work Packages 001–014 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, and — across Work Packages
-007–013 — **Knowledge Studio** (SDD-013). Repository Explorer through
+007–014 — **Knowledge Studio** (SDD-013). Repository Explorer through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -25,7 +25,8 @@ Relationship search against Foundation's Search Engine, in
 Foundation's own result order.
 
 Knowledge Studio, by contrast, remains **Studio-only for everything
-except Repository Commit and OCR** — no AI — but is no longer
+except Repository Commit and OCR** — no AI, no LLMs, no machine
+learning — but is no longer
 in-memory-only. It supports manually-created Knowledge Candidates
 (across ten types) and Relationship Candidates reviewed within a
 Knowledge Curation Session that **persists locally across restarts**
@@ -64,7 +65,16 @@ gains Provenance (Candidate → Evidence Region → Page Selection →
 Source Material) and Dependency (referenced by/references/
 relationships/procedure and specification usage/evidence count/
 validation) tabs, alongside a Session Health Dashboard of informational
-engineering-quality metrics (see `docs/KNOWLEDGE_GRAPH.md`).
+engineering-quality metrics (see `docs/KNOWLEDGE_GRAPH.md`). As of Work
+Package 014, OCR text can be analyzed with deterministic pattern
+matching to recognize fourteen kinds of engineering value (torque
+specs, voltages, part numbers, wire colors, and more) as Engineering
+Entities — Workspace artifacts, one layer above OCR text, never
+Knowledge Candidates until explicit engineer acceptance; an Entity
+Review Workspace supports filter/sort/search/accept/ignore/navigate-
+to-source, and every entity gets a computed Validation (duplicates,
+impossible values, malformed units, low OCR confidence) — see
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
 and *delete* remain unexposed via Foundation from Studio — only
@@ -73,7 +83,8 @@ deletion remain entirely unexposed; Knowledge Studio's AI Suggestions
 and Repository Matches panels remain placeholder content; PDF text
 extraction/selection, non-rectangle Evidence Region shapes, a
 generalized Source-Material-/Page-Selection-level Evidence Link, OCR
-result editing, and true on-screen TIFF preview are out of scope).
+result editing, true on-screen TIFF preview, and Engineering Entity
+pattern editing are out of scope).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -122,5 +133,6 @@ Studio Design Documents live under `docs/`:
 * `KNOWLEDGE_GRAPH.md` — Knowledge Session Graph/Provenance/Dependency/Session Health models
 * `REPOSITORY_COMMIT.md` — Commit Plan/Candidate Conversion/Transaction Model/Commit Report
 * `OCR_PIPELINE.md` — OCR architecture/cache/overlay/search/confidence models
+* `ENGINEERING_ENTITY_EXTRACTION.md` — Pattern engine/Entity model/Pattern library/Validation model/Review workflow
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status
