@@ -98,6 +98,7 @@ class KnowledgeCandidateRow extends StatelessWidget {
               if (validation != null) _ValidationBadge(validation: validation!),
               const SizedBox(width: 6),
               _StatusBadge(status: candidate.status),
+              if (candidate.isCommitted) ...[const SizedBox(width: 6), _CommittedBadge(candidate: candidate)],
               // `padding`/`constraints` shrink each button from Material's
               // default 48x48 tap target — five full-size IconButtons plus
               // the badges above no longer fit this row at the app's
@@ -165,6 +166,24 @@ class _ValidationBadge extends StatelessWidget {
     return Tooltip(
       message: validation.issues.isEmpty ? 'No validation issues.' : validation.issues.join('\n'),
       child: Icon(icon, size: 15, color: color),
+    );
+  }
+}
+
+/// Marks a candidate that has already been committed to Foundation
+/// (Work Package 012) — "Knowledge Candidates remain in the Knowledge
+/// Session after commit," so a committed candidate still shows up here
+/// but should read as already-in-Foundation rather than pending.
+class _CommittedBadge extends StatelessWidget {
+  const _CommittedBadge({required this.candidate});
+
+  final KnowledgeCandidate candidate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Committed to Foundation as ${candidate.committedObjectId}',
+      child: const Icon(Icons.cloud_done_outlined, size: 14, color: StudioColors.info),
     );
   }
 }

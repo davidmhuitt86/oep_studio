@@ -411,3 +411,59 @@ Unlike relationship retrieval, a failed search does not touch
 `showFoundationErrorDialog` (Work Package 006: "If search fails:
 Display a professional error dialog"), per `docs/CONNECTION_MANAGER.md`
 § Error Handling.
+
+---
+
+# Extension (Work Package 012): Object/Relationship Mutation + Transactions
+
+`oep_api.h` gained Object Mutation, Relationship Mutation, Transactions,
+and Batch Mutation (Foundation's own Work Package 014) between Studio's
+Work Packages 011 and 012; `OEP_API_VERSION` moved from 3 to 4. Unlike
+Work Packages 004/006 above, this surface did **not** already exist
+when this work package began — its absence was reported as a hard
+architectural blocker and resolved externally by Foundation adding it
+mid-work-package. See `docs/REPOSITORY_COMMIT.md` § Why Repository
+Commit Was Blocked, Then Unblocked for the full account.
+
+## New Public C API Surface Consumed
+
+* `oep_object_create`
+* `oep_relationship_create`
+* `oep_transaction_begin` / `oep_transaction_commit` /
+  `oep_transaction_rollback` / `oep_transaction_is_active`
+
+**Not consumed**, deliberately: `oep_object_update`/`oep_object_delete`/
+`oep_relationship_update`/`oep_relationship_delete` (Repository Commit
+only needed create), and `oep_batch_create_objects`/
+`oep_batch_create_relationships` (the batch functions can't interleave
+object-then-relationship creation while resolving a same-commit
+object's freshly-assigned id as a relationship endpoint — see
+`docs/REPOSITORY_COMMIT.md` § Transaction Model).
+
+All six are added to `native/foundation_bridge/oep_foundation_bridge.def`.
+
+## New Native Types
+
+No new structs — `oep_object_create`/`oep_relationship_create` populate
+an `oep_object_info_t`/`oep_relationship_info_t` (the same structs
+`EngineeringObjectSummary.fromNative`/`RelationshipSummary.fromNative`
+already decode for the read APIs), so no new native-type declarations
+were needed beyond the function typedefs themselves
+(`OepObjectCreateNative`/`Dart`, `OepRelationshipCreateNative`/`Dart`,
+`OepTransactionBegin/Commit/Rollback/IsActiveNative`/`Dart`).
+
+**New marshaling pattern**: `oep_object_create`'s `const char* const*
+tags` is the first `Pointer<Pointer<Utf8>>` parameter this codebase has
+marshaled — every prior function only ever took single strings.
+`FoundationBridge._allocateTagArray`/`_freeTagArray` handle it,
+including the `tags` may be `NULL` iff `tag_count` is `0` contract.
+
+## New FoundationBridge Methods
+
+`createObject(...)`, `createRelationship(...)`, `beginTransaction()`,
+`commitTransaction()`, `rollbackTransaction()`, `isTransactionActive`
+follow the existing `_assertNotDisposed()` → marshal → `_checkResult(...)`
+→ decode-and-return → `finally { malloc.free(...) }` pattern every
+prior Bridge method uses. See `docs/REPOSITORY_COMMIT.md` § Foundation
+Integration and § Transaction Model for the full reference and the
+orchestration that calls them.

@@ -125,6 +125,8 @@ class PropertyInspectorPanel extends ConsumerWidget {
                 pendingCount: foundation.knowledgePendingCount,
                 relationshipCandidateCount: foundation.knowledgeRelationshipCandidateCount,
                 health: foundation.sessionHealth,
+                commitPlan: foundation.commitPlan,
+                latestCommitReport: foundation.latestCommitReport,
               ),
               _ => const _NoSelection(),
             },

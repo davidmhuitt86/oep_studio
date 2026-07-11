@@ -3,7 +3,9 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 
 import '../models/engineering_object_summary.dart';
+import '../models/object_category.dart';
 import '../models/relationship_summary.dart';
+import '../models/relationship_type.dart';
 import '../models/search_result.dart';
 import 'foundation_bridge_exception.dart';
 import 'oep_api_bindings.dart';
@@ -301,6 +303,164 @@ class FoundationBridge {
       malloc.free(queryPointer);
       malloc.free(resultPointer);
     }
+  }
+
+  /// Creates a new Engineering Object (Work Package 012/Foundation Work
+  /// Package 014's `oep_object_create`, the first write-capable function
+  /// in this API). [name] must not be empty — Foundation's own
+  /// validation rejects it with [FoundationErrorCategory.validation].
+  /// Throws [FoundationBridgeException] if no repository is open or
+  /// Foundation rejects the object. If a transaction is active
+  /// (see [beginTransaction]) and this call fails, Foundation
+  /// automatically rolls the transaction back before the failure is
+  /// returned — the caller does not need to (but safely may) call
+  /// [rollbackTransaction] itself afterward.
+  EngineeringObjectSummary createObject({
+    required ObjectCategory category,
+    required String name,
+    String description = '',
+    String author = '',
+    List<String> tags = const [],
+  }) {
+    _assertNotDisposed();
+    final namePointer = name.toNativeUtf8();
+    final descriptionPointer = description.toNativeUtf8();
+    final authorPointer = author.toNativeUtf8();
+    final tagsPointer = _allocateTagArray(tags);
+    final outObjectPointer = malloc<OepObjectInfoNative>();
+    try {
+      _checkResult(
+        _bindings.objectCreate(
+          _runtime,
+          category.nativeValue,
+          namePointer,
+          descriptionPointer,
+          authorPointer,
+          tagsPointer,
+          tags.length,
+          outObjectPointer,
+        ),
+      );
+      return EngineeringObjectSummary.fromNative(outObjectPointer.ref);
+    } finally {
+      malloc.free(namePointer);
+      malloc.free(descriptionPointer);
+      malloc.free(authorPointer);
+      _freeTagArray(tagsPointer, tags.length);
+      malloc.free(outObjectPointer);
+    }
+  }
+
+  /// Creates a new Relationship between two existing Engineering
+  /// Objects (Foundation Work Package 014's `oep_relationship_create`).
+  /// [objectNamesById] resolves the created relationship's source/
+  /// target display names (see [RelationshipSummary.fromNative]) — the
+  /// caller already knows both names (it just supplied both IDs), so
+  /// this never needs a fresh Current Object List fetch. Throws
+  /// [FoundationBridgeException] if no repository is open, either
+  /// referenced object doesn't exist, or the relationship is otherwise
+  /// invalid (e.g. source equals target). Same automatic-rollback-on-
+  /// failure behavior as [createObject] while a transaction is active.
+  RelationshipSummary createRelationship({
+    required String sourceObjectId,
+    required String targetObjectId,
+    required RelationshipType type,
+    String author = '',
+    String description = '',
+    required Map<String, String> objectNamesById,
+  }) {
+    _assertNotDisposed();
+    final sourcePointer = sourceObjectId.toNativeUtf8();
+    final targetPointer = targetObjectId.toNativeUtf8();
+    final authorPointer = author.toNativeUtf8();
+    final descriptionPointer = description.toNativeUtf8();
+    final outRelationshipPointer = malloc<OepRelationshipInfoNative>();
+    try {
+      _checkResult(
+        _bindings.relationshipCreate(
+          _runtime,
+          sourcePointer,
+          targetPointer,
+          type.nativeValue,
+          authorPointer,
+          descriptionPointer,
+          outRelationshipPointer,
+        ),
+      );
+      return RelationshipSummary.fromNative(outRelationshipPointer.ref, objectNamesById: objectNamesById);
+    } finally {
+      malloc.free(sourcePointer);
+      malloc.free(targetPointer);
+      malloc.free(authorPointer);
+      malloc.free(descriptionPointer);
+      malloc.free(outRelationshipPointer);
+    }
+  }
+
+  /// Begins a transaction (Foundation Work Package 014's
+  /// `oep_transaction_begin`) — "Repository Commit shall execute as one
+  /// logical transaction" (Work Package 012). Only one transaction may
+  /// be active per Runtime; a nested call fails with
+  /// [FoundationErrorCategory.state]. Each mutation still writes
+  /// immediately when called (Foundation's stores have no staged/
+  /// uncommitted write concept); while a transaction is active,
+  /// Foundation additionally records what each successful mutation
+  /// would need to undo it, so [rollbackTransaction] can reverse
+  /// everything performed since this call.
+  void beginTransaction() {
+    _assertNotDisposed();
+    _checkResult(_bindings.transactionBegin(_runtime));
+  }
+
+  /// Commits the active transaction — discards its undo record (every
+  /// mutation within it already persisted; there is nothing further to
+  /// write). Throws [FoundationBridgeException] if no transaction is
+  /// active.
+  void commitTransaction() {
+    _assertNotDisposed();
+    _checkResult(_bindings.transactionCommit(_runtime));
+  }
+
+  /// Rolls back the active transaction, undoing every mutation
+  /// performed since [beginTransaction] in reverse order. Throws
+  /// [FoundationBridgeException] if no transaction is active.
+  void rollbackTransaction() {
+    _assertNotDisposed();
+    _checkResult(_bindings.transactionRollback(_runtime));
+  }
+
+  /// Whether a transaction is currently active on this Runtime.
+  bool get isTransactionActive {
+    _assertNotDisposed();
+    return _bindings.transactionIsActive(_runtime) != 0;
+  }
+
+  /// Allocates a native `const char* const*` array from [tags] — `NULL`
+  /// (not an empty allocation) when [tags] is empty, matching
+  /// `oep_object_create`'s own "`tags` may be NULL iff `tag_count` is 0"
+  /// contract. Each element must be released individually (see
+  /// [_freeTagArray]) since each is its own heap allocation, distinct
+  /// from every other `toNativeUtf8()` call in this file, which only
+  /// ever marshals a single string at a time.
+  Pointer<Pointer<Utf8>> _allocateTagArray(List<String> tags) {
+    if (tags.isEmpty) return nullptr;
+    final array = malloc<Pointer<Utf8>>(tags.length);
+    for (var i = 0; i < tags.length; i++) {
+      array[i] = tags[i].toNativeUtf8();
+    }
+    return array;
+  }
+
+  /// Releases every individual tag string [_allocateTagArray] allocated,
+  /// then the array itself. Safe to call with `array == nullptr` (the
+  /// empty-tags case) — a no-op, mirroring every release function
+  /// `oep_api.h` itself defines.
+  void _freeTagArray(Pointer<Pointer<Utf8>> array, int length) {
+    if (array == nullptr) return;
+    for (var i = 0; i < length; i++) {
+      malloc.free(array[i]);
+    }
+    malloc.free(array);
   }
 
   /// Shuts the Runtime down, closing an open repository first if needed.

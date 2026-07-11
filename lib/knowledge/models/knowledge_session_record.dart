@@ -1,3 +1,4 @@
+import 'commit_report.dart';
 import 'evidence_link.dart';
 import 'evidence_region.dart';
 import 'knowledge_candidate.dart';
@@ -29,6 +30,7 @@ class KnowledgeSessionRecord {
     this.pageSelections = const [],
     this.procedureSteps = const [],
     this.specificationDetails = const [],
+    this.commitReports = const [],
   });
 
   final KnowledgeSession session;
@@ -58,6 +60,11 @@ class KnowledgeSessionRecord {
   /// Package 010 STUDIO-TASK-000024).
   final List<SpecificationDetails> specificationDetails;
 
+  /// The append-only history of Repository Commit attempts against this
+  /// session (Work Package 012 STUDIO-TASK-000033) — "Sessions become
+  /// historical engineering records."
+  final List<CommitReport> commitReports;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -70,6 +77,7 @@ class KnowledgeSessionRecord {
     'pageSelections': pageSelections.map((selection) => selection.toJson()).toList(),
     'procedureSteps': procedureSteps.map((step) => step.toJson()).toList(),
     'specificationDetails': specificationDetails.map((details) => details.toJson()).toList(),
+    'commitReports': commitReports.map((report) => report.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -86,6 +94,7 @@ class KnowledgeSessionRecord {
     final pageSelectionsJson = json['pageSelections'] as List<dynamic>? ?? const [];
     final procedureStepsJson = json['procedureSteps'] as List<dynamic>? ?? const [];
     final specificationDetailsJson = json['specificationDetails'] as List<dynamic>? ?? const [];
+    final commitReportsJson = json['commitReports'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -112,6 +121,9 @@ class KnowledgeSessionRecord {
       ],
       specificationDetails: [
         for (final entry in specificationDetailsJson) SpecificationDetails.fromJson(entry as Map<String, dynamic>),
+      ],
+      commitReports: [
+        for (final entry in commitReportsJson) CommitReport.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

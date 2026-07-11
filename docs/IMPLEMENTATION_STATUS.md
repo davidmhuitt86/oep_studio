@@ -2626,3 +2626,265 @@ Work Package 010 (or earlier) to apply it by; none constituted the kind
 of genuine, irreconcilable conflict this work package's instructions
 say to stop for.
 
+---
+
+## Work Package 012 — Knowledge Studio (Repository Commit)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000030 — Commit Plan — Complete
+* STUDIO-TASK-000031 — Candidate Conversion — Complete
+* STUDIO-TASK-000032 — Transactional Repository Commit — Complete
+* STUDIO-TASK-000033 — Commit Report — Complete
+* STUDIO-TASK-000034 — Property Inspector Commit Plan/Commit Report support — Complete
+
+### Architectural Blocker, Then Resolution
+
+The first attempt at this work package stopped without writing code:
+Foundation's Public C API (`oep_api.h`, through `OEP_API_VERSION 3`)
+was read-only - no create/write/commit/transaction function existed
+anywhere in the public header, confirmed by an exhaustive search and
+by Foundation's own `platform/api/README.md`/`TASK.md`, both of which
+explicitly listed object/relationship mutation as a non-goal through
+Work Package 013. The underlying C++ runtime had `ObjectStore::create`/
+`RelationshipStore::create` (used by Foundation's own CLI, which links
+C++ directly), but `oep_foundation/CLAUDE.md`'s own architecture-freeze
+rules forbid a Studio from bypassing the Public SDK, so that path was
+never an option. This was reported as a hard blocker with three options
+for the architect (extend Foundation's API, descope to read-only Commit
+Planning, or hold the work package) - no code was written.
+
+The blocker was resolved externally: Foundation's own Work Package 014
+("Add Object Mutation, Relationship Mutation, Transactions, and Batch
+Mutation to the Public C API") landed mid-session, confirmed via
+`git log`/re-reading the updated `oep_api.h` (`OEP_API_VERSION 4`)
+before any Work Package 012 code was written. See
+`docs/REPOSITORY_COMMIT.md` § Why Repository Commit Was Blocked, Then
+Unblocked.
+
+### What Exists
+
+Continues the Work Package 007-011 `lib/knowledge/` module - the first
+work package in that module to call the Foundation Bridge. Full detail
+in `docs/REPOSITORY_COMMIT.md`.
+
+* `native/foundation_bridge/oep_foundation_bridge.def` - six new
+  exports (`oep_object_create`, `oep_relationship_create`,
+  `oep_transaction_begin`/`commit`/`rollback`/`is_active`); no C++
+  wrapper code needed (plain EXPORTS list).
+* `lib/core/foundation/oep_api_native_types.dart`/`oep_api_bindings.dart` -
+  the six corresponding typedefs/bindings.
+* `lib/core/foundation/foundation_bridge.dart` - `createObject`,
+  `createRelationship`, `beginTransaction`, `commitTransaction`,
+  `rollbackTransaction`, `isTransactionActive`, plus
+  `_allocateTagArray`/`_freeTagArray` (the first `Pointer<Pointer<Utf8>>`
+  marshaling in this codebase).
+* `lib/core/foundation/oep_api_types.dart` - `RepositoryStatistics`
+  gained `toJson`/`fromJson` (previously had no serialization at all).
+* `lib/knowledge/models/knowledge_candidate_type.dart` -
+  `foundationCategory` (`ObjectCategory?`) getter, `null` for the six
+  candidate types with no Foundation object type.
+* `lib/knowledge/models/knowledge_candidate.dart`/`relationship_candidate.dart` -
+  `committedObjectId`/`committedRelationshipId` + `committedTime` +
+  `isCommitted`.
+* `lib/knowledge/models/commit_plan.dart` (new) - `CommitPlan`,
+  superseding `CommitPreview` (deleted).
+* `lib/knowledge/models/commit_report.dart` (new) - `CommittedObjectRecord`,
+  `CommittedRelationshipRecord`, `CommitReport` - stored, not derived
+  (`FoundationServiceState.commitReports`, append-only, mirroring
+  `ReviewDecision`).
+* `lib/knowledge/services/commit_plan_service.dart` (new) -
+  `CommitPlanService.computeCommitPlan`, pure, superseding
+  `KnowledgeSessionService.computeCommitPreview` (removed).
+* `lib/knowledge/services/commit_conversion_service.dart` (new) -
+  `CommitConversionService.toObjectCreateArgs`/`toRelationshipCreateArgs`,
+  pure - type mapping, notes-into-description merge, author fallback,
+  provenance tags.
+* `lib/knowledge/services/commit_transaction_service.dart` (new) -
+  `CommitTransactionService.execute` - the only place this work
+  package calls the Foundation Bridge for a commit: begin transaction,
+  sequential object/relationship creates, commit-or-rollback.
+* `lib/core/services/foundation_runtime_state.dart` - `commitPreview`
+  replaced by `commitPlan` (derived) and `commitReports`/
+  `latestCommitReport` (stored/derived).
+* `lib/core/services/foundation_runtime_service.dart` - new
+  `commitToFoundation()` method: validates the plan, calls
+  `CommitTransactionService.execute`, marks committed candidates/
+  relationships on success, always appends the resulting `CommitReport`.
+* `lib/knowledge/workspaces/commit_preview_panel.dart` (rewritten,
+  same file/class name) - real Commit Plan display, confirmation
+  dialog before `commitToFoundation()`, opens the Commit Report dialog
+  automatically once the attempt completes.
+* `lib/knowledge/workspaces/commit_report_dialog.dart` (new) - full
+  `CommitReport` display + "Export as JSON" via `file_selector`.
+* `lib/knowledge/inspector/session_properties.dart` - Commit Plan and
+  Last Commit Report summary sections.
+* `lib/knowledge/review/knowledge_candidate_row.dart` - a "Committed"
+  badge (cloud icon with a tooltip naming the Foundation object id)
+  when `candidate.isCommitted`.
+* `lib/knowledge/models/knowledge_session_record.dart` -
+  `commitReports` field, backward-compatible default `[]`.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: OCR and AI functionality
+remain untouched, and no independent architectural decision was
+introduced anywhere a genuine conflict existed (see Architectural
+Blocker above and Architectural Observations below for the two
+judgment calls that were made, both with a reasonable literal reading
+available). `oep_object_update`/`delete` and
+`oep_relationship_update`/`delete` (added by Foundation alongside
+create in the same Work Package 014) are not wired into Studio - only
+create was needed. The `oep_batch_create_objects`/
+`oep_batch_create_relationships` convenience functions are not used -
+see § Transaction Model in `docs/REPOSITORY_COMMIT.md`.
+
+### Repository Structure Additions
+
+```
+lib/
+  core/
+    foundation/
+      foundation_bridge.dart              Extended (create*/transaction methods)
+      oep_api_bindings.dart               Extended (6 new bindings)
+      oep_api_native_types.dart           Extended (6 new typedefs)
+      oep_api_types.dart                  Extended (RepositoryStatistics JSON)
+    services/
+      foundation_runtime_service.dart     Extended (commitToFoundation())
+      foundation_runtime_state.dart       Extended (commitPlan/commitReports)
+  knowledge/
+    models/
+      commit_plan.dart                    New
+      commit_report.dart                  New
+      commit_preview.dart                 Deleted
+      knowledge_candidate.dart            Extended (commit-tracking fields)
+      knowledge_candidate_type.dart       Extended (foundationCategory)
+      knowledge_session_record.dart       Extended (commitReports)
+      relationship_candidate.dart         Extended (commit-tracking fields)
+    services/
+      commit_plan_service.dart            New
+      commit_conversion_service.dart      New
+      commit_transaction_service.dart     New
+      knowledge_session_service.dart      Extended (computeCommitPreview removed)
+    workspaces/
+      commit_preview_panel.dart           Rewritten (real CommitPlan)
+      commit_report_dialog.dart           New
+    inspector/
+      session_properties.dart             Extended (Commit Plan/Report sections)
+    review/
+      knowledge_candidate_row.dart        Extended (Committed badge)
+native/
+  foundation_bridge/
+    oep_foundation_bridge.def             Extended (6 new exports)
+docs/
+  REPOSITORY_COMMIT.md                    New
+```
+
+### Flutter Package Decisions
+
+**No new Flutter package.** The Commit Report's "Export as JSON" reuses
+`package:file_selector` (already a dependency since Work Package 002),
+confirming its exact `getSaveLocation()`/`FileSaveLocation.path` shape
+by reading the installed package source directly. Everything else this
+work package added is pure Dart logic or native FFI calls to this
+project's own DLL, for which "prefer a mature, permissively-licensed
+package" doesn't apply.
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 137/137 passing: all prior tests, plus two new test
+  files (`commit_plan_service_test.dart` - 16 tests covering repository-
+  open/name-mismatch errors, pending/rejected/unmapped-type/
+  already-committed exclusion, name-collision warnings, relationship
+  eligibility including previously-committed endpoints, `canCommit`;
+  `commit_conversion_service_test.dart` - 11 tests covering type
+  mapping, the `ArgumentError` for unmapped types, tag/provenance
+  construction, author fallback, and every notes/description merge
+  case).
+* flutter build windows - succeeded, including a native rebuild against
+  the updated `oep_foundation` sibling checkout (Foundation's own Work
+  Package 014 commit) - `native/foundation_bridge/CMakeLists.txt`
+  builds Foundation's modules fresh from the sibling checkout on every
+  build, so no CMake changes were needed to pick up the new API.
+* **Manual verification against a real Foundation repository.** A
+  scratch repository (`wp012-scratch-repo`) was created via Foundation's
+  own `oep init` CLI, confirmed empty via `oep status`. As in Work
+  Packages 007-011, `computer-use` was confirmed unable to target the
+  compiled `oep_studio.exe`. Per this work package's own pre-approved
+  instructions, verification was performed with a temporary
+  `integration_test` (`integration_test/repository_commit_wp012_test.dart`,
+  added, run against the real compiled app via `flutter test ... -d
+  windows` with `--dart-define`-supplied repository path/name, then
+  deleted - `pubspec.yaml`'s `integration_test` dev dependency reverted
+  and `pubspec.lock` regenerated), opening the repository directly
+  through `FoundationRuntimeNotifier.openRepository` (bypassing the
+  native folder-picker dialog, the same precedent Work Package 006
+  established for this exact dialog's unreliability in this
+  environment).
+
+  The test drove: create a session targeting the scratch repository,
+  author two Component candidates, accept both, author a Relationship
+  Candidate connecting them, confirm the Commit Summary panel showed 2
+  New Objects/1 New Relationship/0 Existing Objects, tap Commit, confirm
+  the dialog, and commit. **The `integration_test` process itself
+  stalled after the commit and was killed at each 5-minute timeout on
+  two separate attempts, but both commits independently succeeded** -
+  confirmed by directly reading the scratch repository's persisted JSON
+  (`repository/objects/*.json`, `repository/relationships/*.json`,
+  timestamps seconds apart, correct name/type/author/provenance tags)
+  and independently cross-checked against Foundation's own CLI
+  (`oep object list --repository <path>`/`oep relationship list
+  --repository <path>`), which matched exactly, including the
+  relationships' resolved source/target object ids (proving a
+  relationship between two objects created in the *same* commit
+  correctly used the first object's freshly-assigned id as the second's
+  endpoint - the specific capability that ruled out the batch mutation
+  functions in favor of explicit transaction primitives). See
+  `docs/REPOSITORY_COMMIT.md` § Architectural Observations for the full
+  account of the test-harness stall, which is assessed as an
+  `integration_test`/Windows reporting reliability issue in this
+  environment, not a Studio defect, given the ground-truth confirmation
+  from two independent sources.
+
+### Architectural Observations
+
+See `docs/REPOSITORY_COMMIT.md` § Architectural Observations for the
+full account - summarized here:
+
+* **The `KnowledgeCandidateType` → `ObjectCategory` mapping gap
+  (flagged in Work Packages 008 and 010, never load-bearing until now)
+  became load-bearing this work package**, since real Commit needs a
+  real answer for every candidate. Resolved with a nullable
+  `foundationCategory` getter and an explicit Commit Plan exclusion +
+  warning for the six unmapped types, rather than modifying Foundation
+  (forbidden) or inventing a lossy substitute mapping.
+* **Notes preservation via description-merge** - Foundation's
+  Engineering Object model has no field distinct from `description`;
+  notes are appended (`"Notes: ..."`) rather than dropped, lossless
+  within Foundation's existing fields but not a distinct field.
+* **`buildDuplicate` carries commit-tracking fields over unchanged** -
+  a deliberate judgment call (the underlying Foundation object already
+  exists, so a duplicated session's committed candidates should still
+  read as committed), not an oversight.
+* **Explicit transaction primitives over the batch mutation
+  functions** - the batch functions can't interleave object-then-
+  relationship creation while resolving a same-commit object's
+  freshly-assigned id as a relationship endpoint; explicit
+  begin/sequential-creates/commit-or-rollback gives full control and
+  directly matches "Repository Commit shall execute as one logical
+  transaction" as its own task.
+
+None of the observations above blocked implementation - each had a
+reasonable, literal reading available (extend a nullable getter rather
+than Foundation's fixed enum; append rather than drop notes; carry a
+field through unchanged like every other field already does; choose
+explicit API calls over a convenience function that can't do the job)
+and none constituted the kind of genuine, irreconcilable conflict this
+work package's instructions say to stop for - unlike the Public C API's
+total absence of mutation capability at the start of this work package,
+which was exactly that kind of conflict and was reported as a blocker
+rather than worked around.
+

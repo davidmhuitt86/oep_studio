@@ -122,7 +122,23 @@ class OepApiBindings {
       relationshipSearchResultListRelease = _library
           .lookupFunction<OepRelationshipSearchResultListReleaseNative, OepRelationshipSearchResultListReleaseDart>(
             'oep_relationship_search_result_list_release',
-          );
+          ),
+      objectCreate = _library.lookupFunction<OepObjectCreateNative, OepObjectCreateDart>('oep_object_create'),
+      relationshipCreate = _library.lookupFunction<OepRelationshipCreateNative, OepRelationshipCreateDart>(
+        'oep_relationship_create',
+      ),
+      transactionBegin = _library.lookupFunction<OepTransactionBeginNative, OepTransactionBeginDart>(
+        'oep_transaction_begin',
+      ),
+      transactionCommit = _library.lookupFunction<OepTransactionCommitNative, OepTransactionCommitDart>(
+        'oep_transaction_commit',
+      ),
+      transactionRollback = _library.lookupFunction<OepTransactionRollbackNative, OepTransactionRollbackDart>(
+        'oep_transaction_rollback',
+      ),
+      transactionIsActive = _library.lookupFunction<OepTransactionIsActiveNative, OepTransactionIsActiveDart>(
+        'oep_transaction_is_active',
+      );
 
   // ignore: unused_field
   final DynamicLibrary _library;
@@ -159,4 +175,10 @@ class OepApiBindings {
   final OepObjectSearchResultListReleaseDart objectSearchResultListRelease;
   final OepSearchRelationshipsDart searchRelationships;
   final OepRelationshipSearchResultListReleaseDart relationshipSearchResultListRelease;
+  final OepObjectCreateDart objectCreate;
+  final OepRelationshipCreateDart relationshipCreate;
+  final OepTransactionBeginDart transactionBegin;
+  final OepTransactionCommitDart transactionCommit;
+  final OepTransactionRollbackDart transactionRollback;
+  final OepTransactionIsActiveDart transactionIsActive;
 }

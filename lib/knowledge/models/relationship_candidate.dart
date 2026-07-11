@@ -30,6 +30,8 @@ class RelationshipCandidate {
     this.description = '',
     required this.createdTime,
     this.modifiedTime,
+    this.committedRelationshipId,
+    this.committedTime,
   });
 
   final String id;
@@ -40,12 +42,30 @@ class RelationshipCandidate {
   final DateTime createdTime;
   final DateTime? modifiedTime;
 
+  /// The Foundation `relationship_id` this candidate became on
+  /// Repository Commit (Work Package 012 STUDIO-TASK-000031), `null`
+  /// until committed — the [KnowledgeCandidate.committedObjectId]
+  /// counterpart for relationship candidates, same purpose: prevents a
+  /// later commit of the same session from creating a duplicate
+  /// Foundation relationship.
+  final String? committedRelationshipId;
+
+  /// When [committedRelationshipId] was set, `null` iff
+  /// [committedRelationshipId] is `null`.
+  final DateTime? committedTime;
+
+  /// Whether this relationship candidate has already been committed to
+  /// Foundation.
+  bool get isCommitted => committedRelationshipId != null;
+
   RelationshipCandidate copyWith({
     String? sourceCandidateId,
     String? targetCandidateId,
     RelationshipType? type,
     String? description,
     DateTime? modifiedTime,
+    String? committedRelationshipId,
+    DateTime? committedTime,
   }) {
     return RelationshipCandidate(
       id: id,
@@ -55,6 +75,8 @@ class RelationshipCandidate {
       description: description ?? this.description,
       createdTime: createdTime,
       modifiedTime: modifiedTime ?? this.modifiedTime,
+      committedRelationshipId: committedRelationshipId ?? this.committedRelationshipId,
+      committedTime: committedTime ?? this.committedTime,
     );
   }
 
@@ -66,6 +88,8 @@ class RelationshipCandidate {
     'description': description,
     'createdTime': createdTime.toIso8601String(),
     'modifiedTime': modifiedTime?.toIso8601String(),
+    'committedRelationshipId': committedRelationshipId,
+    'committedTime': committedTime?.toIso8601String(),
   };
 
   factory RelationshipCandidate.fromJson(Map<String, dynamic> json) {
@@ -77,6 +101,8 @@ class RelationshipCandidate {
       description: json['description'] as String? ?? '',
       createdTime: DateTime.parse(json['createdTime'] as String),
       modifiedTime: json['modifiedTime'] == null ? null : DateTime.parse(json['modifiedTime'] as String),
+      committedRelationshipId: json['committedRelationshipId'] as String?,
+      committedTime: json['committedTime'] == null ? null : DateTime.parse(json['committedTime'] as String),
     );
   }
 }

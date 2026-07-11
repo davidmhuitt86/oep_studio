@@ -1,7 +1,8 @@
 import '../../knowledge/models/candidate_dependency_info.dart';
 import '../../knowledge/models/candidate_provenance.dart';
 import '../../knowledge/models/candidate_validation_result.dart';
-import '../../knowledge/models/commit_preview.dart';
+import '../../knowledge/models/commit_plan.dart';
+import '../../knowledge/models/commit_report.dart';
 import '../../knowledge/models/evidence_link.dart';
 import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
@@ -15,6 +16,7 @@ import '../../knowledge/models/review_decision.dart';
 import '../../knowledge/models/session_health_metrics.dart';
 import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
+import '../../knowledge/services/commit_plan_service.dart';
 import '../../knowledge/services/dependency_service.dart';
 import '../../knowledge/services/knowledge_graph_service.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
@@ -37,9 +39,10 @@ enum FoundationConnectionPhase { connecting, connected, error }
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
-/// List, Current Relationship Candidate List, Current Commit Preview,
-/// Current Source Document/Page, Current Evidence Region List, Current
-/// Evidence Link List, Current Page Selection List, and Current Selection
+/// List, Current Relationship Candidate List, Current Commit Plan,
+/// Current Commit Report, Current Source Document/Page, Current Evidence
+/// Region List, Current Evidence Link List, Current Page Selection List,
+/// and Current Selection
 /// (of an object, a relationship, a Knowledge Candidate, a Relationship
 /// Candidate, a Source Material, or an Evidence Region — never more than
 /// one at once). Immutable; widgets watch this through
@@ -82,6 +85,7 @@ class FoundationServiceState {
     this.specificationDetails = const [],
     this.openProcedure,
     this.selectedProcedureStep,
+    this.commitReports = const [],
   });
 
   final FoundationConnectionPhase phase;
@@ -271,6 +275,16 @@ class FoundationServiceState {
   /// field.
   final ProcedureStep? selectedProcedureStep;
 
+  /// The append-only history of Repository Commit attempts against
+  /// [knowledgeSession] (Work Package 012 STUDIO-TASK-000033's "Current
+  /// Commit Report") — every attempt, successful or failed, mirroring
+  /// [reviewDecisions]'s append-only audit-log shape. Unlike
+  /// [commitPlan] (recomputed fresh on every read), each entry here is
+  /// the permanent record of something that actually happened —
+  /// "Sessions become historical engineering records" (this work
+  /// package's own text).
+  final List<CommitReport> commitReports;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -295,18 +309,30 @@ class FoundationServiceState {
   int get knowledgeRelationshipCandidateCount => relationshipCandidates.length;
   int get knowledgeEvidenceRegionCount => evidenceRegions.length;
 
-  /// The Current Commit Preview (Work Package 008 STUDIO-TASK-000018),
+  /// The Current Commit Plan (Work Package 012 STUDIO-TASK-000030),
   /// `null` when no session is active — otherwise always non-null, even
-  /// when it has nothing to show yet (an empty preview is still a
-  /// preview; "no session" is the only state with nothing to preview).
-  CommitPreview? get commitPreview {
-    if (knowledgeSession == null) return null;
-    return KnowledgeSessionService.computeCommitPreview(
+  /// when it has nothing eligible to commit yet (an empty plan is still
+  /// a plan; "no session" is the only state with nothing to plan).
+  /// Supersedes Work Package 008's `commitPreview`/`CommitPreview` — see
+  /// `CommitPlan`'s own doc comment for why.
+  CommitPlan? get commitPlan {
+    final session = knowledgeSession;
+    if (session == null) return null;
+    return CommitPlanService.computeCommitPlan(
+      session: session,
       candidates: candidates,
       relationshipCandidates: relationshipCandidates,
-      repositoryStatistics: repositoryStatistics,
+      isRepositoryOpen: isRepositoryOpen,
+      openRepositoryName: repositoryStatus?.repositoryName,
+      objectList: objectList,
+      currentStatistics: repositoryStatistics,
     );
   }
+
+  /// The Current Commit Report (Work Package 012 STUDIO-TASK-000033) —
+  /// the most recent entry in [commitReports], `null` if this session
+  /// has never been committed.
+  CommitReport? get latestCommitReport => commitReports.isEmpty ? null : commitReports.last;
 
   /// Evidence Regions belonging to [sourceId]'s page [page] (Work
   /// Package 009: the Source Viewer only ever needs a single page's
@@ -494,6 +520,7 @@ class FoundationServiceState {
     bool clearOpenProcedure = false,
     ProcedureStep? selectedProcedureStep,
     bool clearSelectedProcedureStep = false,
+    List<CommitReport>? commitReports,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -543,6 +570,7 @@ class FoundationServiceState {
       specificationDetails: specificationDetails ?? this.specificationDetails,
       openProcedure: clearOpenProcedure ? null : (openProcedure ?? this.openProcedure),
       selectedProcedureStep: clearSelectedProcedureStep ? null : (selectedProcedureStep ?? this.selectedProcedureStep),
+      commitReports: commitReports ?? this.commitReports,
     );
   }
 }

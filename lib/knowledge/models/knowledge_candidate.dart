@@ -31,6 +31,8 @@ class KnowledgeCandidate {
     this.status = KnowledgeCandidateStatus.pending,
     required this.createdTime,
     this.modifiedTime,
+    this.committedObjectId,
+    this.committedTime,
   });
 
   final String id;
@@ -56,6 +58,23 @@ class KnowledgeCandidate {
   final DateTime createdTime;
   final DateTime? modifiedTime;
 
+  /// The Foundation `object_id` this candidate became on Repository
+  /// Commit (Work Package 012 STUDIO-TASK-000031), `null` until
+  /// committed. "Knowledge Candidates remain in the Knowledge Session
+  /// after Commit" (this work package's own text) — this field is how
+  /// the session remembers a candidate was already committed, so a
+  /// later commit of the same session never creates a duplicate
+  /// Foundation object for it. Once set, nothing in this work package
+  /// ever clears it — Commit is one-way.
+  final String? committedObjectId;
+
+  /// When [committedObjectId] was set, `null` iff [committedObjectId]
+  /// is `null`.
+  final DateTime? committedTime;
+
+  /// Whether this candidate has already been committed to Foundation.
+  bool get isCommitted => committedObjectId != null;
+
   KnowledgeCandidate copyWith({
     KnowledgeCandidateType? type,
     String? name,
@@ -65,6 +84,8 @@ class KnowledgeCandidate {
     List<String>? tags,
     KnowledgeCandidateStatus? status,
     DateTime? modifiedTime,
+    String? committedObjectId,
+    DateTime? committedTime,
   }) {
     return KnowledgeCandidate(
       id: id,
@@ -77,6 +98,8 @@ class KnowledgeCandidate {
       status: status ?? this.status,
       createdTime: createdTime,
       modifiedTime: modifiedTime ?? this.modifiedTime,
+      committedObjectId: committedObjectId ?? this.committedObjectId,
+      committedTime: committedTime ?? this.committedTime,
     );
   }
 
@@ -93,6 +116,8 @@ class KnowledgeCandidate {
     'status': status.name,
     'createdTime': createdTime.toIso8601String(),
     'modifiedTime': modifiedTime?.toIso8601String(),
+    'committedObjectId': committedObjectId,
+    'committedTime': committedTime?.toIso8601String(),
   };
 
   /// Deserializes a `candidates` array entry. Throws [FormatException]
@@ -115,6 +140,8 @@ class KnowledgeCandidate {
       status: KnowledgeCandidateStatus.values.byName(json['status'] as String),
       createdTime: DateTime.parse(json['createdTime'] as String),
       modifiedTime: json['modifiedTime'] == null ? null : DateTime.parse(json['modifiedTime'] as String),
+      committedObjectId: json['committedObjectId'] as String?,
+      committedTime: json['committedTime'] == null ? null : DateTime.parse(json['committedTime'] as String),
     );
   }
 }

@@ -1,14 +1,11 @@
 import 'dart:io';
 import 'dart:math';
 
-import '../../core/foundation/oep_api_types.dart';
 import '../../core/models/relationship_type.dart';
 import '../models/candidate_validation_result.dart';
-import '../models/commit_preview.dart';
 import '../models/evidence_link.dart';
 import '../models/evidence_region.dart';
 import '../models/knowledge_candidate.dart';
-import '../models/knowledge_candidate_status.dart';
 import '../models/knowledge_candidate_type.dart';
 import '../models/knowledge_session.dart';
 import '../models/knowledge_session_record.dart';
@@ -20,8 +17,14 @@ import '../models/source_material.dart';
 import '../models/specification_details.dart';
 import 'knowledge_session_storage.dart';
 
-/// Pure validation, ID-generation, and commit-preview-computation rules
-/// for the Knowledge Curation workflow (Work Package 007/008).
+/// Pure validation and ID-generation rules for the Knowledge Curation
+/// workflow (Work Package 007/008). Commit planning/conversion/
+/// transaction logic lives in `CommitPlanService`/
+/// `CommitConversionService`/`CommitTransactionService` (Work Package
+/// 012) instead of here — kept separate since none of the three need
+/// this class's session/candidate/relationship-candidate validation
+/// rules, and commit logic is substantial enough on its own to warrant
+/// its own services rather than growing this one further.
 ///
 /// Holds no state of its own — `FoundationRuntimeNotifier` (the
 /// Connection Manager) is the sole owner of session/candidate state,
@@ -147,48 +150,6 @@ abstract final class KnowledgeSessionService {
     );
   }
 
-  /// Computes a [CommitPreview] from the session's current candidates,
-  /// relationship candidates, and (if available) the currently open
-  /// Foundation repository's statistics (Work Package 008
-  /// STUDIO-TASK-000018). Pure — takes a snapshot, returns a value,
-  /// touches no state and calls no Foundation function itself (the
-  /// Connection Manager already holds `repositoryStatistics` from its
-  /// existing Work Package 004 fetch).
-  static CommitPreview computeCommitPreview({
-    required List<KnowledgeCandidate> candidates,
-    required List<RelationshipCandidate> relationshipCandidates,
-    required RepositoryStatistics? repositoryStatistics,
-  }) {
-    final newObjects = candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.accepted).toList();
-    final rejected = candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.rejected).toList();
-    final pendingCount = candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.pending).length;
-
-    final candidateIds = candidates.map((candidate) => candidate.id).toSet();
-    final issues = <String>[];
-    for (final relationship in relationshipCandidates) {
-      final sourceMissing = !candidateIds.contains(relationship.sourceCandidateId);
-      final targetMissing = !candidateIds.contains(relationship.targetCandidateId);
-      if (sourceMissing || targetMissing) {
-        issues.add(
-          'Relationship candidate "${relationship.id}" references a candidate that no longer exists.',
-        );
-      }
-    }
-    if (pendingCount > 0) {
-      issues.add('$pendingCount candidate${pendingCount == 1 ? '' : 's'} still pending review.');
-    }
-
-    return CommitPreview(
-      newObjects: newObjects,
-      rejectedCandidates: rejected,
-      relationships: relationshipCandidates,
-      modifiedObjectCount: 0,
-      mergedObjectCount: 0,
-      validationIssues: issues,
-      currentStatistics: repositoryStatistics,
-    );
-  }
-
   /// Validates an Evidence Region's label (Work Package 009
   /// STUDIO-TASK-000020 Evidence Browser: "Support: Rename"). Throws
   /// [KnowledgeValidationException] for an empty label — regions are
@@ -241,8 +202,8 @@ abstract final class KnowledgeSessionService {
   /// status for every Knowledge Candidate."). Pure — takes a snapshot,
   /// returns a value, never mutates [candidates] or anything else ("
   /// Validation shall never modify candidate data"), the same
-  /// derived-not-stored discipline `computeCommitPreview` already
-  /// established.
+  /// derived-not-stored discipline `CommitPlanService.computeCommitPlan`
+  /// (Work Package 012) also follows.
   ///
   /// Checks, per candidate:
   /// - **Duplicate candidate names**: another candidate in the session
@@ -262,9 +223,10 @@ abstract final class KnowledgeSessionService {
   ///   content).
   /// - **Invalid relationships**: a [RelationshipCandidate] connecting
   ///   this candidate to a candidate that no longer exists (`error`) —
-  ///   mirrors the dangling-reference check `computeCommitPreview`
-  ///   already performs at the session level, repeated per-candidate
-  ///   here since this method's whole purpose is a per-candidate view.
+  ///   the same dangling-reference concern `CommitPlanService` guards
+  ///   against separately when building a Commit Plan, repeated
+  ///   per-candidate here since this method's whole purpose is a
+  ///   per-candidate view.
   /// - **Orphaned procedure steps**: for a Procedure candidate, any of
   ///   its steps referencing a Knowledge Candidate or Evidence Region
   ///   that no longer exists (`warning`) — read as "a step whose
@@ -399,6 +361,16 @@ abstract final class KnowledgeSessionService {
       pageSelections: original.pageSelections,
       procedureSteps: original.procedureSteps,
       specificationDetails: original.specificationDetails,
+      // Carried over unchanged, same as every other list above —
+      // including committed candidates' own committedObjectId (also
+      // carried over unchanged). A duplicate's "already committed"
+      // candidates therefore still read as committed: the underlying
+      // Foundation object genuinely already exists, so treating a
+      // duplicate's copy as eligible to commit again would create a
+      // second Foundation object for what is, at the moment of
+      // duplication, identical candidate data. See
+      // `docs/REPOSITORY_COMMIT.md` § Architectural Observations.
+      commitReports: original.commitReports,
     );
   }
 }

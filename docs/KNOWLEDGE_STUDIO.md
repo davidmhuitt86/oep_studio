@@ -14,29 +14,38 @@ Specification Editor, STUDIO-TASK-000025 Knowledge Candidate
 Validation); extended again in Work Package 011 (STUDIO-TASK-000026
 Knowledge Session Graph, STUDIO-TASK-000027 Provenance Explorer,
 STUDIO-TASK-000028 Candidate Dependency Viewer, STUDIO-TASK-000029
-Session Health Dashboard). Validates the architecture defined in
-SDD-013 (Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
-Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
-Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
-(Engineering Knowledge Lifecycle and Provenance), SDD-019 (Engineering
-Object Philosophy), SDD-020 (Engineering Knowledge Review System), and
-— as of Work Package 010 — SDD-021 (Engineering Evidence Model),
-remaining **Studio-only: no AI, no OCR, no repository commit** through
-all five work packages.
+Session Health Dashboard); extended again in Work Package 012
+(STUDIO-TASK-000030 Commit Plan, STUDIO-TASK-000031 Candidate
+Conversion, STUDIO-TASK-000032 Transactional Repository Commit,
+STUDIO-TASK-000033 Commit Report, STUDIO-TASK-000034 Property Inspector
+Commit Plan/Commit Report support). Validates the architecture defined
+in SDD-013 (Knowledge Studio), SDD-014 (Engineering Knowledge
+Acquisition Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016
+(Knowledge Studio User Experience), SDD-017 (Knowledge Curation
+Workflow), SDD-018 (Engineering Knowledge Lifecycle and Provenance),
+SDD-019 (Engineering Object Philosophy), SDD-020 (Engineering Knowledge
+Review System), and — as of Work Package 010 — SDD-021 (Engineering
+Evidence Model), remaining **Studio-only: no AI, no OCR** through every
+work package — **except Repository Commit itself**, which as of Work
+Package 012 performs a real, transactional write into the open
+Foundation repository through the Public C API's Object/Relationship
+Mutation and Transaction functions (Foundation's own Work Package 014)
+— see `docs/REPOSITORY_COMMIT.md`.
 
-For the persisted-file format and the Relationship Candidate/Commit
-Preview model reference (including the
-`KnowledgeCandidateType`/`ObjectCategory` mismatch), see
-`docs/KNOWLEDGE_SESSION_FORMAT.md`. For the Evidence Region/Evidence
-Link/Page Selection models, the PDF Source Viewer, and the Work
-Package 009 architectural findings, see `docs/EVIDENCE_MODEL.md`. For
-the Knowledge Candidate/Procedure/Procedure Step/Specification/
-Validation model reference and the Work Package 010 architectural
-findings, see `docs/KNOWLEDGE_CANDIDATES.md`. For the Knowledge Session
-Graph/Provenance/Dependency/Session Health model reference and the
-Work Package 011 architectural findings, see `docs/KNOWLEDGE_GRAPH.md`.
-This document covers the workspace layout, session lifecycle, and
-state ownership.
+For the persisted-file format and the Relationship Candidate model
+reference (including the `KnowledgeCandidateType`/`ObjectCategory`
+mismatch), see `docs/KNOWLEDGE_SESSION_FORMAT.md`. For the Evidence
+Region/Evidence Link/Page Selection models, the PDF Source Viewer, and
+the Work Package 009 architectural findings, see
+`docs/EVIDENCE_MODEL.md`. For the Knowledge Candidate/Procedure/
+Procedure Step/Specification/Validation model reference and the Work
+Package 010 architectural findings, see `docs/KNOWLEDGE_CANDIDATES.md`.
+For the Knowledge Session Graph/Provenance/Dependency/Session Health
+model reference and the Work Package 011 architectural findings, see
+`docs/KNOWLEDGE_GRAPH.md`. For the Commit Plan/Candidate Conversion/
+Transaction Model/Commit Report reference and the Work Package 012
+architectural findings, see `docs/REPOSITORY_COMMIT.md`. This document
+covers the workspace layout, session lifecycle, and state ownership.
 
 > **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
 > Package 007 and remains unpopulated as of Work Package 011. None of
@@ -117,9 +126,11 @@ functionality:
   Relationship Candidate authoring — see § Relationship Candidates
   below).
 * **Commit Summary** (`lib/knowledge/workspaces/commit_preview_panel.dart`)
-  — a simulated preview of what a Repository Commit would do, with a
-  permanently disabled "Commit" button (Repository Commit itself is
-  out of scope — see § Future Foundation Integration).
+  — shows the real Commit Plan (New Objects/New Relationships/Existing
+  Objects/Validation Errors/Warnings) and a "Commit" button, enabled
+  once the plan is valid and non-empty, that performs a real,
+  transactional write into the open Foundation repository — see
+  § Repository Commit (Work Package 012).
 * **Property Inspector** — eight modes (see § State Ownership).
 
 **AI Suggestions** and **Repository Matches** remain placeholder
@@ -155,7 +166,7 @@ is modeled. A rough correspondence, for whoever implements the rest:
 | `created` | Preparation begins |
 | `preparing` | Preparation |
 | `reviewing` | Analysis + Review (no Analysis stage exists — candidates are manually authored, not AI-proposed) |
-| `readyToCommit` | Validation passed, awaiting Repository Preview/Commit (Commit Preview exists as of Work Package 008; Commit itself is not implemented) |
+| `readyToCommit` | Validation passed, awaiting Repository Commit (a real, transactional Repository Commit exists as of Work Package 012 — see § Repository Commit) |
 | `cancelled` | Session abandoned before Commit |
 
 Transitions are validated by `KnowledgeSessionService.validateStatusTransition`:
@@ -256,7 +267,9 @@ six relationship kinds, just not yet committed.
 Unlike `KnowledgeCandidate`, a relationship candidate carries **no
 accept/reject status** — only Create/Edit/Delete, per this work
 package's Requirements list; every relationship candidate that exists
-is included in the Commit Preview.
+is a Commit Plan candidate (Work Package 012), included once both its
+endpoints resolve to a Foundation object — see
+`docs/REPOSITORY_COMMIT.md`.
 
 Validation (`KnowledgeSessionService.validateRelationshipCandidate`,
 blocking): a relationship cannot connect a candidate to itself, and
@@ -296,36 +309,40 @@ image thumbnail; Markdown/Text raw content) and otherwise shows the
 file's location — this is still "display," not "parse": nothing
 extracts structured meaning from a source's content.
 
-## Commit Preview (Work Package 008)
+## Repository Commit (Work Package 012)
 
-`CommitPreview` (`lib/knowledge/models/commit_preview.dart`), computed
-on demand by `KnowledgeSessionService.computeCommitPreview` from the
-Connection Manager's current candidates/relationship candidates/
-repository statistics — never stored, since it has no independent
-existence beyond "what the current session's data would produce right
-now":
+`CommitPreview` (Work Package 008) is superseded, not extended, by
+`CommitPlan`/`CommitReport` — see `docs/REPOSITORY_COMMIT.md` for the
+full Commit Plan/Candidate Conversion/Transaction Model/Commit Report
+reference and the work package's architectural observations (most
+notably the `KnowledgeCandidateType` → `ObjectCategory` mapping gap's
+load-bearing consequences now that real conversion exists). In brief:
 
-* **New Objects** — accepted candidates.
-* **Rejected Candidates (excluded)** — rejected candidates, shown so
-  it's visible they were considered and excluded, not silently dropped.
-* **Relationships** — every relationship candidate (no status to
-  filter by).
-* **Modified Objects / Merged Objects** — always `0`; no
-  modify-existing or merge-with-existing workflow exists yet (both
-  presuppose repository matching).
-* **Validation Summary** — human-readable findings: any relationship
-  candidate whose source/target no longer exists (defensive; the UI
-  itself cascades deletes so this shouldn't normally occur), and a
-  count of candidates still pending review.
-* **Repository Object/Relationship Count, current → projected** — see
-  `docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations for
-  why this is an aggregate-total projection, not a fabricated
-  per-category one.
-
-The Commit Summary panel's "Commit" button is permanently disabled
-with an explanatory tooltip — Repository Commit itself is out of scope
-for Work Package 008 ("No repository modification occurs. Everything
-displayed is simulated.").
+* `CommitPlan` (`lib/knowledge/models/commit_plan.dart`), computed on
+  demand by `CommitPlanService.computeCommitPlan`, replaces
+  `CommitPreview` entirely — same "derived, never stored" discipline,
+  now describing exactly what a real commit will do rather than a
+  simulation.
+* The Commit Summary panel's "Commit" button is enabled once
+  `CommitPlan.canCommit` is true, and — after a confirmation dialog —
+  calls `FoundationRuntimeNotifier.commitToFoundation()`, which
+  performs a real, one-shot transactional write into the open
+  Foundation repository via the Public C API's Object/Relationship
+  Mutation and Transaction functions, with automatic rollback on any
+  failure.
+* Every commit attempt (success or failure) produces a `CommitReport`
+  (`lib/knowledge/models/commit_report.dart`), shown in
+  `lib/knowledge/workspaces/commit_report_dialog.dart` and exportable
+  as JSON — unlike `CommitPlan`, this is a real, persisted, append-only
+  record (`FoundationServiceState.commitReports`), mirroring
+  `ReviewDecision`'s audit-log pattern.
+* Knowledge Candidates and Relationship Candidates remain in the
+  Knowledge Session after Commit ("Knowledge Candidates remain
+  Knowledge Workspace artifacts after Commit") — `committedObjectId`/
+  `committedRelationshipId` track which Foundation object/relationship
+  each became, so a later commit of the same session only touches
+  newly-eligible candidates, never re-creating a duplicate Foundation
+  object.
 
 ## State Ownership
 
@@ -363,7 +380,8 @@ ownership table; as of Work Package 011:
 | `sessionHealth` | Derived getter (Work Package 011's "Current Session Health") — see `docs/KNOWLEDGE_GRAPH.md` § Session Health Model |
 | `reviewDecisions` | The append-only Create/Edit/Accept/Reject/Delete audit log |
 | `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
-| `commitPreview` | Derived getter — see § Commit Preview |
+| `commitPlan` | Derived getter (Work Package 012) — see § Repository Commit |
+| `commitReports` / `latestCommitReport` | The append-only history of Repository Commit attempts against this session, and the most recent one (Work Package 012) — see § Repository Commit |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
@@ -408,14 +426,18 @@ node to whichever of the three existing `select*` methods matches its
 kind. See `docs/KNOWLEDGE_GRAPH.md` § Selection Synchronization.
 
 `lib/knowledge/services/knowledge_session_service.dart` holds the
-Knowledge domain's validation, ID-generation, and commit-preview
-computation as pure, stateless functions — kept separate from the
-notifier so "no engineering logic shall exist inside widgets" doesn't
-push that logic into the widget layer just because it also isn't
-Foundation-calling code that belongs in the Bridge.
-`lib/knowledge/services/knowledge_session_storage.dart` and
-`lib/knowledge/services/source_material_service.dart` hold persistence
-logic the same way.
+Knowledge domain's validation and ID-generation as pure, stateless
+functions — kept separate from the notifier so "no engineering logic
+shall exist inside widgets" doesn't push that logic into the widget
+layer just because it also isn't Foundation-calling code that belongs
+in the Bridge. `lib/knowledge/services/knowledge_session_storage.dart`
+and `lib/knowledge/services/source_material_service.dart` hold
+persistence logic the same way. Commit Plan computation, Candidate
+Conversion, and Transaction orchestration (Work Package 012) live in
+their own three services (`commit_plan_service.dart`,
+`commit_conversion_service.dart`, `commit_transaction_service.dart`)
+rather than `knowledge_session_service.dart` — see
+`docs/REPOSITORY_COMMIT.md` for why the split.
 
 ## Error Handling
 
@@ -455,28 +477,35 @@ type — never a raw `IOException` or stack trace.
 
 ## Future Foundation Integration
 
-None of this code calls the Foundation Bridge — by design. The natural
-extension points, once the corresponding Public C API exists:
+Repository Commit (Work Package 012) is the first Knowledge Studio
+feature to call the Foundation Bridge — everything else below remains
+Studio-only by design, pending further Public C API surface:
 
-* **Repository Commit** (SDD-017 Stage 6) would need a new `oep_api.h`
-  surface for atomic multi-object creation — no such function exists
-  today. `SessionStatus.readyToCommit` and the now-implemented Commit
-  Preview are the natural point to add a real "Commit" action once it
-  does.
 * **Repository Matches** (SDD-013/016/020 duplicate detection) would
   need Foundation to expose something equivalent to a fuzzy/exact
   object-name search scoped for matching rather than free-text search
   — `oep_search_objects` (Work Package 006) is close but is designed
-  for the Search Workspace's use case, not necessarily this one.
+  for the Search Workspace's use case, not necessarily this one. The
+  Commit Plan's existing-name-collision warning (Work Package 012,
+  using the already-fetched Current Object List) is a narrower,
+  exact-match-only version of this same idea, not a substitute for it.
 * **AI Suggestions** (SDD-013/016 AI Analysis) requires an entire
   analysis pipeline (OCR, image extraction, object detection,
   relationship detection) that doesn't exist in Foundation or Studio
   yet.
 * **`KnowledgeCandidateType`/`ObjectCategory` reconciliation** — see
-  `docs/KNOWLEDGE_SESSION_FORMAT.md` § Architectural Observations. A
-  real Commit implementation will need this resolved one way or
-  another (extend one taxonomy, or define an explicit mapping with a
-  documented answer for the types that don't correspond).
+  `docs/REPOSITORY_COMMIT.md` § Architectural Observations. Work
+  Package 012 resolved this for Commit purposes with a nullable
+  `foundationCategory` getter (excluding the six unmapped types from
+  Commit eligibility with a warning) rather than extending Foundation's
+  fixed `oep_object_type_t` or inventing a lossy substitute mapping —
+  the underlying taxonomy mismatch itself is unchanged and still open
+  for whoever extends Foundation's object types next.
+* `oep_object_update`/`oep_object_delete`/`oep_relationship_update`/
+  `oep_relationship_delete` (added alongside `oep_object_create`/
+  `oep_relationship_create` in Foundation's Work Package 014) are not
+  wired into Studio — out of Work Package 012's scope, which only
+  needed create.
 
 None of these are implemented here, per the "document it, do not
 implement it" rule this project has followed since Work Package 004.

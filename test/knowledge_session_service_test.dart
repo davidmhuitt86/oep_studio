@@ -233,46 +233,6 @@ void main() {
     });
   });
 
-  group('computeCommitPreview', () {
-    test('splits candidates into new objects and rejected, and flags pending candidates', () {
-      final candidates = [
-        _candidate('Accepted One', id: 'a1', status: KnowledgeCandidateStatus.accepted),
-        _candidate('Rejected One', id: 'r1', status: KnowledgeCandidateStatus.rejected),
-        _candidate('Pending One', id: 'p1'),
-      ];
-      final preview = KnowledgeSessionService.computeCommitPreview(
-        candidates: candidates,
-        relationshipCandidates: const [],
-        repositoryStatistics: null,
-      );
-      expect(preview.newObjects, hasLength(1));
-      expect(preview.rejectedCandidates, hasLength(1));
-      expect(preview.validationIssues, contains('1 candidate still pending review.'));
-      expect(preview.currentStatistics, isNull);
-      expect(preview.projectedObjectCount, isNull);
-    });
-
-    test('flags a relationship candidate whose endpoint no longer exists', () {
-      final candidates = [_candidate('Only One', id: 'c1', status: KnowledgeCandidateStatus.accepted)];
-      final relationships = [
-        RelationshipCandidate(
-          id: 'r1',
-          sourceCandidateId: 'c1',
-          targetCandidateId: 'missing',
-          type: RelationshipType.references,
-          createdTime: DateTime(2026, 1, 1),
-        ),
-      ];
-      final preview = KnowledgeSessionService.computeCommitPreview(
-        candidates: candidates,
-        relationshipCandidates: relationships,
-        repositoryStatistics: null,
-      );
-      expect(preview.validationIssues, isNotEmpty);
-      expect(preview.validationIssues.first, contains('no longer exists'));
-    });
-  });
-
   group('validateEvidenceRegionLabel', () {
     test('rejects an empty label', () {
       expect(

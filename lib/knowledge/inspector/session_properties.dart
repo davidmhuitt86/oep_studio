@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/studio_colors.dart';
 import '../../shared/format.dart';
 import '../../shared/widgets/property_field.dart';
+import '../models/commit_plan.dart';
+import '../models/commit_report.dart';
 import '../models/knowledge_session.dart';
 import '../models/session_health_metrics.dart';
 
@@ -24,6 +26,8 @@ class SessionProperties extends StatelessWidget {
     required this.pendingCount,
     required this.relationshipCandidateCount,
     this.health,
+    this.commitPlan,
+    this.latestCommitReport,
     super.key,
   });
 
@@ -40,6 +44,14 @@ class SessionProperties extends StatelessWidget {
   /// is `null` exactly when [session] itself would be `null`, which
   /// cannot happen here since this widget requires a non-null session).
   final SessionHealthMetrics? health;
+
+  /// The current Commit Plan (Work Package 012), same defensive-`null`
+  /// reasoning as [health].
+  final CommitPlan? commitPlan;
+
+  /// The most recent Repository Commit attempt against this session, if
+  /// any has ever been made.
+  final CommitReport? latestCommitReport;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +73,65 @@ class SessionProperties extends StatelessWidget {
         PropertyField(label: 'Pending Count', value: '$pendingCount'),
         PropertyField(label: 'Relationship Candidate Count', value: '$relationshipCandidateCount'),
         if (health != null) _SessionHealthSection(health: health!),
+        if (commitPlan != null) _CommitPlanSection(plan: commitPlan!),
+        if (latestCommitReport != null) _CommitReportSection(report: latestCommitReport!),
+      ],
+    );
+  }
+}
+
+/// A summary of the current Commit Plan (Work Package 012
+/// STUDIO-TASK-000034: "Property Inspector: Extend support for Commit
+/// Plan, Commit Report").
+class _CommitPlanSection extends StatelessWidget {
+  const _CommitPlanSection({required this.plan});
+
+  final CommitPlan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          'Commit Plan',
+          style: TextStyle(color: StudioColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        PropertyField(label: 'New Objects', value: '${plan.newObjects.length}'),
+        PropertyField(label: 'New Relationships', value: '${plan.newRelationships.length}'),
+        PropertyField(label: 'Existing Objects', value: '${plan.existingObjectCount}'),
+        PropertyField(label: 'Validation Errors', value: '${plan.validationErrors.length}'),
+        PropertyField(label: 'Warnings', value: '${plan.warnings.length}'),
+        PropertyField(label: 'Can Commit', value: plan.canCommit ? 'Yes' : 'No'),
+      ],
+    );
+  }
+}
+
+/// A summary of the most recent Commit Report (Work Package 012
+/// STUDIO-TASK-000034).
+class _CommitReportSection extends StatelessWidget {
+  const _CommitReportSection({required this.report});
+
+  final CommitReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const Text(
+          'Last Commit Report',
+          style: TextStyle(color: StudioColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        PropertyField(label: 'Result', value: report.success ? 'Success' : 'Failed'),
+        PropertyField(label: 'Objects Created', value: '${report.objectsCreated.length}'),
+        PropertyField(label: 'Relationships Created', value: '${report.relationshipsCreated.length}'),
+        PropertyField(label: 'Timestamp', value: formatDateTime(report.timestamp)),
       ],
     );
   }

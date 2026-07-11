@@ -19,6 +19,7 @@ import '../../knowledge/models/session_status.dart';
 import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/models/specification_type.dart';
+import '../../knowledge/services/commit_transaction_service.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../../knowledge/services/knowledge_session_storage.dart';
 import '../../knowledge/services/source_material_service.dart';
@@ -38,8 +39,9 @@ import 'foundation_runtime_state.dart';
 /// Current Knowledge Curation Session, Current Source List (doubling as
 /// Current Source Document), Current Page, Current Relationship
 /// Candidate List, Current Evidence Region List, Current Evidence Link
-/// List, Current Page Selection List, Current Commit Preview (derived —
-/// see `FoundationServiceState.commitPreview`), and Current Selection —
+/// List, Current Page Selection List, Current Commit Plan (derived —
+/// see `FoundationServiceState.commitPlan`), Current Commit Report
+/// (`commitReports`/`latestCommitReport`), and Current Selection —
 /// see `docs/CONNECTION_MANAGER.md`. This is the only place in Studio
 /// that holds a [FoundationBridge] instance; every feature reaches
 /// Foundation through this provider, never through the Bridge directly.
@@ -335,6 +337,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       pageSelections: const [],
       procedureSteps: const [],
       specificationDetails: const [],
+      commitReports: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -377,6 +380,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       pageSelections: const [],
       procedureSteps: const [],
       specificationDetails: const [],
+      commitReports: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -412,6 +416,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         pageSelections: record.pageSelections,
         procedureSteps: record.procedureSteps,
         specificationDetails: record.specificationDetails,
+        commitReports: record.commitReports,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -468,6 +473,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           pageSelections: record.pageSelections,
           procedureSteps: record.procedureSteps,
           specificationDetails: record.specificationDetails,
+          commitReports: record.commitReports,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -521,6 +527,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           pageSelections: state.pageSelections,
           procedureSteps: state.procedureSteps,
           specificationDetails: state.specificationDetails,
+          commitReports: state.commitReports,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -697,9 +704,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Relationship Candidate referencing this candidate as source or
   /// target is deleted too — a relationship connecting to a candidate
   /// that no longer exists would otherwise be a dangling reference
-  /// (see `KnowledgeSessionService.computeCommitPreview`'s validation,
-  /// which checks for exactly this in case this cascade is ever
-  /// bypassed, e.g. by a future bulk-delete path). Also removes any
+  /// (see `CommitPlanService.computeCommitPlan`'s own resolvability
+  /// check, which guards against exactly this in case this cascade is
+  /// ever bypassed, e.g. by a future bulk-delete path). Also removes any
   /// Evidence Link referencing this candidate (Work Package 009) — an
   /// evidence link to a deleted candidate would be equally dangling.
   void deleteKnowledgeCandidate(String candidateId) {
@@ -1482,6 +1489,88 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           }
         }
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Repository Commit (Work Package 012)
+  // ---------------------------------------------------------------------
+
+  /// Executes Repository Commit (Work Package 012 STUDIO-TASK-000031/
+  /// 000032): converts [FoundationServiceState.commitPlan]'s eligible
+  /// Knowledge Candidates/Relationship Candidates into real Foundation
+  /// Engineering Objects/Relationships, as one transaction (delegated
+  /// entirely to `CommitTransactionService`, which is the only other
+  /// place besides `FoundationBridge` itself that calls
+  /// `oep_transaction_*`/`oep_object_create`/`oep_relationship_create`
+  /// — this method only orchestrates *state*, per "Connection Manager
+  /// coordinates application state only").
+  ///
+  /// Throws [KnowledgeValidationException] if there is no active
+  /// session or bridge, or if the plan is not committable
+  /// (`canCommit == false`) — checked *before* any Foundation call, so
+  /// an invalid attempt never opens a transaction at all ("Commit shall
+  /// remain disabled until validation succeeds").
+  ///
+  /// On both success and failure, appends the resulting [CommitReport]
+  /// to [FoundationServiceState.commitReports] and persists the session
+  /// — "Knowledge Candidates remain in the Knowledge Session after
+  /// Commit," so even a failed attempt's report is worth keeping. On
+  /// success only, every committed candidate/relationship candidate is
+  /// marked with its new Foundation id (so a later commit of the same
+  /// session never recreates it) and the Current Object/Relationship
+  /// List and Repository Statistics are refreshed immediately, the same
+  /// way [openRepository] already refreshes them after opening.
+  Future<void> commitToFoundation() async {
+    final bridge = _bridge;
+    final session = state.knowledgeSession;
+    final plan = state.commitPlan;
+    if (bridge == null || session == null || plan == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before committing.');
+    }
+    if (!plan.canCommit) {
+      throw const KnowledgeValidationException(
+        'This session cannot be committed yet. Resolve the validation errors shown in the Commit Plan first.',
+      );
+    }
+
+    final report = CommitTransactionService.execute(
+      bridge: bridge,
+      plan: plan,
+      session: session,
+      allCandidates: state.candidates,
+    );
+
+    if (report.success) {
+      final objectIdByCandidateId = {
+        for (final record in report.objectsCreated) record.candidateId: record.objectId,
+      };
+      final relationshipIdByCandidateId = {
+        for (final record in report.relationshipsCreated) record.relationshipCandidateId: record.relationshipId,
+      };
+      final now = DateTime.now();
+      state = state.copyWith(
+        candidates: [
+          for (final candidate in state.candidates)
+            if (objectIdByCandidateId[candidate.id] case final objectId?)
+              candidate.copyWith(committedObjectId: objectId, committedTime: now)
+            else
+              candidate,
+        ],
+        relationshipCandidates: [
+          for (final relationship in state.relationshipCandidates)
+            if (relationshipIdByCandidateId[relationship.id] case final relationshipId?)
+              relationship.copyWith(committedRelationshipId: relationshipId, committedTime: now)
+            else
+              relationship,
+        ],
+        commitReports: [...state.commitReports, report],
+      );
+      _refreshRepositoryData(bridge);
+    } else {
+      state = state.copyWith(commitReports: [...state.commitReports, report]);
+    }
+
+    unawaited(_persistActiveSession());
   }
 
   void _disposeBridge() {

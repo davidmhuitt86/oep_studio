@@ -137,6 +137,36 @@ class RepositoryStatistics {
   final Map<ObjectCategory, int> objectCountByCategory;
   final int relationshipCount;
   final int packageCount;
+
+  /// Serializes for `CommitReport`'s "Repository Statistics Before"/
+  /// "Repository Statistics After" (Work Package 012 STUDIO-TASK-000033)
+  /// — the only reason this snapshot, otherwise ephemeral (decoded from
+  /// a native struct and never previously persisted), needs a JSON
+  /// shape at all.
+  Map<String, dynamic> toJson() => {
+    'repositoryId': repositoryId,
+    'repositoryName': repositoryName,
+    'repositoryVersion': repositoryVersion,
+    'totalObjectCount': totalObjectCount,
+    'objectCountByCategory': {for (final entry in objectCountByCategory.entries) entry.key.name: entry.value},
+    'relationshipCount': relationshipCount,
+    'packageCount': packageCount,
+  };
+
+  factory RepositoryStatistics.fromJson(Map<String, dynamic> json) {
+    final rawCounts = json['objectCountByCategory'] as Map<String, dynamic>? ?? const {};
+    return RepositoryStatistics(
+      repositoryId: json['repositoryId'] as String,
+      repositoryName: json['repositoryName'] as String,
+      repositoryVersion: json['repositoryVersion'] as String,
+      totalObjectCount: json['totalObjectCount'] as int,
+      objectCountByCategory: {
+        for (final category in ObjectCategory.values) category: (rawCounts[category.name] as int?) ?? 0,
+      },
+      relationshipCount: json['relationshipCount'] as int,
+      packageCount: json['packageCount'] as int,
+    );
+  }
 }
 
 /// Decodes a NUL-terminated, fixed-length `char[]` embedded in a struct

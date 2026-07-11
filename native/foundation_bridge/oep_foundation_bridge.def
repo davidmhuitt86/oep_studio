@@ -46,3 +46,9 @@ EXPORTS
     oep_object_search_result_list_release
     oep_search_relationships
     oep_relationship_search_result_list_release
+    oep_object_create
+    oep_relationship_create
+    oep_transaction_begin
+    oep_transaction_commit
+    oep_transaction_rollback
+    oep_transaction_is_active

@@ -9,11 +9,11 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–011 are implemented: Application Shell + Dashboard,
+Work Packages 001–012 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, and — across Work Packages
-007–011 — **Knowledge Studio** (SDD-013). Repository Explorer through
+007–012 — **Knowledge Studio** (SDD-013). Repository Explorer through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -24,16 +24,19 @@ navigation; the Search Workspace performs live Repository/Object/
 Relationship search against Foundation's Search Engine, in
 Foundation's own result order.
 
-Knowledge Studio, by contrast, remains **Studio-only** — no AI, no
-OCR, no repository commit — but is no longer in-memory-only. It
-supports manually-created Knowledge Candidates (across ten types) and
-Relationship Candidates reviewed within a Knowledge Curation Session
-that **persists locally across restarts**
+Knowledge Studio, by contrast, remains **Studio-only for everything
+except Repository Commit** — no AI, no OCR — but is no longer
+in-memory-only. It supports manually-created Knowledge Candidates
+(across ten types) and Relationship Candidates reviewed within a
+Knowledge Curation Session that **persists locally across restarts**
 (`%APPDATA%/oep_studio/knowledge_sessions/`, see
-`docs/KNOWLEDGE_SESSION_FORMAT.md`), a Session Browser (Open/
-Duplicate/Archive/Delete), and a simulated Repository Commit Preview
-with a permanently disabled Commit button (see
-`docs/KNOWLEDGE_STUDIO.md`). Attached PDF Source Material gets a real,
+`docs/KNOWLEDGE_SESSION_FORMAT.md`), and a Session Browser (Open/
+Duplicate/Archive/Delete). As of Work Package 012, Repository Commit is
+real: a Commit Plan shows exactly what will happen, and a transactional
+Commit creates real Engineering Objects and Relationships in the open
+Foundation repository, with automatic rollback on failure and a
+persisted Commit Report per attempt (see `docs/REPOSITORY_COMMIT.md`).
+Attached PDF Source Material gets a real,
 interactive viewer (page navigation, zoom, fit, rotate, continuous
 scrolling) with manual Evidence Region drawing and Page Selection, and
 Knowledge Candidates can be linked to Evidence Regions with
@@ -55,13 +58,14 @@ relationships/procedure and specification usage/evidence count/
 validation) tabs, alongside a Session Health Dashboard of informational
 engineering-quality metrics (see `docs/KNOWLEDGE_GRAPH.md`).
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
-today and what is still a placeholder (repository/object/relationship
-creation, editing, and deletion remain entirely unexposed via
-Foundation; Knowledge Studio's AI Suggestions and Repository Matches
-panels remain placeholder content; Repository Commit itself is not
-implemented; PDF text extraction/selection, non-rectangle Evidence
-Region shapes, and a generalized Source-Material-/Page-Selection-level
-Evidence Link are out of scope).
+today and what is still a placeholder (object/relationship *update*
+and *delete* remain unexposed via Foundation from Studio — only
+*create* was needed for Repository Commit; repository creation/
+deletion remain entirely unexposed; Knowledge Studio's AI Suggestions
+and Repository Matches panels remain placeholder content; PDF text
+extraction/selection, non-rectangle Evidence Region shapes, and a
+generalized Source-Material-/Page-Selection-level Evidence Link are
+out of scope).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -96,9 +100,10 @@ Studio Design Documents live under `docs/`:
 * `CONNECTION_MANAGER.md` — Runtime/Repository/Selection state ownership
 * `SEARCH_WORKSPACE.md` — search workflow, relationship workflow, search history
 * `KNOWLEDGE_STUDIO.md` — workspace layout, session lifecycle, state ownership
-* `KNOWLEDGE_SESSION_FORMAT.md` — persisted session file format, Source Material/Relationship Candidate/Commit Preview models
+* `KNOWLEDGE_SESSION_FORMAT.md` — persisted session file format, Source Material/Relationship Candidate models
 * `EVIDENCE_MODEL.md` — PDF Source Viewer, Evidence Region/Evidence Link/Page Selection models
 * `KNOWLEDGE_CANDIDATES.md` — Knowledge Candidate/Procedure/Procedure Step/Specification/Validation models
 * `KNOWLEDGE_GRAPH.md` — Knowledge Session Graph/Provenance/Dependency/Session Health models
+* `REPOSITORY_COMMIT.md` — Commit Plan/Candidate Conversion/Transaction Model/Commit Report
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

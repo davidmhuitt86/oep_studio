@@ -314,6 +314,35 @@ typedef OepRelationshipSearchResultListReleaseNative = Void Function(
   Pointer<OepRelationshipSearchResultListNative> list,
 );
 
+// --- Object/Relationship Mutation, Transactions (Work Package 014,
+// TASK-000027/28/29 — the first write-capable surface of this API) ---
+
+typedef OepObjectCreateNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Int32 objectType,
+  Pointer<Utf8> name,
+  Pointer<Utf8> description,
+  Pointer<Utf8> author,
+  Pointer<Pointer<Utf8>> tags,
+  Int32 tagCount,
+  Pointer<OepObjectInfoNative> outObject,
+);
+
+typedef OepRelationshipCreateNative = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> sourceObjectId,
+  Pointer<Utf8> targetObjectId,
+  Int32 relationshipType,
+  Pointer<Utf8> author,
+  Pointer<Utf8> description,
+  Pointer<OepRelationshipInfoNative> outRelationship,
+);
+
+typedef OepTransactionBeginNative = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionCommitNative = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionRollbackNative = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionIsActiveNative = Int32 Function(Pointer<Void> runtime);
+
 // dart:ffi requires a separate Dart-side typedef alongside each Native
 // one whenever the native signature uses fixed-width types (Int32) that
 // don't map 1:1 onto a Dart type.
@@ -398,3 +427,29 @@ typedef OepSearchRelationshipsDart = OepResultNative Function(
 typedef OepRelationshipSearchResultListReleaseDart = void Function(
   Pointer<OepRelationshipSearchResultListNative> list,
 );
+
+typedef OepObjectCreateDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  int objectType,
+  Pointer<Utf8> name,
+  Pointer<Utf8> description,
+  Pointer<Utf8> author,
+  Pointer<Pointer<Utf8>> tags,
+  int tagCount,
+  Pointer<OepObjectInfoNative> outObject,
+);
+
+typedef OepRelationshipCreateDart = OepResultNative Function(
+  Pointer<Void> runtime,
+  Pointer<Utf8> sourceObjectId,
+  Pointer<Utf8> targetObjectId,
+  int relationshipType,
+  Pointer<Utf8> author,
+  Pointer<Utf8> description,
+  Pointer<OepRelationshipInfoNative> outRelationship,
+);
+
+typedef OepTransactionBeginDart = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionCommitDart = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionRollbackDart = OepResultNative Function(Pointer<Void> runtime);
+typedef OepTransactionIsActiveDart = int Function(Pointer<Void> runtime);
