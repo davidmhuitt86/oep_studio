@@ -10,6 +10,7 @@ import '../models/source_material.dart';
 import '../models/source_material_type.dart';
 import '../services/source_material_service.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'ocr_layer_viewer_dialog.dart';
 import 'pdf_source_viewer.dart';
 
 /// The Source Viewer panel (Work Package 008 STUDIO-TASK-000016;
@@ -67,9 +68,21 @@ class _ImagePreview extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          source.originalFileName,
-          style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                source.originalFileName,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+            IconButton(
+              tooltip: 'OCR Layer Viewer',
+              icon: const Icon(Icons.text_snippet_outlined, size: 18),
+              onPressed: () => showOcrLayerViewerDialog(context, source: source),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         Expanded(

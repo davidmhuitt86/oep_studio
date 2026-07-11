@@ -15,6 +15,7 @@ import '../../knowledge/inspector/source_material_properties.dart';
 import '../../knowledge/models/evidence_link.dart';
 import '../../knowledge/models/evidence_region.dart';
 import '../../knowledge/models/knowledge_candidate.dart';
+import '../../knowledge/models/ocr_processing_status.dart';
 import '../../knowledge/models/source_material.dart';
 import 'property_field.dart';
 
@@ -113,6 +114,9 @@ class PropertyInspectorPanel extends ConsumerWidget {
                         .map((selection) => selection.page)
                         .toList()
                       ..sort(),
+                ocrStatus: foundation.ocrProcessingStatus[source.id] ?? OcrProcessingStatus.notProcessed,
+                ocrResults: foundation.ocrResultsForSource(source.id),
+                ocrAverageConfidence: foundation.ocrAverageConfidenceFor(source.id),
               ),
               (_, _, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
               (_, _, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),

@@ -11,6 +11,8 @@ import '../../knowledge/models/knowledge_graph_node.dart';
 import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/knowledge_session_record.dart';
 import '../../knowledge/models/knowledge_validation_exception.dart';
+import '../../knowledge/models/ocr_processing_exception.dart';
+import '../../knowledge/models/ocr_processing_status.dart';
 import '../../knowledge/models/page_selection.dart';
 import '../../knowledge/models/procedure_step.dart';
 import '../../knowledge/models/relationship_candidate.dart';
@@ -22,6 +24,7 @@ import '../../knowledge/models/specification_type.dart';
 import '../../knowledge/services/commit_transaction_service.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
 import '../../knowledge/services/knowledge_session_storage.dart';
+import '../../knowledge/services/ocr_pipeline_service.dart';
 import '../../knowledge/services/source_material_service.dart';
 import '../foundation/foundation_bridge.dart';
 import '../foundation/foundation_bridge_exception.dart';
@@ -338,6 +341,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       procedureSteps: const [],
       specificationDetails: const [],
       commitReports: const [],
+      ocrPageResults: const [],
+      ocrProcessingStatus: const {},
+      ocrOverlayVisible: true,
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -348,6 +354,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearKnowledgeStorageError: true,
       clearOpenProcedure: true,
       clearSelectedProcedureStep: true,
+      clearOcrErrorMessage: true,
     );
     unawaited(_persistActiveSession());
   }
@@ -381,6 +388,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       procedureSteps: const [],
       specificationDetails: const [],
       commitReports: const [],
+      ocrPageResults: const [],
+      ocrProcessingStatus: const {},
+      ocrOverlayVisible: true,
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -391,6 +401,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearKnowledgeStorageError: true,
       clearOpenProcedure: true,
       clearSelectedProcedureStep: true,
+      clearOcrErrorMessage: true,
     );
   }
 
@@ -417,6 +428,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         procedureSteps: record.procedureSteps,
         specificationDetails: record.specificationDetails,
         commitReports: record.commitReports,
+        ocrPageResults: record.ocrPageResults,
+        ocrProcessingStatus: const {},
+        ocrOverlayVisible: true,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -427,6 +441,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearKnowledgeStorageError: true,
         clearOpenProcedure: true,
         clearSelectedProcedureStep: true,
+        clearOcrErrorMessage: true,
       );
     } on KnowledgeValidationException catch (error) {
       state = state.copyWith(knowledgeStorageError: error.message);
@@ -474,6 +489,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           procedureSteps: record.procedureSteps,
           specificationDetails: record.specificationDetails,
           commitReports: record.commitReports,
+          ocrPageResults: record.ocrPageResults,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -528,6 +544,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           procedureSteps: state.procedureSteps,
           specificationDetails: state.specificationDetails,
           commitReports: state.commitReports,
+          ocrPageResults: state.ocrPageResults,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -932,11 +949,18 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final selectedRegionRemoved = state.selectedEvidenceRegion != null && removedRegionIds.contains(state.selectedEvidenceRegion!.id);
     final selectedLinkRemoved =
         state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
+    final remainingOcrProcessingStatus = Map<String, OcrProcessingStatus>.from(state.ocrProcessingStatus)
+      ..remove(sourceId);
     state = state.copyWith(
       sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
       evidenceRegions: remainingRegions,
       evidenceLinks: remainingLinks,
       pageSelections: state.pageSelections.where((selection) => selection.sourceId != sourceId).toList(),
+      // Work Package 013: a source's OCR results are meaningless once
+      // the source itself is gone — cascaded the same way Evidence
+      // Regions/Page Selections already are above.
+      ocrPageResults: state.ocrPageResults.where((result) => result.sourceId != sourceId).toList(),
+      ocrProcessingStatus: remainingOcrProcessingStatus,
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
       clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
       clearCurrentPage: state.openSourceDocument?.id == sourceId,
@@ -1571,6 +1595,70 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
 
     unawaited(_persistActiveSession());
+  }
+
+  // ---------------------------------------------------------------------
+  // OCR Pipeline (Work Package 013)
+  // ---------------------------------------------------------------------
+
+  /// Runs OCR for [sourceId] — every page needing (re)processing, per
+  /// `OcrCacheService` (STUDIO-TASK-000037: "Reopening a session shall
+  /// not rerun OCR"). Safe to call every time the OCR Layer Viewer opens
+  /// for a source: a fully-cached, unchanged source returns almost
+  /// immediately with no engine invocation at all. Throws
+  /// [KnowledgeValidationException] if no session is active or
+  /// [sourceId] doesn't exist; pipeline-level failures (e.g. the OCR
+  /// engine isn't installed) are caught and surfaced via
+  /// [FoundationServiceState.ocrErrorMessage] rather than thrown — the
+  /// OCR Layer Viewer calls this from its own `initState`/open logic,
+  /// not from inside a form it needs to keep open on failure.
+  Future<void> runOcrForSource(String sourceId) async {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before running OCR.');
+    }
+    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This source could not be found.');
+    }
+    final source = matches.first;
+
+    state = state.copyWith(
+      ocrProcessingStatus: {...state.ocrProcessingStatus, sourceId: OcrProcessingStatus.processing},
+      clearOcrErrorMessage: true,
+    );
+    try {
+      final results = await OcrPipelineService.processSource(source: source, existingResults: state.ocrPageResults);
+      final allSucceeded = results.isNotEmpty && results.every((result) => result.success);
+      state = state.copyWith(
+        ocrPageResults: [
+          ...state.ocrPageResults.where((result) => result.sourceId != sourceId),
+          ...results,
+        ],
+        ocrProcessingStatus: {
+          ...state.ocrProcessingStatus,
+          sourceId: allSucceeded ? OcrProcessingStatus.completed : OcrProcessingStatus.failed,
+        },
+      );
+      unawaited(_persistActiveSession());
+    } on OcrProcessingException catch (error) {
+      state = state.copyWith(
+        ocrProcessingStatus: {...state.ocrProcessingStatus, sourceId: OcrProcessingStatus.failed},
+        ocrErrorMessage: error.message,
+      );
+    }
+  }
+
+  /// Toggles the OCR Layer Viewer's overlay (Work Package 013
+  /// Connection Manager: "OCR overlay visibility"; STUDIO-TASK-000035
+  /// "Engineers may: Show OCR / Hide OCR").
+  void toggleOcrOverlay() {
+    state = state.copyWith(ocrOverlayVisible: !state.ocrOverlayVisible);
+  }
+
+  /// Dismisses the current OCR error banner without retrying anything
+  /// (mirrors [clearKnowledgeStorageError]).
+  void clearOcrErrorMessage() {
+    state = state.copyWith(clearOcrErrorMessage: true);
   }
 
   void _disposeBridge() {

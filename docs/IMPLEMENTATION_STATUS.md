@@ -2638,7 +2638,7 @@ Tasks:
 * STUDIO-TASK-000031 — Candidate Conversion — Complete
 * STUDIO-TASK-000032 — Transactional Repository Commit — Complete
 * STUDIO-TASK-000033 — Commit Report — Complete
-* STUDIO-TASK-000034 — Property Inspector Commit Plan/Commit Report support — Complete
+* Property Inspector Commit Plan/Commit Report support (part of STUDIO-TASK-000033) — Complete
 
 ### Architectural Blocker, Then Resolution
 
@@ -2887,4 +2887,252 @@ work package's instructions say to stop for - unlike the Public C API's
 total absence of mutation capability at the start of this work package,
 which was exactly that kind of conflict and was reported as a blocker
 rather than worked around.
+
+---
+
+## Work Package 013 — Knowledge Studio (Engineering OCR Pipeline)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000034 — OCR Pipeline — Complete
+* STUDIO-TASK-000035 — OCR Layer Viewer — Complete
+* STUDIO-TASK-000036 — Searchable Documents — Complete
+* STUDIO-TASK-000037 — OCR Session Cache — Complete
+
+### What Exists
+
+Continues the Work Package 007-012 `lib/knowledge/` module - OCR
+augments Source Material only, exactly like Evidence Regions/Page
+Selections before it: Studio-only, never Foundation, never a
+Knowledge Candidate. Full detail in `docs/OCR_PIPELINE.md`.
+
+* `lib/knowledge/models/ocr_bounding_box.dart`, `ocr_word.dart`,
+  `ocr_page_result.dart`, `ocr_processing_status.dart`,
+  `ocr_search_match.dart`, `ocr_processing_exception.dart` (all new) -
+  the OCR data model: text/confidence/bounding box/reading order per
+  word, a page result with a content-hash fingerprint and engine
+  version, per-source processing status, a search match.
+* `lib/knowledge/services/tesseract_tsv_parser.dart` (new, pure) -
+  parses Tesseract's `tsv` CLI output format into `OcrWord`s; unit
+  tested against a real captured Tesseract 5.4.0 sample.
+* `lib/knowledge/services/tesseract_ocr_engine.dart` (new) - the only
+  place Studio invokes the external `tesseract` process; locates the
+  installed engine, exposes `isAvailable()`/`engineVersion()`/
+  `recognizePage()`.
+* `lib/knowledge/services/ocr_cache_service.dart` (new) - SHA-256
+  content fingerprinting and cache-validity/pages-needing-processing
+  logic (pure, given an already-computed fingerprint).
+* `lib/knowledge/services/ocr_pipeline_service.dart` (new) - orchestrates
+  per-page (re)processing: renders PDF pages to PNG via `pdfrx` +
+  `dart:ui` pixel-to-PNG encoding, calls the OCR engine per page,
+  merges fresh results with still-valid cached ones.
+* `lib/knowledge/services/ocr_search_service.dart` (new, pure) - Find/
+  Find Next matching, case-insensitive, line-scoped.
+* `lib/knowledge/models/knowledge_session_record.dart` - extended with
+  `ocrPageResults`, backward-compatible default `[]`.
+* `lib/knowledge/services/knowledge_session_service.dart` -
+  `buildDuplicate` carries `ocrPageResults` over unchanged (same
+  content-hash-survives-file-copy reasoning as Work Package 012's
+  commit-tracking fields).
+* `lib/knowledge/models/source_material_type.dart` - `tif`/`tiff`
+  extensions added to `SourceMaterialType.image` (OCR's own "Supported:
+  PDF, PNG, JPG, TIFF" list).
+* `lib/core/services/foundation_runtime_state.dart` - `ocrPageResults`
+  (persisted), `ocrProcessingStatus`/`ocrOverlayVisible`/`ocrErrorMessage`
+  (ephemeral), plus `ocrResultsForSource`/`ocrSuccessfulPageCountFor`/
+  `ocrAverageConfidenceFor` derived getters.
+* `lib/core/services/foundation_runtime_service.dart` - `runOcrForSource`
+  (the only method that calls `OcrPipelineService`), `toggleOcrOverlay`,
+  `clearOcrErrorMessage`; `ocrPageResults` wired through
+  create/close/open/archive/persist/duplicate, and cascaded on
+  `removeSourceMaterial` (a removed source's OCR results are dropped
+  too, same pattern as Evidence Regions/Page Selections).
+* `lib/knowledge/workspaces/ocr_layer_viewer_dialog.dart` (new) - the
+  OCR Layer Viewer: original page + toggleable word-box overlay +
+  confidence heat map, PDF via a second `pdfrx.PdfViewer` instance with
+  `pageOverlaysBuilder`, images via `InteractiveViewer`/`Stack`, plus a
+  Find/Find Next search bar. Triggers `runOcrForSource` on open every
+  time (its own cache check makes repeat opens near-instant when
+  nothing changed).
+* `lib/knowledge/workspaces/pdf_source_viewer.dart` /
+  `source_viewer_panel.dart` - a new "OCR Layer Viewer" toolbar entry
+  point, for PDF and image sources respectively.
+* `lib/knowledge/inspector/source_material_properties.dart` - a new OCR
+  section (OCR Status, Pages OCR'd, Confidence, OCR Engine).
+* `pubspec.yaml` - `crypto` added as a direct dependency (SHA-256
+  fingerprinting).
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: no AI, no automatic
+Knowledge Candidate generation, no Repository Commit changes. OCR
+result editing does not exist ("No editing yet" - STUDIO-TASK-000035's
+own text). `oep_foundation`/the Public C API are untouched.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      ocr_bounding_box.dart                New
+      ocr_word.dart                        New
+      ocr_page_result.dart                 New
+      ocr_processing_status.dart           New
+      ocr_processing_exception.dart        New
+      ocr_search_match.dart                New
+      knowledge_session_record.dart        Extended (ocrPageResults)
+      source_material_type.dart            Extended (tif/tiff)
+    services/
+      tesseract_tsv_parser.dart            New
+      tesseract_ocr_engine.dart            New
+      ocr_cache_service.dart               New
+      ocr_pipeline_service.dart            New
+      ocr_search_service.dart              New
+      knowledge_session_service.dart       Extended (buildDuplicate)
+    workspaces/
+      ocr_layer_viewer_dialog.dart         New
+      pdf_source_viewer.dart               Extended (OCR toolbar button)
+      source_viewer_panel.dart             Extended (OCR toolbar button)
+    inspector/
+      source_material_properties.dart      Extended (OCR section)
+  core/
+    services/
+      foundation_runtime_state.dart        Extended (OCR state + getters)
+      foundation_runtime_service.dart      Extended (runOcrForSource etc.)
+  shared/
+    widgets/
+      property_inspector_panel.dart        Extended (OCR params wired)
+docs/
+  OCR_PIPELINE.md                          New
+```
+
+### Package Decisions
+
+**One new dependency: `crypto` (Dart-team-maintained, BSD-3, no native
+code)** for `OcrCacheService`'s SHA-256 fingerprinting — already a
+transitive dependency via `pdfrx`, promoted to direct since it's used
+directly.
+
+**OCR engine: Tesseract, invoked as an external process** — not a
+Flutter package. Three-plus alternatives compared
+(`flutter_ocr_native`, `flusseract`, `tesseract_ocr`, cloud OCR APIs),
+each rejected for a documented reason (an ID-scanning SDK with content-
+filtering behavior; a two-year-stale wrapper with unconfirmed
+structured output; no Windows desktop support at all; violates local/
+offline processing). See `docs/OCR_PIPELINE.md` § Package Selection
+Rationale for the full comparison and rationale. No Flutter package
+for the OCR Layer Viewer or search UI either - built on `pdfrx`
+(already a dependency) and Flutter framework widgets
+(`InteractiveViewer`/`Stack`/`Positioned`).
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 160/160 passing: all prior tests, plus three new test
+  files (`tesseract_tsv_parser_test.dart` - 10 tests including a real
+  captured Tesseract 5.4.0 TSV sample and a CRLF-line-ending regression
+  test; `ocr_cache_service_test.dart` - 7 tests covering fingerprint
+  matching/mismatch, previously-failed-page non-permanence, and pages-
+  needing-processing; `ocr_search_service_test.dart` - 6 tests covering
+  single-word/multi-word/cross-line/cross-page/no-match search).
+* flutter build windows - succeeded.
+* **Manual verification against real engineering documents.** A
+  synthetic-but-realistic 3-page PDF service manual (torque
+  specification table, a numbered replacement procedure with a
+  WARNING line, a parts list with real part-number formatting) and a
+  PNG/TIFF/JPG specification sheet were generated by a one-off Python
+  (`reportlab`)/PowerShell (`System.Drawing`) script, not committed -
+  mirroring Work Packages 009/010's own fixture precedent. Tesseract
+  OCR (v5.4.0.20240606) was installed via `winget` with the user's
+  explicit permission after research showed it was the only suitable
+  engine (see `docs/OCR_PIPELINE.md` § Package Selection Rationale);
+  the CLI was run directly against all three image formats first to
+  establish ground truth before any Studio code touched them.
+
+  As in Work Packages 007-012, `computer-use` was confirmed unable to
+  target the compiled `oep_studio.exe`. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test` (added, run against the real compiled
+  app via `flutter test ... -d windows` with `--dart-define`-supplied
+  fixture paths, then deleted - `pubspec.yaml`'s `integration_test` dev
+  dependency reverted and `pubspec.lock` regenerated), attaching all
+  three fixtures directly through `FoundationRuntimeNotifier.attachSourceMaterial`
+  (bypassing the native file picker, this project's established
+  precedent for this exact dialog's unreliability in this
+  environment).
+
+  The test drove: create a session, attach the PDF/PNG/TIFF fixtures,
+  open the OCR Layer Viewer for the PDF (waiting for real OCR across
+  all 3 rendered pages), search for text appearing only in page 2's
+  procedure steps and confirm a real match, Find Next, close and
+  reopen the dialog to confirm the cached result was reused (no
+  "Running OCR..." spinner the second time), then repeat OCR + search
+  for the PNG and TIFF sources, and finally independently confirm via
+  the Connection Manager that every source had real, non-empty,
+  successful `OcrPageResult`s. **Two real bugs were found and fixed
+  during this pass**, both described in full in
+  `docs/OCR_PIPELINE.md` § Architectural Observations:
+  1. `TesseractTsvParser` read the page-level row's `width`/`height`
+     from the wrong TSV columns (left/top instead of width/height),
+     producing a `0x0` image size for every page - caught by the unit
+     tests before manual verification even began (a genuine test-first
+     catch, not a manual-verification catch).
+  2. `TesseractTsvParser` split TSV output on `'\n'` only; a real
+     Windows `tesseract` install emits `\r\n`, leaving a trailing `'\r'`
+     on every word's text and silently breaking exact-substring search
+     ("oil\r filter" is not a substring of "oil filter"). This one was
+     *not* caught by the hand-written-fixture unit tests - only surfaced
+     once a real, `tesseract`-generated image was searched through the
+     actual running application, exactly the class of bug "manual
+     verification against real engineering documents" exists to catch.
+     Fixed, with a regression test added reproducing the exact CRLF
+     scenario.
+
+  Two additional test-script-only issues were fixed along the way (not
+  Studio defects): a source lookup by pre-copy file path instead of
+  `originalFileName` (`attachSourceMaterial` copies the file, changing
+  its path), and an off-screen `tester.tap` on the OCR toolbar button
+  inside a horizontally-scrollable toolbar (fixed with
+  `tester.ensureVisible` before tapping) - both are recorded here since
+  a future verification session hitting the same finder patterns should
+  not have to re-diagnose them from scratch.
+
+### Architectural Observations
+
+See `docs/OCR_PIPELINE.md` § Architectural Observations for the full
+account - summarized here:
+
+* **Tesseract is the first external, system-installed (not bundled)
+  native dependency in this project** - every prior native dependency
+  builds or bundles automatically via `flutter build windows`.
+  `TesseractOcrEngine.isAvailable()` fails clearly, never silently,
+  when it's missing.
+* **TIFF preview is a genuine, narrow gap**: OCR supports TIFF (via
+  Tesseract's own `libtiff`), but Flutter's built-in image codecs
+  cannot decode it for on-screen preview. Resolved with graceful
+  degradation (a placeholder canvas, correctly sized, with a fully
+  functional overlay/search on top) rather than a new image-decoding
+  dependency, which would have been scope creep beyond this work
+  package's actual OCR tasks.
+* **Search is deliberately line-scoped**, matching how printed
+  engineering text is actually laid out (a torque-spec table row, a
+  parts-list line), not a limitation discovered by accident.
+* **The `flutter_ocr_native` package's real feature surface (an ID/KYC
+  document-scanning SDK with content-filtering behavior) was discovered
+  only through direct inspection of its actual API**, not its
+  marketing description ("actively maintained... structured OCR
+  results") - a reminder that "compare at least three alternatives"
+  means reading each one's real surface, not trusting a search-engine
+  summary of a package's own README.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available (fail clearly rather than bundle
+the unbundlable; degrade gracefully rather than add a new dependency
+for a narrow preview gap; scope search to what a human would read as
+one phrase) and none constituted the kind of genuine, irreconcilable
+architectural conflict this work package's instructions say to stop
+for.
 

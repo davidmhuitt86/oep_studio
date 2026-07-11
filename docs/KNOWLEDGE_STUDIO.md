@@ -17,20 +17,23 @@ STUDIO-TASK-000028 Candidate Dependency Viewer, STUDIO-TASK-000029
 Session Health Dashboard); extended again in Work Package 012
 (STUDIO-TASK-000030 Commit Plan, STUDIO-TASK-000031 Candidate
 Conversion, STUDIO-TASK-000032 Transactional Repository Commit,
-STUDIO-TASK-000033 Commit Report, STUDIO-TASK-000034 Property Inspector
-Commit Plan/Commit Report support). Validates the architecture defined
-in SDD-013 (Knowledge Studio), SDD-014 (Engineering Knowledge
-Acquisition Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016
-(Knowledge Studio User Experience), SDD-017 (Knowledge Curation
-Workflow), SDD-018 (Engineering Knowledge Lifecycle and Provenance),
-SDD-019 (Engineering Object Philosophy), SDD-020 (Engineering Knowledge
-Review System), and — as of Work Package 010 — SDD-021 (Engineering
-Evidence Model), remaining **Studio-only: no AI, no OCR** through every
-work package — **except Repository Commit itself**, which as of Work
-Package 012 performs a real, transactional write into the open
-Foundation repository through the Public C API's Object/Relationship
-Mutation and Transaction functions (Foundation's own Work Package 014)
-— see `docs/REPOSITORY_COMMIT.md`.
+STUDIO-TASK-000033 Commit Report, including Property Inspector Commit
+Plan/Commit Report support); extended again in Work Package 013
+(STUDIO-TASK-000034 OCR Pipeline, STUDIO-TASK-000035 OCR Layer Viewer,
+STUDIO-TASK-000036 Searchable Documents, STUDIO-TASK-000037 OCR
+Session Cache). Validates the architecture defined in SDD-013
+(Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
+Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
+Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
+(Engineering Knowledge Lifecycle and Provenance), SDD-019 (Engineering
+Object Philosophy), SDD-020 (Engineering Knowledge Review System), and
+— as of Work Package 010 — SDD-021 (Engineering Evidence Model),
+remaining **Studio-only: no AI** through every work package — except
+Repository Commit itself (Work Package 012, a real, transactional write
+into the open Foundation repository — see `docs/REPOSITORY_COMMIT.md`)
+and OCR (Work Package 013 — a real, local Tesseract OCR pipeline that
+augments Source Material with searchable text and positional data,
+never Knowledge Candidates, never Foundation — see `docs/OCR_PIPELINE.md`).
 
 For the persisted-file format and the Relationship Candidate model
 reference (including the `KnowledgeCandidateType`/`ObjectCategory`
@@ -44,8 +47,11 @@ For the Knowledge Session Graph/Provenance/Dependency/Session Health
 model reference and the Work Package 011 architectural findings, see
 `docs/KNOWLEDGE_GRAPH.md`. For the Commit Plan/Candidate Conversion/
 Transaction Model/Commit Report reference and the Work Package 012
-architectural findings, see `docs/REPOSITORY_COMMIT.md`. This document
-covers the workspace layout, session lifecycle, and state ownership.
+architectural findings, see `docs/REPOSITORY_COMMIT.md`. For the OCR
+architecture/cache/overlay/search/confidence model reference and the
+Work Package 013 architectural findings, see `docs/OCR_PIPELINE.md`.
+This document covers the workspace layout, session lifecycle, and
+state ownership.
 
 > **Note on SDD-014.** SDD-014 was an empty file (0 bytes) as of Work
 > Package 007 and remains unpopulated as of Work Package 011. None of
@@ -117,7 +123,10 @@ functionality:
   zoom, fit, rotate, continuous scrolling, Evidence Region drawing,
   Page Selection — see `docs/EVIDENCE_MODEL.md`). Everything else
   renders what it reasonably can (image thumbnail; Markdown/Text raw
-  content; a location-only message for Other).
+  content; a location-only message for Other). PDF and image (PNG/JPG/
+  TIFF) sources both get an "OCR Layer Viewer" toolbar entry point
+  (Work Package 013) opening `lib/knowledge/workspaces/ocr_layer_viewer_dialog.dart`
+  — see `docs/OCR_PIPELINE.md`.
 * **Engineering Review** (`lib/knowledge/review/engineering_review_panel.dart`)
   — two tabs: Candidates (manual Knowledge Candidate creation across
   ten types, Accept/Reject/Edit/Duplicate/Delete, filter/sort, and
@@ -382,6 +391,10 @@ ownership table; as of Work Package 011:
 | `knowledgeStorageError` | The most recent autosave/Session-Browser persistence failure, if any |
 | `commitPlan` | Derived getter (Work Package 012) — see § Repository Commit |
 | `commitReports` / `latestCommitReport` | The append-only history of Repository Commit attempts against this session, and the most recent one (Work Package 012) — see § Repository Commit |
+| `ocrPageResults` | OCR results for this session's Source Material, persisted (Work Package 013) — see `docs/OCR_PIPELINE.md` § OCR Cache |
+| `ocrProcessingStatus` | Per-source OCR processing state, ephemeral (Work Package 013's "OCR state") — see `docs/OCR_PIPELINE.md` |
+| `ocrOverlayVisible` | Whether the OCR Layer Viewer's overlay is shown, ephemeral (Work Package 013's "OCR overlay visibility") |
+| `ocrErrorMessage` | The most recent pipeline-level OCR failure, if any (Work Package 013), mirroring `knowledgeStorageError` |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
@@ -445,9 +458,11 @@ Per this project's Knowledge Studio error-handling rules (invalid
 session names, duplicate candidate names, missing repository, invalid/
 missing source files, invalid relationship definitions, corrupted
 session files, invalid PDFs, deleted source material, invalid
-specifications, invalid units, invalid procedure ordering, and — as of
-Work Package 011 — empty sessions, missing evidence, broken graph/
-provenance/dependency references, and invalid graph nodes):
+specifications, invalid units, invalid procedure ordering, empty
+sessions, missing evidence, broken graph/provenance/dependency
+references, invalid graph nodes, and — as of Work Package 013 — a
+missing/unavailable OCR engine and a page that fails to render or
+recognize):
 
 * **New Session / New Candidate / New Relationship Candidate / Insert
   or Edit Step / Specification Editor dialogs** validate inline — an
@@ -466,6 +481,14 @@ provenance/dependency references, and invalid graph nodes):
   (`knowledgeStorageError`) rather than a dialog, since most triggers
   (e.g. accepting a candidate) have no dialog already open to show one
   in.
+* **Pipeline-level OCR failures** (the engine is missing; Work Package
+  013) surface via a dismissible banner inside the OCR Layer Viewer
+  dialog itself (`ocrErrorMessage`), the same pattern as
+  `knowledgeStorageError` — `runOcrForSource` is triggered by opening
+  that dialog, not from inside a form. **Per-page OCR failures** (one
+  page failed to render/recognize) do not block the rest of the
+  document — they produce a failed `OcrPageResult` for that page only,
+  shown inline where that page would otherwise appear.
 
 All validation and persistence failures throw
 `KnowledgeValidationException`

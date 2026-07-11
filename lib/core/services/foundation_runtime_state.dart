@@ -9,6 +9,8 @@ import '../../knowledge/models/knowledge_candidate.dart';
 import '../../knowledge/models/knowledge_candidate_status.dart';
 import '../../knowledge/models/knowledge_session.dart';
 import '../../knowledge/models/knowledge_session_graph.dart';
+import '../../knowledge/models/ocr_page_result.dart';
+import '../../knowledge/models/ocr_processing_status.dart';
 import '../../knowledge/models/page_selection.dart';
 import '../../knowledge/models/procedure_step.dart';
 import '../../knowledge/models/relationship_candidate.dart';
@@ -35,14 +37,15 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-009): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-013): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
 /// List, Current Relationship Candidate List, Current Commit Plan,
 /// Current Commit Report, Current Source Document/Page, Current Evidence
 /// Region List, Current Evidence Link List, Current Page Selection List,
-/// and Current Selection
+/// OCR state/OCR overlay visibility (Work Package 013), and Current
+/// Selection
 /// (of an object, a relationship, a Knowledge Candidate, a Relationship
 /// Candidate, a Source Material, or an Evidence Region — never more than
 /// one at once). Immutable; widgets watch this through
@@ -86,6 +89,10 @@ class FoundationServiceState {
     this.openProcedure,
     this.selectedProcedureStep,
     this.commitReports = const [],
+    this.ocrPageResults = const [],
+    this.ocrProcessingStatus = const {},
+    this.ocrOverlayVisible = true,
+    this.ocrErrorMessage,
   });
 
   final FoundationConnectionPhase phase;
@@ -285,6 +292,38 @@ class FoundationServiceState {
   /// package's own text).
   final List<CommitReport> commitReports;
 
+  /// OCR results for this session's Source Material (Work Package 013
+  /// STUDIO-TASK-000034/000037), one entry per (source, page) —
+  /// persisted with the session, unlike every field below. See
+  /// `docs/OCR_PIPELINE.md` § OCR Cache.
+  final List<OcrPageResult> ocrPageResults;
+
+  /// Whether a background OCR run is currently in flight for a source,
+  /// keyed by [SourceMaterial.id] (Work Package 013 Connection
+  /// Manager: "OCR state"). Ephemeral — a fresh launch always starts
+  /// with an empty map and re-evaluates the cache from
+  /// [ocrPageResults]/[OcrCacheService] rather than persisting
+  /// "processing," which cannot survive a restart meaningfully.
+  final Map<String, OcrProcessingStatus> ocrProcessingStatus;
+
+  /// Whether the OCR Layer Viewer's word-box/confidence-heat-map
+  /// overlay is currently shown over the original page (Work Package
+  /// 013 Connection Manager: "OCR overlay visibility"; STUDIO-TASK-000035
+  /// "Engineers may: Show OCR / Hide OCR"). Defaults to `true` — the
+  /// overlay is the reason to open that dialog in the first place.
+  /// Ephemeral, like [currentPage] — a display toggle, not session
+  /// content.
+  final bool ocrOverlayVisible;
+
+  /// The most recent pipeline-level OCR failure (e.g. "Tesseract is not
+  /// installed"), if any — mirrors [knowledgeStorageError]'s pattern:
+  /// surfaced as a banner rather than thrown, since [runOcrForSource]
+  /// is usually triggered by opening a dialog, not from inside one.
+  /// Distinct from a single *page's* failure
+  /// ([OcrPageResult.errorMessage]), which is scoped to that page only
+  /// and does not stop the rest of the document from processing.
+  final String? ocrErrorMessage;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -464,6 +503,30 @@ class FoundationServiceState {
     );
   }
 
+  /// [sourceId]'s cached OCR results, sorted by page (Work Package 013
+  /// — the OCR Layer Viewer and the Property Inspector's OCR section
+  /// both need "every result for this one source," never the full
+  /// cross-session list).
+  List<OcrPageResult> ocrResultsForSource(String sourceId) {
+    final results = ocrPageResults.where((result) => result.sourceId == sourceId).toList()
+      ..sort((a, b) => a.page.compareTo(b.page));
+    return results;
+  }
+
+  /// How many of [sourceId]'s pages have a *successful* cached OCR
+  /// result (Property Inspector "OCR statistics" — "Pages OCR'd").
+  int ocrSuccessfulPageCountFor(String sourceId) =>
+      ocrResultsForSource(sourceId).where((result) => result.success).length;
+
+  /// The mean of every successfully-OCR'd page's
+  /// [OcrPageResult.averageConfidence] for [sourceId], or `0` if none
+  /// have been processed yet (Property Inspector "Confidence").
+  double ocrAverageConfidenceFor(String sourceId) {
+    final successful = ocrResultsForSource(sourceId).where((result) => result.success).toList();
+    if (successful.isEmpty) return 0;
+    return successful.map((result) => result.averageConfidence).reduce((a, b) => a + b) / successful.length;
+  }
+
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
     FoundationRuntimeState? runtimeState,
@@ -521,6 +584,11 @@ class FoundationServiceState {
     ProcedureStep? selectedProcedureStep,
     bool clearSelectedProcedureStep = false,
     List<CommitReport>? commitReports,
+    List<OcrPageResult>? ocrPageResults,
+    Map<String, OcrProcessingStatus>? ocrProcessingStatus,
+    bool? ocrOverlayVisible,
+    String? ocrErrorMessage,
+    bool clearOcrErrorMessage = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -571,6 +639,10 @@ class FoundationServiceState {
       openProcedure: clearOpenProcedure ? null : (openProcedure ?? this.openProcedure),
       selectedProcedureStep: clearSelectedProcedureStep ? null : (selectedProcedureStep ?? this.selectedProcedureStep),
       commitReports: commitReports ?? this.commitReports,
+      ocrPageResults: ocrPageResults ?? this.ocrPageResults,
+      ocrProcessingStatus: ocrProcessingStatus ?? this.ocrProcessingStatus,
+      ocrOverlayVisible: ocrOverlayVisible ?? this.ocrOverlayVisible,
+      ocrErrorMessage: clearOcrErrorMessage ? null : (ocrErrorMessage ?? this.ocrErrorMessage),
     );
   }
 }

@@ -371,6 +371,14 @@ abstract final class KnowledgeSessionService {
       // duplication, identical candidate data. See
       // `docs/REPOSITORY_COMMIT.md` § Architectural Observations.
       commitReports: original.commitReports,
+      // Also carried over unchanged: `File.copy` (`SourceMaterialService.attach`'s
+      // duplication path) produces byte-identical copies, so each
+      // result's `sourceFingerprint` (a content hash, not a file-system-
+      // metadata one) still matches the duplicate's copied files —
+      // "Reopening a session shall not rerun OCR" extends naturally to
+      // "duplicating one shouldn't either" when nothing actually
+      // changed. See `docs/OCR_PIPELINE.md` § OCR Cache.
+      ocrPageResults: original.ocrPageResults,
     );
   }
 }

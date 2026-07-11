@@ -25,6 +25,11 @@ dependencies:
   # PDF Source Viewer (STUDIO-TASK-000019) — page rendering, navigation, zoom.
   pdfrx: ^2.4.7
 
+  # OCR Session Cache (Work Package 013 STUDIO-TASK-000037) — SHA-256
+  # content fingerprinting for cache invalidation. Dart-team-maintained,
+  # BSD-3, no native code.
+  crypto: ^3.0.6
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

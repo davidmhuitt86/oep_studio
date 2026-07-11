@@ -3,8 +3,8 @@
 Introduced in Work Package 012 (STUDIO-TASK-000030 Commit Plan,
 STUDIO-TASK-000031 Candidate Conversion, STUDIO-TASK-000032
 Transactional Repository Commit, STUDIO-TASK-000033 Commit Report,
-STUDIO-TASK-000034 Property Inspector Commit Plan/Commit Report
-support). This is the first Knowledge Studio feature that calls the
+including Property Inspector Commit Plan/Commit Report support). This
+is the first Knowledge Studio feature that calls the
 Foundation Bridge — every prior work package (007–011) was
 deliberately Studio-only. Supersedes Work Package 008's `CommitPreview`
 entirely (see § Commit Plan for why superseding rather than extending

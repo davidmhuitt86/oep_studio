@@ -8,6 +8,7 @@ import '../../core/theme/studio_colors.dart';
 import '../models/knowledge_validation_exception.dart';
 import '../models/source_material.dart';
 import 'evidence_browser_dialog.dart';
+import 'ocr_layer_viewer_dialog.dart';
 
 /// The PDF Source Viewer (Work Package 009 STUDIO-TASK-000019): a real
 /// PDF renderer — page navigation, zoom, fit, rotate, continuous
@@ -50,6 +51,10 @@ class _PdfSourceViewerState extends ConsumerState<PdfSourceViewer> {
 
   void _openEvidenceBrowser() {
     showEvidenceBrowserDialog(context, sourceId: widget.source.id, sourceName: widget.source.originalFileName);
+  }
+
+  void _openOcrLayerViewer() {
+    showOcrLayerViewerDialog(context, source: widget.source);
   }
 
   void _toggleAddRegion() {
@@ -279,6 +284,7 @@ class _PdfSourceViewerState extends ConsumerState<PdfSourceViewer> {
           onRotate: _rotate,
           onToggleAddRegion: _toggleAddRegion,
           onOpenEvidenceBrowser: _openEvidenceBrowser,
+          onOpenOcrLayerViewer: _openOcrLayerViewer,
         ),
         const Divider(height: 1),
         Expanded(
@@ -378,6 +384,7 @@ class _Toolbar extends StatelessWidget {
     required this.onRotate,
     required this.onToggleAddRegion,
     required this.onOpenEvidenceBrowser,
+    required this.onOpenOcrLayerViewer,
   });
 
   final PdfViewerController controller;
@@ -391,6 +398,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onRotate;
   final VoidCallback onToggleAddRegion;
   final VoidCallback onOpenEvidenceBrowser;
+  final VoidCallback onOpenOcrLayerViewer;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +464,12 @@ class _Toolbar extends StatelessWidget {
                   tooltip: 'Evidence Browser',
                   icon: const Icon(Icons.list_alt, size: 18),
                   onPressed: onOpenEvidenceBrowser,
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'OCR Layer Viewer',
+                  icon: const Icon(Icons.text_snippet_outlined, size: 18),
+                  onPressed: onOpenOcrLayerViewer,
                 ),
               ],
             );
