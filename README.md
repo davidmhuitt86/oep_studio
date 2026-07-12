@@ -9,11 +9,11 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–014 are implemented: Application Shell + Dashboard,
+Work Packages 001–015 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, and — across Work Packages
-007–014 — **Knowledge Studio** (SDD-013). Repository Explorer through
+007–015 — **Knowledge Studio** (SDD-013). Repository Explorer through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -74,7 +74,18 @@ Knowledge Candidates until explicit engineer acceptance; an Entity
 Review Workspace supports filter/sort/search/accept/ignore/navigate-
 to-source, and every entity gets a computed Validation (duplicates,
 impossible values, malformed units, low OCR confidence) — see
-`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`. As of Work Package 015,
+extracted entities can be grouped into logical Engineering Contexts
+(a Torque Specifications section, a Parts List, a Warning callout)
+using deterministic document structure alone — heading/callout
+keywords, relative line height, and entity proximity, with major
+sections (Procedure, Component, Torque Table, etc.) nesting minor
+annotations (Warning, Note, Figure, Diagram) detected inside their own
+range; a Context Explorer supports an expandable tree view,
+filter/sort/search, and Accept/Ignore/Split/Merge/Navigate-to-Source,
+with computed Validation (empty/duplicate/overlapping contexts,
+orphaned entities, invalid hierarchy) — see
+`docs/ENGINEERING_CONTEXT.md`.
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
 and *delete* remain unexposed via Foundation from Studio — only
@@ -83,8 +94,9 @@ deletion remain entirely unexposed; Knowledge Studio's AI Suggestions
 and Repository Matches panels remain placeholder content; PDF text
 extraction/selection, non-rectangle Evidence Region shapes, a
 generalized Source-Material-/Page-Selection-level Evidence Link, OCR
-result editing, true on-screen TIFF preview, and Engineering Entity
-pattern editing are out of scope).
+result editing, true on-screen TIFF preview, Engineering Entity pattern
+editing, and Engineering Context pattern/keyword editing are out of
+scope).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -134,5 +146,6 @@ Studio Design Documents live under `docs/`:
 * `REPOSITORY_COMMIT.md` — Commit Plan/Candidate Conversion/Transaction Model/Commit Report
 * `OCR_PIPELINE.md` — OCR architecture/cache/overlay/search/confidence models
 * `ENGINEERING_ENTITY_EXTRACTION.md` — Pattern engine/Entity model/Pattern library/Validation model/Review workflow
+* `ENGINEERING_CONTEXT.md` — Context model/Detection rules/Navigation/Validation model/Persistence
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

@@ -5,6 +5,7 @@ import '../../core/models/engineering_object_summary.dart';
 import '../../core/models/relationship_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../../knowledge/inspector/engineering_context_properties.dart';
 import '../../knowledge/inspector/engineering_entity_properties.dart';
 import '../../knowledge/inspector/evidence_link_entries.dart';
 import '../../knowledge/inspector/evidence_region_properties.dart';
@@ -43,6 +44,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
+    final selectedContext = foundation.selectedContext;
     final selectedEntity = foundation.selectedEntity;
     final selectedEvidenceRegion = foundation.selectedEvidenceRegion;
     final selectedCandidate = foundation.selectedCandidate;
@@ -76,6 +78,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
           const Divider(height: 1),
           Expanded(
             child: switch ((
+              selectedContext,
               selectedEntity,
               selectedEvidenceRegion,
               selectedCandidate,
@@ -86,18 +89,26 @@ class PropertyInspectorPanel extends ConsumerWidget {
               selectedRelationship,
               knowledgeSession,
             )) {
-              (final entity?, _, _, _, _, _, _, _, _) => EngineeringEntityProperties(
+              (final context?, _, _, _, _, _, _, _, _, _) => EngineeringContextProperties(
+                context: context,
+                sourceName: _sourceName(foundation.sourceMaterials, context.sourceId),
+                statistics: foundation.contextStatisticsFor(context.id),
+                childEntities: foundation.childEntitiesFor(context.id),
+                parentContext: foundation.parentContextOf(context.id),
+                validation: foundation.contextValidation[context.id],
+              ),
+              (_, final entity?, _, _, _, _, _, _, _, _) => EngineeringEntityProperties(
                 entity: entity,
                 sourceName: _sourceName(foundation.sourceMaterials, entity.sourceId),
                 pattern: foundation.patternFor(entity.id),
                 validation: foundation.entityValidation[entity.id],
               ),
-              (_, final region?, _, _, _, _, _, _, _) => EvidenceRegionProperties(
+              (_, _, final region?, _, _, _, _, _, _, _) => EvidenceRegionProperties(
                 region: region,
                 sourceName: _sourceName(foundation.sourceMaterials, region.sourceId),
                 links: _linkedCandidates(foundation.evidenceLinks, foundation.candidates, region.id),
               ),
-              (_, _, final candidate?, _, _, _, _, _, _) => KnowledgeCandidateProperties(
+              (_, _, _, final candidate?, _, _, _, _, _, _) => KnowledgeCandidateProperties(
                 candidate: candidate,
                 links: _linkedRegions(
                   foundation.evidenceLinks,
@@ -106,13 +117,13 @@ class PropertyInspectorPanel extends ConsumerWidget {
                   candidate.id,
                 ),
               ),
-              (_, _, _, final step?, _, _, _, _, _) => ProcedureStepProperties(step: step),
-              (_, _, _, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
+              (_, _, _, _, final step?, _, _, _, _, _) => ProcedureStepProperties(step: step),
+              (_, _, _, _, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
                 relationship: relationship,
                 sourceName: _candidateName(foundation.candidates, relationship.sourceCandidateId),
                 targetName: _candidateName(foundation.candidates, relationship.targetCandidateId),
               ),
-              (_, _, _, _, _, final source?, _, _, _) => SourceMaterialProperties(
+              (_, _, _, _, _, _, final source?, _, _, _) => SourceMaterialProperties(
                 source: source,
                 evidenceRegionCount: foundation.evidenceRegions
                     .where((region) => region.sourceId == source.id)
@@ -127,9 +138,9 @@ class PropertyInspectorPanel extends ConsumerWidget {
                 ocrResults: foundation.ocrResultsForSource(source.id),
                 ocrAverageConfidence: foundation.ocrAverageConfidenceFor(source.id),
               ),
-              (_, _, _, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
-              (_, _, _, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
-              (_, _, _, _, _, _, _, _, final session?) => SessionProperties(
+              (_, _, _, _, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
+              (_, _, _, _, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, _, _, _, _, _, _, final session?) => SessionProperties(
                 session: session,
                 sourceCount: foundation.knowledgeSourceCount,
                 candidateCount: foundation.knowledgeCandidateCount,

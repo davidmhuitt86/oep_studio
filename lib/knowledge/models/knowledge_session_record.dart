@@ -1,4 +1,5 @@
 import 'commit_report.dart';
+import 'engineering_context.dart';
 import 'engineering_entity.dart';
 import 'evidence_link.dart';
 import 'evidence_region.dart';
@@ -35,6 +36,7 @@ class KnowledgeSessionRecord {
     this.commitReports = const [],
     this.ocrPageResults = const [],
     this.engineeringEntities = const [],
+    this.engineeringContexts = const [],
   });
 
   final KnowledgeSession session;
@@ -82,6 +84,12 @@ class KnowledgeSessionRecord {
   /// decisions survive a restart the same way `ReviewDecision`s do.
   final List<EngineeringEntity> engineeringEntities;
 
+  /// Engineering Contexts detected from this session's OCR results and
+  /// entities (Work Package 015 STUDIO-TASK-000042) — persisted
+  /// alongside their review status ([EngineeringContextStatus]) for
+  /// the same reason `engineeringEntities` is.
+  final List<EngineeringContext> engineeringContexts;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -97,6 +105,7 @@ class KnowledgeSessionRecord {
     'commitReports': commitReports.map((report) => report.toJson()).toList(),
     'ocrPageResults': ocrPageResults.map((result) => result.toJson()).toList(),
     'engineeringEntities': engineeringEntities.map((entity) => entity.toJson()).toList(),
+    'engineeringContexts': engineeringContexts.map((context) => context.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -116,6 +125,7 @@ class KnowledgeSessionRecord {
     final commitReportsJson = json['commitReports'] as List<dynamic>? ?? const [];
     final ocrPageResultsJson = json['ocrPageResults'] as List<dynamic>? ?? const [];
     final engineeringEntitiesJson = json['engineeringEntities'] as List<dynamic>? ?? const [];
+    final engineeringContextsJson = json['engineeringContexts'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -151,6 +161,9 @@ class KnowledgeSessionRecord {
       ],
       engineeringEntities: [
         for (final entry in engineeringEntitiesJson) EngineeringEntity.fromJson(entry as Map<String, dynamic>),
+      ],
+      engineeringContexts: [
+        for (final entry in engineeringContextsJson) EngineeringContext.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

@@ -24,7 +24,10 @@ STUDIO-TASK-000036 Searchable Documents, STUDIO-TASK-000037 OCR
 Session Cache); extended again in Work Package 014 (STUDIO-TASK-000038
 Entity Extraction Engine, STUDIO-TASK-000039 Entity Review Workspace,
 STUDIO-TASK-000040 Pattern Library, STUDIO-TASK-000041 Entity
-Validation). Validates the architecture defined in SDD-013
+Validation); extended again in Work Package 015 (STUDIO-TASK-000042
+Context Detection Engine, STUDIO-TASK-000043 Context Explorer,
+STUDIO-TASK-000044 Context Validation, STUDIO-TASK-000045 Context
+Navigation). Validates the architecture defined in SDD-013
 (Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
 Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
 Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
@@ -40,7 +43,10 @@ never Knowledge Candidates, never Foundation — see `docs/OCR_PIPELINE.md`).
 Work Package 014's Engineering Entity Extraction stays within this same
 no-AI boundary: deterministic regex pattern matching over OCR text,
 never a Knowledge Candidate until explicit engineer acceptance — see
-`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`. Work Package 015's Engineering
+Context Analysis stays within it too: deterministic document-structure
+grouping of entities, never a Knowledge Candidate and never a
+Foundation Object — see `docs/ENGINEERING_CONTEXT.md`.
 
 For the persisted-file format and the Relationship Candidate model
 reference (including the `KnowledgeCandidateType`/`ObjectCategory`
@@ -59,7 +65,9 @@ architecture/cache/overlay/search/confidence model reference and the
 Work Package 013 architectural findings, see `docs/OCR_PIPELINE.md`. For
 the Engineering Entity/Pattern/Validation model reference and the Work
 Package 014 architectural findings, see
-`docs/ENGINEERING_ENTITY_EXTRACTION.md`.
+`docs/ENGINEERING_ENTITY_EXTRACTION.md`. For the Engineering
+Context/Detection/Navigation/Validation model reference and the Work
+Package 015 architectural findings, see `docs/ENGINEERING_CONTEXT.md`.
 This document covers the workspace layout, session lifecycle, and
 state ownership.
 
@@ -410,20 +418,29 @@ ownership table; as of Work Package 011:
 | `engineeringEntitiesForSource(sourceId)` | Derived getter, sorted by page then character start (Work Package 014) |
 | `entityValidation` | Derived getter (Work Package 014) — see `docs/ENGINEERING_ENTITY_EXTRACTION.md` § Validation Model |
 | `patternFor(entityId)` | Derived getter — the `EngineeringPattern` that produced an entity, looked up by its recorded id (Work Package 014) |
+| `engineeringContexts` | Engineering Contexts detected from this session's OCR results and entities, persisted (Work Package 015) — see `docs/ENGINEERING_CONTEXT.md` |
+| `selectedContext` | The Engineering Context currently selected (Work Package 015) |
+| `contextTypeFilter` | The Context Explorer's type filter, ephemeral (Work Package 015's "Context Filter") |
+| `engineeringContextsForSource(sourceId)` | Derived getter, sorted by page start then title (Work Package 015) |
+| `contextValidation` | Derived getter (Work Package 015) — see `docs/ENGINEERING_CONTEXT.md` § Validation Model |
+| `orphanedEntityIdsFor(sourceId)` | Derived getter — entities claimed by no context (Work Package 015) |
+| `childEntitiesFor(contextId)` / `parentContextOf(contextId)` / `contextStatisticsFor(contextId)` | Derived getters for the Property Inspector's Child Entities/Parent Context/Context Statistics (Work Package 015) |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
 `knowledgeRelationshipCandidateCount`/`knowledgeEvidenceRegionCount` are
 getters derived from the lists above, not separately stored.
 
-Selection is **nine-way mutually exclusive**: Engineering Entity (Work
-Package 014), Knowledge Candidate, Relationship Candidate, Source
-Material, Object, Relationship, Evidence Region, Procedure Step (Work
-Package 010), and — the ninth — nothing selected at all. Every
-`select*` method clears the other eight. The Property Inspector's mode
-order (`property_inspector_panel.dart`):
+Selection is **ten-way mutually exclusive**: Engineering Context (Work
+Package 015), Engineering Entity (Work Package 014), Knowledge
+Candidate, Relationship Candidate, Source Material, Object,
+Relationship, Evidence Region, Procedure Step (Work Package 010), and
+— the tenth — nothing selected at all. Every `select*` method clears
+the other nine. The Property Inspector's mode order
+(`property_inspector_panel.dart`):
 
 ```
+selectedContext? → Engineering Context mode (Work Package 015)
 selectedEntity? → Engineering Entity mode (Work Package 014)
 selectedEvidenceRegion? → Evidence Region mode
 selectedCandidate? → Knowledge Candidate mode (Specification fields + Validation Status shown as sections when applicable — Work Package 010)

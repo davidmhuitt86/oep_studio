@@ -15,6 +15,7 @@ import '../models/source_material.dart';
 import '../models/source_material_type.dart';
 import '../services/ocr_search_service.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'context_explorer_dialog.dart';
 import 'entity_review_workspace_dialog.dart';
 
 /// The OCR Layer Viewer (Work Package 013 STUDIO-TASK-000035): "Display:
@@ -120,6 +121,10 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
   // `_lastNavigatedRegionId` pattern for Evidence Regions.
   String? _lastNavigatedEntityId;
 
+  // Same pattern, for Engineering Contexts (Work Package 015
+  // STUDIO-TASK-000045: "Selecting a context updates: ... OCR Viewer").
+  String? _lastNavigatedContextId;
+
   @override
   Widget build(BuildContext context) {
     final foundation = ref.watch(foundationRuntimeServiceProvider);
@@ -147,6 +152,22 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
       _lastNavigatedEntityId = null;
     }
 
+    final selectedContext = foundation.selectedContext;
+    if (selectedContext != null &&
+        selectedContext.sourceId == widget.source.id &&
+        selectedContext.id != _lastNavigatedContextId) {
+      _lastNavigatedContextId = selectedContext.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _currentPage = selectedContext.pageStart);
+        if (widget.source.type == SourceMaterialType.pdf && _pdfController.isReady) {
+          _pdfController.goToPage(pageNumber: selectedContext.pageStart);
+        }
+      });
+    } else if (selectedContext == null) {
+      _lastNavigatedContextId = null;
+    }
+
     return Dialog(
       backgroundColor: StudioColors.surfaceRaised,
       child: SizedBox(
@@ -165,6 +186,25 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: StudioColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Previous Context',
+                    icon: const Icon(Icons.skip_previous_outlined, size: 18),
+                    onPressed: () => ref
+                        .read(foundationRuntimeServiceProvider.notifier)
+                        .navigateToAdjacentContext(widget.source.id, forward: false),
+                  ),
+                  IconButton(
+                    tooltip: 'Next Context',
+                    icon: const Icon(Icons.skip_next_outlined, size: 18),
+                    onPressed: () => ref
+                        .read(foundationRuntimeServiceProvider.notifier)
+                        .navigateToAdjacentContext(widget.source.id, forward: true),
+                  ),
+                  IconButton(
+                    tooltip: 'Context Explorer',
+                    icon: const Icon(Icons.account_tree_outlined, size: 18),
+                    onPressed: () => showContextExplorerDialog(context, source: widget.source),
                   ),
                   IconButton(
                     tooltip: 'Extract Entities',

@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../knowledge/models/engineering_context.dart';
+import '../../knowledge/models/engineering_context_status.dart';
+import '../../knowledge/models/engineering_context_type.dart';
 import '../../knowledge/models/engineering_entity.dart';
 import '../../knowledge/models/engineering_entity_status.dart';
 import '../../knowledge/models/evidence_link.dart';
@@ -24,6 +27,7 @@ import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/models/specification_type.dart';
 import '../../knowledge/services/commit_transaction_service.dart';
+import '../../knowledge/services/context_detection_service.dart';
 import '../../knowledge/services/engineering_entity_extraction_service.dart';
 import '../../knowledge/services/engineering_pattern_library.dart';
 import '../../knowledge/services/knowledge_session_service.dart';
@@ -247,6 +251,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -268,6 +273,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -351,6 +357,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrProcessingStatus: const {},
       ocrOverlayVisible: true,
       engineeringEntities: const [],
+      engineeringContexts: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -363,6 +370,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearOcrErrorMessage: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
+      clearContextTypeFilter: true,
     );
     unawaited(_persistActiveSession());
   }
@@ -400,6 +409,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrProcessingStatus: const {},
       ocrOverlayVisible: true,
       engineeringEntities: const [],
+      engineeringContexts: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -412,6 +422,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearOcrErrorMessage: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
+      clearContextTypeFilter: true,
     );
   }
 
@@ -442,6 +454,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ocrProcessingStatus: const {},
         ocrOverlayVisible: true,
         engineeringEntities: record.engineeringEntities,
+        engineeringContexts: record.engineeringContexts,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -454,6 +467,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearSelectedProcedureStep: true,
         clearOcrErrorMessage: true,
         clearSelectedEntity: true,
+        clearSelectedContext: true,
+        clearContextTypeFilter: true,
       );
     } on KnowledgeValidationException catch (error) {
       state = state.copyWith(knowledgeStorageError: error.message);
@@ -503,6 +518,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           commitReports: record.commitReports,
           ocrPageResults: record.ocrPageResults,
           engineeringEntities: record.engineeringEntities,
+          engineeringContexts: record.engineeringContexts,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -559,6 +575,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           commitReports: state.commitReports,
           ocrPageResults: state.ocrPageResults,
           engineeringEntities: state.engineeringEntities,
+          engineeringContexts: state.engineeringContexts,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -793,6 +810,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -898,6 +916,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -968,6 +987,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final remainingOcrProcessingStatus = Map<String, OcrProcessingStatus>.from(state.ocrProcessingStatus)
       ..remove(sourceId);
     final selectedEntityRemoved = state.selectedEntity != null && state.selectedEntity!.sourceId == sourceId;
+    final selectedContextRemoved = state.selectedContext != null && state.selectedContext!.sourceId == sourceId;
     state = state.copyWith(
       sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
       evidenceRegions: remainingRegions,
@@ -982,12 +1002,17 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       // source's OCR is meaningless once the source itself is gone —
       // same cascade, one layer further.
       engineeringEntities: state.engineeringEntities.where((entity) => entity.sourceId != sourceId).toList(),
+      // Work Package 015: same cascade, one layer further still — an
+      // Engineering Context organizing this source's now-gone OCR
+      // evidence and entities is equally meaningless.
+      engineeringContexts: state.engineeringContexts.where((context) => context.sourceId != sourceId).toList(),
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
       clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
       clearCurrentPage: state.openSourceDocument?.id == sourceId,
       clearSelectedEvidenceRegion: selectedRegionRemoved,
       clearSelectedEvidenceLink: selectedLinkRemoved,
       clearSelectedEntity: selectedEntityRemoved,
+      clearSelectedContext: selectedContextRemoved,
     );
     if (matches.isNotEmpty) {
       await SourceMaterialService.removeFile(matches.first);
@@ -1022,6 +1047,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearCurrentPage: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -1168,6 +1194,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceLink: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -1458,6 +1485,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedEntity: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -1738,6 +1766,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedSourceMaterial: true,
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
+      clearSelectedContext: true,
     );
   }
 
@@ -1795,6 +1824,239 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ],
     );
     unawaited(_persistActiveSession());
+  }
+
+  // ---------------------------------------------------------------------
+  // Engineering Context Analysis (Work Package 015)
+  // ---------------------------------------------------------------------
+
+  /// Detects (or reuses already-detected) Engineering Contexts for
+  /// [sourceId] (STUDIO-TASK-000042). Synchronous, in-memory — same
+  /// preconditions as [extractEntitiesForSource]: an active session and
+  /// a source with at least one successful OCR result. Unlike entity
+  /// extraction, prior entity extraction is *not* required — a context
+  /// derived purely from heading structure with no entities yet inside
+  /// it is valid (and would correctly surface an "empty context"
+  /// validation warning).
+  void detectContextsForSource(String sourceId) {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException(
+        'Create or open a Knowledge Curation Session before detecting engineering contexts.',
+      );
+    }
+    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This source could not be found.');
+    }
+    final ocrResults = state.ocrResultsForSource(sourceId);
+    if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
+      throw const KnowledgeValidationException('Run OCR on this source before detecting engineering contexts.');
+    }
+    final updated = ContextDetectionService.detectForSource(
+      source: matches.first,
+      ocrResults: state.ocrPageResults,
+      entities: state.engineeringEntities,
+      existingContexts: state.engineeringContexts,
+    );
+    state = state.copyWith(
+      engineeringContexts: [
+        ...state.engineeringContexts.where((context) => context.sourceId != sourceId),
+        ...updated,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Selects an Engineering Context, switching the Property Inspector to
+  /// Engineering Context mode. Clears every other selection.
+  void selectContext(EngineeringContext context) {
+    state = state.copyWith(
+      selectedContext: context,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
+    );
+  }
+
+  /// Clears the current Engineering Context selection.
+  void clearContextSelection() {
+    state = state.copyWith(clearSelectedContext: true);
+  }
+
+  /// Sets the Context Explorer's type filter (Work Package 015
+  /// Connection Manager: "Context Filter").
+  void setContextTypeFilter(EngineeringContextType? type) {
+    state = type == null
+        ? state.copyWith(clearContextTypeFilter: true)
+        : state.copyWith(contextTypeFilter: type);
+  }
+
+  /// Accepts a context (STUDIO-TASK-000043: "Engineers may: Accept").
+  /// Unlike [acceptEntity], this creates **nothing** — "Contexts are not
+  /// Knowledge Candidates," so accepting one is purely a review-status
+  /// marker meaning "I reviewed this grouping and agree it is correct."
+  void acceptContext(String contextId) {
+    final matches = state.engineeringContexts.where((context) => context.id == contextId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This context could not be found.');
+    }
+    state = state.copyWith(
+      engineeringContexts: [
+        for (final context in state.engineeringContexts)
+          if (context.id == contextId) context.copyWith(status: EngineeringContextStatus.accepted) else context,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Ignores a context — only this context's own status changes; the
+  /// OCR evidence and entities it organizes are never touched.
+  void ignoreContext(String contextId) {
+    state = state.copyWith(
+      engineeringContexts: [
+        for (final context in state.engineeringContexts)
+          if (context.id == contextId) context.copyWith(status: EngineeringContextStatus.ignored) else context,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Splits a context into two at [atPage] (STUDIO-TASK-000043:
+  /// "Engineers may: ... Split") — the first half covers
+  /// `[pageStart, atPage]`, the second `[atPage + 1, pageEnd]`. Child
+  /// entities are reassigned by which half their own page falls into.
+  /// Both halves start `pending` (splitting is itself a new judgment
+  /// about the grouping the engineer must re-review) and inherit the
+  /// original's parent context only if their own range still falls
+  /// within it. Throws [KnowledgeValidationException] if the context
+  /// doesn't exist or [atPage] isn't strictly inside its page range.
+  void splitContext(String contextId, int atPage) {
+    final matches = state.engineeringContexts.where((context) => context.id == contextId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This context could not be found.');
+    }
+    final original = matches.first;
+    if (atPage < original.pageStart || atPage >= original.pageEnd) {
+      throw const KnowledgeValidationException('This context cannot be split at that page.');
+    }
+    final childEntities = state.childEntitiesFor(contextId);
+    final firstEntities = childEntities.where((e) => e.page <= atPage).map((e) => e.id).toList();
+    final secondEntities = childEntities.where((e) => e.page > atPage).map((e) => e.id).toList();
+    final now = DateTime.now();
+    final first = EngineeringContext(
+      id: KnowledgeSessionService.generateId('context'),
+      type: original.type,
+      title: '${original.title} (split 1)',
+      sourceId: original.sourceId,
+      pageStart: original.pageStart,
+      pageEnd: atPage,
+      boundingRegion: original.boundingRegion,
+      childEntityIds: firstEntities,
+      confidence: original.confidence,
+      sourceFingerprint: original.sourceFingerprint,
+      detectedTime: now,
+      parentContextId: original.parentContextId,
+    );
+    final second = EngineeringContext(
+      id: KnowledgeSessionService.generateId('context'),
+      type: original.type,
+      title: '${original.title} (split 2)',
+      sourceId: original.sourceId,
+      pageStart: atPage + 1,
+      pageEnd: original.pageEnd,
+      boundingRegion: original.boundingRegion,
+      childEntityIds: secondEntities,
+      confidence: original.confidence,
+      sourceFingerprint: original.sourceFingerprint,
+      detectedTime: now,
+      parentContextId: original.parentContextId,
+    );
+    final selectionRemoved = state.selectedContext?.id == contextId;
+    state = state.copyWith(
+      engineeringContexts: [
+        ...state.engineeringContexts.where((context) => context.id != contextId),
+        first,
+        second,
+      ],
+      clearSelectedContext: selectionRemoved,
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Merges two contexts from the same source into one
+  /// (STUDIO-TASK-000043: "Engineers may: ... Merge") — the combined
+  /// page range, child entities (union), and bounding region cover
+  /// both originals; the result starts `pending` (merging is itself a
+  /// new judgment the engineer must re-review). Keeps the shared parent
+  /// context if both originals had the same one, otherwise leaves the
+  /// merged context top-level. Throws [KnowledgeValidationException] if
+  /// either context doesn't exist or they belong to different sources.
+  EngineeringContext mergeContexts(String contextIdA, String contextIdB) {
+    final matchesA = state.engineeringContexts.where((context) => context.id == contextIdA);
+    final matchesB = state.engineeringContexts.where((context) => context.id == contextIdB);
+    if (matchesA.isEmpty || matchesB.isEmpty) {
+      throw const KnowledgeValidationException('One or both contexts could not be found.');
+    }
+    final a = matchesA.first;
+    final b = matchesB.first;
+    if (a.sourceId != b.sourceId) {
+      throw const KnowledgeValidationException('Contexts from different sources cannot be merged.');
+    }
+    final mergedChildEntityIds = {...a.childEntityIds, ...b.childEntityIds}.toList();
+    final merged = EngineeringContext(
+      id: KnowledgeSessionService.generateId('context'),
+      type: a.type,
+      title: '${a.title} + ${b.title}',
+      sourceId: a.sourceId,
+      pageStart: a.pageStart < b.pageStart ? a.pageStart : b.pageStart,
+      pageEnd: a.pageEnd > b.pageEnd ? a.pageEnd : b.pageEnd,
+      boundingRegion: ContextDetectionService.unionBoundingBoxOf([a.boundingRegion, b.boundingRegion]),
+      childEntityIds: mergedChildEntityIds,
+      confidence: (a.confidence + b.confidence) / 2,
+      sourceFingerprint: a.sourceFingerprint,
+      detectedTime: DateTime.now(),
+      parentContextId: a.parentContextId == b.parentContextId ? a.parentContextId : null,
+    );
+    final selectionRemoved = state.selectedContext?.id == contextIdA || state.selectedContext?.id == contextIdB;
+    state = state.copyWith(
+      engineeringContexts: [
+        ...state.engineeringContexts.where((context) => context.id != contextIdA && context.id != contextIdB),
+        merged,
+      ],
+      clearSelectedContext: selectionRemoved,
+    );
+    unawaited(_persistActiveSession());
+    return merged;
+  }
+
+  /// Moves the current context selection to the next/previous context
+  /// for [sourceId] (STUDIO-TASK-000045: "Allow engineers to move
+  /// through engineering documents by context instead of pages"),
+  /// respecting [FoundationServiceState.contextTypeFilter] when set —
+  /// picking a type via the filter then cycling next/previous is this
+  /// work package's reading of "Navigate by: Procedure, Component,
+  /// Diagram, Table, Specification, Warning" (an illustrative subset of
+  /// the full 12-type taxonomy, not a restriction — see
+  /// `docs/ENGINEERING_CONTEXT.md` § Architectural Observations). Wraps
+  /// around; a no-op if there are no contexts to navigate through.
+  void navigateToAdjacentContext(String sourceId, {required bool forward}) {
+    var contexts = state.engineeringContextsForSource(sourceId);
+    final type = state.contextTypeFilter;
+    if (type != null) {
+      contexts = contexts.where((context) => context.type == type).toList();
+    }
+    if (contexts.isEmpty) return;
+    final currentId = state.selectedContext?.id;
+    final currentIndex = currentId == null ? -1 : contexts.indexWhere((context) => context.id == currentId);
+    final nextIndex = currentIndex == -1
+        ? 0
+        : (forward ? (currentIndex + 1) % contexts.length : (currentIndex - 1 + contexts.length) % contexts.length);
+    selectContext(contexts[nextIndex]);
   }
 
   void _disposeBridge() {

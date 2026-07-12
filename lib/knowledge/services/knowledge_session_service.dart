@@ -386,6 +386,12 @@ abstract final class KnowledgeSessionService {
       // duplicate's already-accepted entities correctly still point at
       // the same (also duplicated-unchanged) Knowledge Candidate.
       engineeringEntities: original.engineeringEntities,
+      // Same reasoning again: contexts are keyed off a combined OCR
+      // fingerprint that still matches the duplicate's byte-identical
+      // copied files, so carrying them over unchanged (including
+      // accepted/ignored status and parent/child links) is correct,
+      // not merely convenient.
+      engineeringContexts: original.engineeringContexts,
     );
   }
 }

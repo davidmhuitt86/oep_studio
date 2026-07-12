@@ -3360,3 +3360,240 @@ reasonable literal reading available and none constituted the kind of
 genuine, irreconcilable architectural conflict this work package's
 instructions say to stop for.
 
+## Work Package 015 — Knowledge Studio (Engineering Context Analysis)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000042 — Context Detection Engine — Complete
+* STUDIO-TASK-000043 — Context Explorer — Complete
+* STUDIO-TASK-000044 — Context Validation — Complete
+* STUDIO-TASK-000045 — Context Navigation — Complete
+
+### What Exists
+
+Continues the Work Package 007-014 `lib/knowledge/` module - Engineering
+Contexts are Workspace artifacts that group OCR evidence and extracted
+entities using deterministic document structure only, one layer above
+Engineering Entities, never a Knowledge Candidate or Foundation Object.
+Full detail in `docs/ENGINEERING_CONTEXT.md`.
+
+* `lib/knowledge/models/engineering_context_type.dart` (new) - 12-value
+  enum (Procedure/Component/Connector/Circuit/Wiring Section/Torque
+  Table/Specification Table/Warning/Note/Figure/Diagram/Parts List).
+* `lib/knowledge/models/engineering_context_status.dart` (new) -
+  `pending`/`accepted`/`ignored`, the same vocabulary
+  `EngineeringEntityStatus` established (never
+  `KnowledgeCandidateStatus`'s - a Context is never a Candidate).
+* `lib/knowledge/models/engineering_context.dart` (new) - the context
+  model: id/type/title/source id/page range/bounding region/child
+  entity ids/confidence/parent context id/source fingerprint/detected
+  time/status.
+* `lib/knowledge/models/context_validation_result.dart` (new) - reuses
+  `ValidationSeverity`.
+* `lib/knowledge/models/context_statistics.dart` (new) - child entity
+  count/average child confidence/count by entity type, for the
+  Property Inspector's "Context Statistics."
+* `lib/knowledge/services/context_detection_service.dart` (new, pure) -
+  heading/callout keyword + relative-line-height detection, major/minor
+  tiering that produces parent/child nesting by position (not page
+  number alone), whole-source fingerprint cache reuse.
+* `lib/knowledge/services/context_validation_service.dart` (new, pure) -
+  empty/duplicate/overlapping-context detection, invalid-hierarchy
+  detection (missing parent, cross-source parent, out-of-range child,
+  cycle), and a separate orphaned-entity-id computation.
+* `lib/knowledge/models/knowledge_session_record.dart` - extended with
+  `engineeringContexts`, backward-compatible default `[]`.
+* `lib/knowledge/services/knowledge_session_service.dart` -
+  `buildDuplicate` carries `engineeringContexts` over unchanged (same
+  content-hash-survives-file-copy reasoning as `engineeringEntities`).
+* `lib/core/services/foundation_runtime_state.dart` - `engineeringContexts`
+  (persisted), `selectedContext` (the tenth mutually-exclusive
+  selection field - added to all 8 pre-existing `select*` methods plus
+  `selectEntity`), `contextTypeFilter` (ephemeral, Connection-Manager-
+  owned per this work package's own explicit "Context Filter"), plus
+  `engineeringContextsForSource`/`contextValidation`/
+  `orphanedEntityIdsFor`/`childEntitiesFor`/`parentContextOf`/
+  `contextStatisticsFor` derived getters.
+* `lib/core/services/foundation_runtime_service.dart` -
+  `detectContextsForSource` (does not require prior entity extraction,
+  unlike entity extraction's own OCR-only precondition),
+  `selectContext`/`clearContextSelection`, `setContextTypeFilter`,
+  `acceptContext`/`ignoreContext` (status-only, create nothing),
+  `splitContext`, `mergeContexts`, `navigateToAdjacentContext`;
+  `engineeringContexts` wired through
+  create/close/open/archive/persist/duplicate, and cascaded on
+  `removeSourceMaterial`.
+* `lib/knowledge/workspaces/context_explorer_dialog.dart` (new) - the
+  Context Explorer: expandable tree (major contexts reveal nested
+  minor children), type filter (Connection-Manager-owned)/status
+  filter/sort/search (local), per-row Accept/Ignore/Split/Merge/
+  Navigate-to-Source, a two-tap Merge flow.
+* `lib/knowledge/workspaces/ocr_layer_viewer_dialog.dart` - a new
+  "Context Explorer" toolbar button, "Previous Context"/"Next Context"
+  navigation buttons, and a `selectedContext`-watching auto-navigate
+  effect mirroring the existing entity one.
+* `lib/knowledge/workspaces/pdf_source_viewer.dart` - a
+  `selectedContext`-watching auto-navigate effect (Work Package 015's
+  own explicit "Selecting a context updates: Source Viewer" - the first
+  work package to require this specific viewer to react to a
+  Workspace-artifact selection made elsewhere).
+* `lib/knowledge/workspaces/entity_review_workspace_dialog.dart` - a
+  local context-entity filter (with a dismissible banner) applied when
+  a context belonging to the same source becomes selected elsewhere
+  ("Selecting a context updates: ... Entity Viewer").
+* `lib/knowledge/inspector/engineering_context_properties.dart` (new) -
+  the Property Inspector's Engineering Context mode (Context fields,
+  Context Statistics, Parent Context, Child Entities, Validation).
+* `lib/shared/widgets/property_inspector_panel.dart` - the
+  mutually-exclusive selection switch extended from 9 to 10 cases.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: no AI, no LLMs, no
+machine learning, no Repository changes, no engineering-meaning
+inference beyond deterministic document organization. There is no UI
+for editing detection keywords or thresholds - the heading/callout
+keyword tables and the height-ratio/confidence-multiplier constants are
+static, code-defined values (the same "no AI, deterministic and
+reproducible" reasoning that kept Work Package 014's pattern library
+code-defined rather than user-editable). `oep_foundation`/the Public C
+API are untouched.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      engineering_context_type.dart          New
+      engineering_context_status.dart        New
+      engineering_context.dart               New
+      context_validation_result.dart         New
+      context_statistics.dart                New
+      knowledge_session_record.dart          Extended (engineeringContexts)
+    services/
+      context_detection_service.dart         New
+      context_validation_service.dart        New
+      knowledge_session_service.dart         Extended (buildDuplicate)
+    workspaces/
+      context_explorer_dialog.dart           New
+      ocr_layer_viewer_dialog.dart            Extended (Context Explorer button, Prev/Next Context, navigate effect)
+      pdf_source_viewer.dart                 Extended (navigate effect)
+      entity_review_workspace_dialog.dart    Extended (context-entity filter)
+    inspector/
+      engineering_context_properties.dart    New
+  core/
+    services/
+      foundation_runtime_state.dart          Extended (context state + getters)
+      foundation_runtime_service.dart        Extended (detectContextsForSource etc.)
+  shared/
+    widgets/
+      property_inspector_panel.dart          Extended (Engineering Context mode)
+docs/
+  ENGINEERING_CONTEXT.md                     New
+```
+
+### Package Decisions
+
+**No new dependencies.** Heading/callout detection uses Dart's built-in
+`RegExp` and simple arithmetic (relative line height); the whole-source
+combined fingerprint reuses `package:crypto`'s SHA-256, already a
+dependency since Work Package 013.
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 214/214 passing: all prior tests, plus two new test
+  files (`context_detection_service_test.dart` - 9 tests covering
+  heading/keyword-priority detection, callout detection independent of
+  line height, major/minor parent nesting (including the position-not-
+  page-number containment fix), multi-page page-range computation,
+  whole-source cache reuse and invalidation, cross-source isolation;
+  `context_validation_service_test.dart` - 11 tests covering
+  empty/duplicate/overlapping-context detection, parent/child
+  containment correctly *not* flagged as an overlap, invalid-hierarchy
+  detection (missing parent, out-of-range child, a two-context cycle),
+  and orphaned-entity computation).
+* flutter build windows - succeeded.
+* **Manual verification against real engineering documents.** A
+  synthetic 2-page PDF service manual (a large "TORQUE SPECIFICATIONS"
+  heading with a torque value and an inline "WARNING" callout, a large
+  "PARTS LIST" heading with a part number and an inline "NOTE"
+  callout) was generated with `reportlab`, mirroring Work Packages
+  013/014's own fixture precedent (not committed). Ground truth was
+  established by rendering to PNG (`pymupdf`) and running the real
+  installed `tesseract 5.4.0.20240606` CLI's own `tsv` output directly,
+  confirming a genuine, exploitable line-height difference between
+  headings (~70px) and body text (~30-50px) in real OCR output, and
+  confirming "WARNING" itself renders at ordinary body-text height -
+  validating the core premise of the height-based heading heuristic and
+  the keyword-only callout rule before any Studio code touched the
+  fixture.
+
+  As in Work Packages 007-014, `computer-use` was confirmed unable to
+  target the compiled `oep_studio.exe`. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test` (added, run against the real compiled
+  app via `flutter test ... -d windows`, then deleted - `pubspec.yaml`'s
+  `integration_test` dev dependency reverted and `pubspec.lock`
+  regenerated), attaching the fixture directly through
+  `FoundationRuntimeNotifier.attachSourceMaterial`.
+
+  The test drove: create a session, attach the fixture, run real OCR
+  across both pages, extract real entities, open the Context Explorer
+  (real detection against real OCR/entity data), confirm the two major
+  contexts ("TORQUE SPECIFICATIONS", "PARTS LIST") and their real
+  nested minor children (the Warning correctly parented under Torque,
+  the Note correctly parented under Parts List - confirming real
+  position-based containment, not just unit-tested containment), filter
+  by type, Accept a context (confirming **no** Knowledge Candidate was
+  created - the key architectural distinction from accepting an
+  entity), Ignore a context (confirming OCR/entities were untouched),
+  Merge the Warning and Note contexts via the two-tap flow (confirming
+  the combined page range and `pending` reset), Navigate to Source
+  (confirming the still-open OCR Layer Viewer *and* the background
+  Source Viewer both jumped to the target page - real, simultaneous
+  multi-viewer synchronization, not just asserted from code), Next/
+  Previous Context cycling, and finally close and reopen the session
+  (confirming accepted/ignored status and the merge both survive a full
+  session reload).
+
+  **A real bug was found and fixed during this pass, caught by unit
+  tests before manual verification began** (not a manual-verification
+  catch): the first parent-containment implementation compared only
+  page *numbers*, which incorrectly parented a callout appearing
+  *before* a major heading on the very same page, since page-number
+  containment alone cannot distinguish "before" from "after" within one
+  page. Fixed by comparing actual (page, line) position instead - see
+  `docs/ENGINEERING_CONTEXT.md` § Architectural Observations.
+
+### Architectural Observations
+
+See `docs/ENGINEERING_CONTEXT.md` § Architectural Observations for the
+full account - summarized here:
+
+* **`parentContextId` is not literally named in "Context Output"'s own
+  field list, yet the Property Inspector and Validation sections
+  explicitly ask for "Parent Context" and "Invalid hierarchy."**
+  Resolved by adding it - a direct implementation of what the same
+  document already asks for elsewhere, not an invented feature; the
+  major/minor tiering gives it real, purely-structural meaning.
+* **"Navigate by" (6 types) vs. "Detect" (12 types) - resolved as a
+  non-exhaustive illustrative subset**, the same reading Work Package
+  014 gave its own "Initial Pattern Categories" vs. "Detect" tension.
+* **A real position-vs-page-number bug** in parent-containment logic
+  was caught by unit tests, not manual verification - the inverse of
+  Work Package 014's own regex-bug finding, reinforcing that both
+  verification paths continue to catch different classes of bug.
+* **Real OCR confirmed the height-heuristic's core premise and the
+  keyword-only callout design** during manual verification against a
+  real rendered fixture, not merely assumed from the design's own
+  reasoning.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available and none constituted the kind of
+genuine, irreconcilable architectural conflict this work package's
+instructions say to stop for.
+

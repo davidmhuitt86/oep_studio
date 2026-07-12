@@ -43,6 +43,15 @@ class _EntityReviewWorkspaceDialogState extends ConsumerState<_EntityReviewWorks
   String _searchQuery = '';
   String? _extractionError;
 
+  // Work Package 015 STUDIO-TASK-000045: "Selecting a context updates:
+  // ... Entity Viewer." Local filter mirroring the Context Explorer's
+  // own selection — set to the selected context's own child entity ids
+  // whenever a context belonging to this source becomes selected;
+  // cleared explicitly via the banner's "Clear" action.
+  Set<String>? _contextEntityFilter;
+  String? _contextFilterTitle;
+  String? _lastAppliedContextId;
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +109,8 @@ class _EntityReviewWorkspaceDialogState extends ConsumerState<_EntityReviewWorks
     if (type != null) result = result.where((entity) => entity.type == type).toList();
     final status = _statusFilter;
     if (status != null) result = result.where((entity) => entity.status == status).toList();
+    final contextFilter = _contextEntityFilter;
+    if (contextFilter != null) result = result.where((entity) => contextFilter.contains(entity.id)).toList();
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       result = result
@@ -130,8 +141,25 @@ class _EntityReviewWorkspaceDialogState extends ConsumerState<_EntityReviewWorks
     final foundation = ref.watch(foundationRuntimeServiceProvider);
     final screen = MediaQuery.of(context).size;
     final allEntities = foundation.engineeringEntitiesForSource(widget.source.id);
-    final entities = _filteredSorted(allEntities);
     final validation = foundation.entityValidation;
+
+    final selectedContext = foundation.selectedContext;
+    if (selectedContext != null &&
+        selectedContext.sourceId == widget.source.id &&
+        selectedContext.id != _lastAppliedContextId) {
+      _lastAppliedContextId = selectedContext.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() {
+          _contextEntityFilter = selectedContext.childEntityIds.toSet();
+          _contextFilterTitle = selectedContext.title;
+        });
+      });
+    } else if (selectedContext == null) {
+      _lastAppliedContextId = null;
+    }
+
+    final entities = _filteredSorted(allEntities);
 
     return Dialog(
       backgroundColor: StudioColors.surfaceRaised,
@@ -172,6 +200,32 @@ class _EntityReviewWorkspaceDialogState extends ConsumerState<_EntityReviewWorks
               onSearchChanged: (value) => setState(() => _searchQuery = value),
             ),
             const Divider(height: 1),
+            if (_contextEntityFilter != null)
+              Container(
+                width: double.infinity,
+                color: StudioColors.selection.withValues(alpha: 0.12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_tree_outlined, size: 14, color: StudioColors.selection),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Showing only entities in context "$_contextFilterTitle".',
+                        style: const TextStyle(color: StudioColors.selection, fontSize: 11.5),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _contextEntityFilter = null;
+                        _contextFilterTitle = null;
+                        _lastAppliedContextId = null;
+                      }),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              ),
             if (_extractionError != null)
               Container(
                 width: double.infinity,

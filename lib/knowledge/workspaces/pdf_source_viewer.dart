@@ -49,6 +49,10 @@ class _PdfSourceViewerState extends ConsumerState<PdfSourceViewer> {
   // followed exactly once rather than on every rebuild — see `build()`.
   String? _lastNavigatedRegionId;
 
+  // Same pattern, for Engineering Contexts (Work Package 015
+  // STUDIO-TASK-000045: "Selecting a context updates: Source Viewer").
+  String? _lastNavigatedContextId;
+
   void _openEvidenceBrowser() {
     showEvidenceBrowserDialog(context, sourceId: widget.source.id, sourceName: widget.source.originalFileName);
   }
@@ -267,6 +271,18 @@ class _PdfSourceViewerState extends ConsumerState<PdfSourceViewer> {
       });
     } else if (selected == null) {
       _lastNavigatedRegionId = null;
+    }
+
+    final selectedContext = _foundation.selectedContext;
+    if (selectedContext != null &&
+        selectedContext.sourceId == widget.source.id &&
+        selectedContext.id != _lastNavigatedContextId) {
+      _lastNavigatedContextId = selectedContext.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller.isReady) _controller.goToPage(pageNumber: selectedContext.pageStart);
+      });
+    } else if (selectedContext == null) {
+      _lastNavigatedContextId = null;
     }
 
     return Column(

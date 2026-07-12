@@ -25,6 +25,14 @@ more) inside already-OCR'd text, using the exact same line-grouping and
 cache-fingerprint conventions this document describes. See
 `docs/ENGINEERING_ENTITY_EXTRACTION.md`.
 
+Work Package 015 (Engineering Context Analysis) builds one layer above
+that again: deterministic heading/layout detection groups OCR lines and
+extracted entities into logical contexts (a Torque Specifications
+section, a Parts List), using the same per-line grouping this document
+describes plus a whole-source variant of the cache-fingerprint
+convention (a context can span multiple pages). See
+`docs/ENGINEERING_CONTEXT.md`.
+
 ---
 
 ## OCR Architecture

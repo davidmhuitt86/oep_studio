@@ -3,7 +3,12 @@ import '../../knowledge/models/candidate_provenance.dart';
 import '../../knowledge/models/candidate_validation_result.dart';
 import '../../knowledge/models/commit_plan.dart';
 import '../../knowledge/models/commit_report.dart';
+import '../../knowledge/models/context_statistics.dart';
+import '../../knowledge/models/context_validation_result.dart';
+import '../../knowledge/models/engineering_context.dart';
+import '../../knowledge/models/engineering_context_type.dart';
 import '../../knowledge/models/engineering_entity.dart';
+import '../../knowledge/models/engineering_entity_type.dart';
 import '../../knowledge/models/engineering_pattern.dart';
 import '../../knowledge/models/entity_validation_result.dart';
 import '../../knowledge/models/evidence_link.dart';
@@ -22,6 +27,7 @@ import '../../knowledge/models/session_health_metrics.dart';
 import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/services/commit_plan_service.dart';
+import '../../knowledge/services/context_validation_service.dart';
 import '../../knowledge/services/dependency_service.dart';
 import '../../knowledge/services/entity_validation_service.dart';
 import '../../knowledge/services/engineering_pattern_library.dart';
@@ -42,7 +48,7 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-014): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-015): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
@@ -50,10 +56,12 @@ enum FoundationConnectionPhase { connecting, connected, error }
 /// Current Commit Report, Current Source Document/Page, Current Evidence
 /// Region List, Current Evidence Link List, Current Page Selection List,
 /// OCR state/OCR overlay visibility (Work Package 013), Current
-/// Entity/Pattern/Validation (Work Package 014), and Current Selection
+/// Entity/Pattern/Validation (Work Package 014), Current Context/Context
+/// Selection/Context Filter (Work Package 015), and Current Selection
 /// (of an object, a relationship, a Knowledge Candidate, a Relationship
-/// Candidate, a Source Material, or an Evidence Region — never more than
-/// one at once). Immutable; widgets watch this through
+/// Candidate, a Source Material, an Evidence Region, an Engineering
+/// Entity, or an Engineering Context — never more than one at once).
+/// Immutable; widgets watch this through
 /// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
 /// directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
@@ -100,6 +108,9 @@ class FoundationServiceState {
     this.ocrErrorMessage,
     this.engineeringEntities = const [],
     this.selectedEntity,
+    this.engineeringContexts = const [],
+    this.selectedContext,
+    this.contextTypeFilter,
   });
 
   final FoundationConnectionPhase phase;
@@ -344,6 +355,31 @@ class FoundationServiceState {
   /// every other selection field.
   final EngineeringEntity? selectedEntity;
 
+  /// Engineering Contexts detected from this session's OCR results and
+  /// entities (Work Package 015 STUDIO-TASK-000042), persisted
+  /// alongside their review status. "Contexts organize OCR evidence
+  /// and extracted entities... Contexts are not Knowledge Candidates...
+  /// Contexts are not Foundation Engineering Objects" (this work
+  /// package's own Architecture Rules). See
+  /// `docs/ENGINEERING_CONTEXT.md`.
+  final List<EngineeringContext> engineeringContexts;
+
+  /// The Engineering Context currently selected, if any (Work Package
+  /// 015 Connection Manager: "Current Context") — switches the
+  /// Property Inspector to Engineering Context mode and drives Context
+  /// Navigation (`docs/ENGINEERING_CONTEXT.md` § Context Navigation).
+  /// Mutually exclusive with every other selection field.
+  final EngineeringContext? selectedContext;
+
+  /// The Context Explorer's type filter (Work Package 015 Connection
+  /// Manager: "Context Filter") — Connection-Manager-owned, unlike the
+  /// Entity Review Workspace's local status/sort/search filters (Work
+  /// Package 014 named no such field in its own Connection Manager
+  /// list; this work package explicitly does). `null` means "show every
+  /// type." Ephemeral, not persisted — a display filter, not session
+  /// content.
+  final EngineeringContextType? contextTypeFilter;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
 
@@ -579,6 +615,80 @@ class FoundationServiceState {
     return EngineeringPatternLibrary.byId(matches.first.matchedPatternId);
   }
 
+  /// [sourceId]'s detected Engineering Contexts, sorted by page start
+  /// then title (Work Package 015 — the same order
+  /// `ContextDetectionService` itself produces, so the Context
+  /// Explorer's default view needs no separate sort step).
+  List<EngineeringContext> engineeringContextsForSource(String sourceId) {
+    final contexts = engineeringContexts.where((context) => context.sourceId == sourceId).toList()
+      ..sort((a, b) {
+        final pageCompare = a.pageStart.compareTo(b.pageStart);
+        return pageCompare != 0 ? pageCompare : a.title.compareTo(b.title);
+      });
+    return contexts;
+  }
+
+  /// The Current Validation State for every detected Engineering
+  /// Context (Work Package 015 Connection Manager: implied by "Context
+  /// Validation"), keyed by context id. Derived — see
+  /// `ContextValidationService`; "Validation remains informational
+  /// only" extends to "no automatic caching that could go stale."
+  Map<String, ContextValidationResult> get contextValidation =>
+      ContextValidationService.computeValidation(contexts: engineeringContexts, entities: engineeringEntities);
+
+  /// [sourceId]'s Engineering Entities not claimed by any Engineering
+  /// Context (Work Package 015 STUDIO-TASK-000044: "Orphaned
+  /// entities"). Derived, like [contextValidation].
+  Set<String> orphanedEntityIdsFor(String sourceId) {
+    return ContextValidationService.computeOrphanedEntityIds(
+      contexts: engineeringContextsForSource(sourceId),
+      entities: engineeringEntitiesForSource(sourceId),
+    );
+  }
+
+  /// [contextId]'s child entities, resolved from its own recorded
+  /// `EngineeringContext.childEntityIds` (Property Inspector "Child
+  /// Entities") — never re-derived by re-detecting proximity.
+  List<EngineeringEntity> childEntitiesFor(String contextId) {
+    final matches = engineeringContexts.where((context) => context.id == contextId);
+    if (matches.isEmpty) return const [];
+    final ids = matches.first.childEntityIds.toSet();
+    return engineeringEntities.where((entity) => ids.contains(entity.id)).toList();
+  }
+
+  /// [contextId]'s enclosing context, if any (Property Inspector
+  /// "Parent Context") — resolved from its own recorded
+  /// `EngineeringContext.parentContextId`.
+  EngineeringContext? parentContextOf(String contextId) {
+    final matches = engineeringContexts.where((context) => context.id == contextId);
+    if (matches.isEmpty) return null;
+    final parentId = matches.first.parentContextId;
+    if (parentId == null) return null;
+    final parentMatches = engineeringContexts.where((context) => context.id == parentId);
+    return parentMatches.isEmpty ? null : parentMatches.first;
+  }
+
+  /// [contextId]'s computed child-entity statistics (Property
+  /// Inspector "Context Statistics") — `null` if the context doesn't
+  /// exist. Never stored.
+  ContextStatistics? contextStatisticsFor(String contextId) {
+    final matches = engineeringContexts.where((context) => context.id == contextId);
+    if (matches.isEmpty) return null;
+    final children = childEntitiesFor(contextId);
+    final countByType = <EngineeringEntityType, int>{};
+    for (final entity in children) {
+      countByType[entity.type] = (countByType[entity.type] ?? 0) + 1;
+    }
+    final averageConfidence = children.isEmpty
+        ? 0.0
+        : children.map((e) => e.confidence).reduce((a, b) => a + b) / children.length;
+    return ContextStatistics(
+      childEntityCount: children.length,
+      averageChildConfidence: averageConfidence,
+      entityCountByType: countByType,
+    );
+  }
+
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
     FoundationRuntimeState? runtimeState,
@@ -644,6 +754,11 @@ class FoundationServiceState {
     List<EngineeringEntity>? engineeringEntities,
     EngineeringEntity? selectedEntity,
     bool clearSelectedEntity = false,
+    List<EngineeringContext>? engineeringContexts,
+    EngineeringContext? selectedContext,
+    bool clearSelectedContext = false,
+    EngineeringContextType? contextTypeFilter,
+    bool clearContextTypeFilter = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -700,6 +815,9 @@ class FoundationServiceState {
       ocrErrorMessage: clearOcrErrorMessage ? null : (ocrErrorMessage ?? this.ocrErrorMessage),
       engineeringEntities: engineeringEntities ?? this.engineeringEntities,
       selectedEntity: clearSelectedEntity ? null : (selectedEntity ?? this.selectedEntity),
+      engineeringContexts: engineeringContexts ?? this.engineeringContexts,
+      selectedContext: clearSelectedContext ? null : (selectedContext ?? this.selectedContext),
+      contextTypeFilter: clearContextTypeFilter ? null : (contextTypeFilter ?? this.contextTypeFilter),
     );
   }
 }
