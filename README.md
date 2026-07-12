@@ -9,11 +9,11 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–015 are implemented: Application Shell + Dashboard,
+Work Packages 001–016 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, and — across Work Packages
-007–015 — **Knowledge Studio** (SDD-013). Repository Explorer through
+007–016 — **Knowledge Studio** (SDD-013). Repository Explorer through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -25,8 +25,9 @@ Relationship search against Foundation's Search Engine, in
 Foundation's own result order.
 
 Knowledge Studio, by contrast, remains **Studio-only for everything
-except Repository Commit and OCR** — no AI, no LLMs, no machine
-learning — but is no longer
+except Repository Commit, OCR, and (as of Work Package 016) a
+provider-independent AI infrastructure layer with no production AI
+integration** — but is no longer
 in-memory-only. It supports manually-created Knowledge Candidates
 (across ten types) and Relationship Candidates reviewed within a
 Knowledge Curation Session that **persists locally across restarts**
@@ -85,18 +86,29 @@ range; a Context Explorer supports an expandable tree view,
 filter/sort/search, and Accept/Ignore/Split/Merge/Navigate-to-Source,
 with computed Validation (empty/duplicate/overlapping contexts,
 orphaned entities, invalid hierarchy) — see
-`docs/ENGINEERING_CONTEXT.md`.
+`docs/ENGINEERING_CONTEXT.md`. As of Work Package 016, a complete,
+provider-independent AI infrastructure layer exists — a common
+`AiProvider` interface, a Prompt Construction Service, and a full
+Accept/Edit/Reject/Defer review workflow — but **no production AI
+provider is integrated**: the only concrete provider is a deterministic,
+in-process `MockAiProvider` that makes zero network calls and needs no
+API credentials. An AI Review Workspace lets an engineer run analysis
+and review suggestions the same way Entity/Context review already
+work; accepting a suggestion creates a normal Knowledge Candidate,
+never automatically — see `docs/AI_PROVIDER_ARCHITECTURE.md`.
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
 and *delete* remain unexposed via Foundation from Studio — only
 *create* was needed for Repository Commit; repository creation/
-deletion remain entirely unexposed; Knowledge Studio's AI Suggestions
-and Repository Matches panels remain placeholder content; PDF text
-extraction/selection, non-rectangle Evidence Region shapes, a
+deletion remain entirely unexposed; Knowledge Studio's Repository
+Matches panel remains placeholder content (the "AI Suggestions" panel
+is now a real session-wide status summary as of Work Package 016 — the
+review workflow itself lives in the AI Review Workspace dialog); PDF
+text extraction/selection, non-rectangle Evidence Region shapes, a
 generalized Source-Material-/Page-Selection-level Evidence Link, OCR
 result editing, true on-screen TIFF preview, Engineering Entity pattern
-editing, and Engineering Context pattern/keyword editing are out of
-scope).
+editing, Engineering Context pattern/keyword editing, and any
+production AI provider integration are out of scope).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -147,5 +159,6 @@ Studio Design Documents live under `docs/`:
 * `OCR_PIPELINE.md` — OCR architecture/cache/overlay/search/confidence models
 * `ENGINEERING_ENTITY_EXTRACTION.md` — Pattern engine/Entity model/Pattern library/Validation model/Review workflow
 * `ENGINEERING_CONTEXT.md` — Context model/Detection rules/Navigation/Validation model/Persistence
+* `AI_PROVIDER_ARCHITECTURE.md` — Provider abstraction/registry/Prompt Service/Mock provider/Review workflow
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

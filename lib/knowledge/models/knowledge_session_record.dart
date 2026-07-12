@@ -1,3 +1,4 @@
+import 'ai_suggestion.dart';
 import 'commit_report.dart';
 import 'engineering_context.dart';
 import 'engineering_entity.dart';
@@ -37,6 +38,7 @@ class KnowledgeSessionRecord {
     this.ocrPageResults = const [],
     this.engineeringEntities = const [],
     this.engineeringContexts = const [],
+    this.aiSuggestions = const [],
   });
 
   final KnowledgeSession session;
@@ -90,6 +92,15 @@ class KnowledgeSessionRecord {
   /// the same reason `engineeringEntities` is.
   final List<EngineeringContext> engineeringContexts;
 
+  /// AI Suggestions generated from this session's OCR/entity/context
+  /// evidence (Work Package 016 STUDIO-TASK-000048) — persisted
+  /// alongside their review status ([AiSuggestionStatus]), per SDD-022's
+  /// own "AI Session Persistence: Persist... Provider, Model, Timestamp,
+  /// Review Status." Does not include the `AiRequest`/`AiResponse`/
+  /// `AiConversation` that produced them — those stay ephemeral (see
+  /// `docs/AI_PROVIDER_ARCHITECTURE.md` § Persistence for why).
+  final List<AiSuggestion> aiSuggestions;
+
   Map<String, dynamic> toJson() => {
     'formatVersion': 1,
     'session': session.toJson(),
@@ -106,6 +117,7 @@ class KnowledgeSessionRecord {
     'ocrPageResults': ocrPageResults.map((result) => result.toJson()).toList(),
     'engineeringEntities': engineeringEntities.map((entity) => entity.toJson()).toList(),
     'engineeringContexts': engineeringContexts.map((context) => context.toJson()).toList(),
+    'aiSuggestions': aiSuggestions.map((suggestion) => suggestion.toJson()).toList(),
   };
 
   /// Throws [FormatException] on any structurally invalid input —
@@ -126,6 +138,7 @@ class KnowledgeSessionRecord {
     final ocrPageResultsJson = json['ocrPageResults'] as List<dynamic>? ?? const [];
     final engineeringEntitiesJson = json['engineeringEntities'] as List<dynamic>? ?? const [];
     final engineeringContextsJson = json['engineeringContexts'] as List<dynamic>? ?? const [];
+    final aiSuggestionsJson = json['aiSuggestions'] as List<dynamic>? ?? const [];
     return KnowledgeSessionRecord(
       session: KnowledgeSession.fromJson(json['session'] as Map<String, dynamic>),
       candidates: [
@@ -164,6 +177,9 @@ class KnowledgeSessionRecord {
       ],
       engineeringContexts: [
         for (final entry in engineeringContextsJson) EngineeringContext.fromJson(entry as Map<String, dynamic>),
+      ],
+      aiSuggestions: [
+        for (final entry in aiSuggestionsJson) AiSuggestion.fromJson(entry as Map<String, dynamic>),
       ],
     );
   }

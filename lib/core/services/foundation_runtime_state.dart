@@ -1,3 +1,6 @@
+import '../../knowledge/models/ai_conversation.dart';
+import '../../knowledge/models/ai_processing_status.dart';
+import '../../knowledge/models/ai_suggestion.dart';
 import '../../knowledge/models/candidate_dependency_info.dart';
 import '../../knowledge/models/candidate_provenance.dart';
 import '../../knowledge/models/candidate_validation_result.dart';
@@ -48,7 +51,7 @@ import '../models/search_result.dart';
 /// native enum has no room for.
 enum FoundationConnectionPhase { connecting, connected, error }
 
-/// The Connection Manager's state (SDD-006, Work Packages 002-015): owns
+/// The Connection Manager's state (SDD-006, Work Packages 002-016): owns
 /// Current Runtime, Current Repository, Repository Statistics, Current
 /// Object List, Current Relationship List, Current Search Query, Current
 /// Search Results, Current Knowledge Curation Session, Current Source
@@ -57,11 +60,13 @@ enum FoundationConnectionPhase { connecting, connected, error }
 /// Region List, Current Evidence Link List, Current Page Selection List,
 /// OCR state/OCR overlay visibility (Work Package 013), Current
 /// Entity/Pattern/Validation (Work Package 014), Current Context/Context
-/// Selection/Context Filter (Work Package 015), and Current Selection
-/// (of an object, a relationship, a Knowledge Candidate, a Relationship
-/// Candidate, a Source Material, an Evidence Region, an Engineering
-/// Entity, or an Engineering Context — never more than one at once).
-/// Immutable; widgets watch this through
+/// Selection/Context Filter (Work Package 015), Current AI
+/// Suggestion/Provider/Review State/Processing State (Work Package 016),
+/// and Current Selection (of an object, a relationship, a Knowledge
+/// Candidate, a Relationship Candidate, a Source Material, an Evidence
+/// Region, an Engineering Entity, an Engineering Context, or an AI
+/// Suggestion — never more than one at once). Immutable; widgets watch
+/// this through
 /// `foundationRuntimeServiceProvider` and never touch [FoundationBridge]
 /// directly. See `docs/CONNECTION_MANAGER.md`.
 class FoundationServiceState {
@@ -111,6 +116,11 @@ class FoundationServiceState {
     this.engineeringContexts = const [],
     this.selectedContext,
     this.contextTypeFilter,
+    this.aiSuggestions = const [],
+    this.selectedAiSuggestion,
+    this.currentAiProviderId = 'mock',
+    this.currentAiConversation,
+    this.aiProcessingStatus = const {},
   });
 
   final FoundationConnectionPhase phase;
@@ -379,6 +389,42 @@ class FoundationServiceState {
   /// type." Ephemeral, not persisted — a display filter, not session
   /// content.
   final EngineeringContextType? contextTypeFilter;
+
+  /// AI Suggestions generated from this session's evidence (Work
+  /// Package 016 STUDIO-TASK-000048), persisted alongside their review
+  /// status. "AI outputs are Workspace artifacts" (SDD-022) — never a
+  /// Knowledge Candidate itself until an engineer explicitly accepts
+  /// one. See `docs/AI_PROVIDER_ARCHITECTURE.md`.
+  final List<AiSuggestion> aiSuggestions;
+
+  /// The AI Suggestion currently selected, if any (Work Package 016
+  /// Connection Manager: "Current AI Suggestion") — switches the
+  /// Property Inspector to AI Suggestion mode. Mutually exclusive with
+  /// every other selection field.
+  final AiSuggestion? selectedAiSuggestion;
+
+  /// Which `AiProvider` (by `AiProviderRegistry` id) new analysis runs
+  /// use (Work Package 016 Connection Manager: "Current AI Provider").
+  /// Ephemeral — a display/session choice, not evidence. Defaults to
+  /// `'mock'`, the only concretely-implemented provider this work
+  /// package ships ("No production provider integration").
+  final String currentAiProviderId;
+
+  /// The most recent `AiConversation` — the exact prompt sent and
+  /// response received for whichever source was last analyzed (Work
+  /// Package 016 Connection Manager: "AI Review State"). Ephemeral,
+  /// like `AiRequest`/`AiResponse`/`AiConversation` themselves — see
+  /// `docs/AI_PROVIDER_ARCHITECTURE.md` § Persistence for why this
+  /// isn't written to the session file. Exists specifically so the AI
+  /// Review Workspace's "Prompt" section can render the *exact* text
+  /// sent to and received from the provider ("No hidden prompts").
+  final AiConversation? currentAiConversation;
+
+  /// Whether a background AI analysis run is currently in flight for a
+  /// source, keyed by `SourceMaterial.id` (Work Package 016 Connection
+  /// Manager: "AI Processing State"). Ephemeral, mirrors
+  /// `ocrProcessingStatus`'s exact shape and reasoning.
+  final Map<String, AiProcessingStatus> aiProcessingStatus;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
@@ -689,6 +735,36 @@ class FoundationServiceState {
     );
   }
 
+  /// [sourceId]'s AI Suggestions, sorted newest first (Work Package 016
+  /// — the AI Review Workspace's own natural reading order: the most
+  /// recently generated suggestions are what an engineer opening the
+  /// workspace after a fresh analysis run wants to see first).
+  List<AiSuggestion> aiSuggestionsForSource(String sourceId) {
+    final suggestions = aiSuggestions.where((suggestion) => suggestion.sourceId == sourceId).toList()
+      ..sort((a, b) => b.createdTime.compareTo(a.createdTime));
+    return suggestions;
+  }
+
+  /// [suggestionId]'s supporting Engineering Entities, resolved from
+  /// its own recorded `AiSuggestion.supportingEntityIds` (Property
+  /// Inspector "Supporting Evidence") — never re-derived by re-running
+  /// analysis.
+  List<EngineeringEntity> supportingEntitiesFor(String suggestionId) {
+    final matches = aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    if (matches.isEmpty) return const [];
+    final ids = matches.first.supportingEntityIds.toSet();
+    return engineeringEntities.where((entity) => ids.contains(entity.id)).toList();
+  }
+
+  /// [suggestionId]'s supporting Engineering Contexts, resolved from
+  /// its own recorded `AiSuggestion.supportingContextIds`.
+  List<EngineeringContext> supportingContextsFor(String suggestionId) {
+    final matches = aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    if (matches.isEmpty) return const [];
+    final ids = matches.first.supportingContextIds.toSet();
+    return engineeringContexts.where((context) => ids.contains(context.id)).toList();
+  }
+
   FoundationServiceState copyWith({
     FoundationConnectionPhase? phase,
     FoundationRuntimeState? runtimeState,
@@ -759,6 +835,13 @@ class FoundationServiceState {
     bool clearSelectedContext = false,
     EngineeringContextType? contextTypeFilter,
     bool clearContextTypeFilter = false,
+    List<AiSuggestion>? aiSuggestions,
+    AiSuggestion? selectedAiSuggestion,
+    bool clearSelectedAiSuggestion = false,
+    String? currentAiProviderId,
+    AiConversation? currentAiConversation,
+    bool clearCurrentAiConversation = false,
+    Map<String, AiProcessingStatus>? aiProcessingStatus,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -818,6 +901,13 @@ class FoundationServiceState {
       engineeringContexts: engineeringContexts ?? this.engineeringContexts,
       selectedContext: clearSelectedContext ? null : (selectedContext ?? this.selectedContext),
       contextTypeFilter: clearContextTypeFilter ? null : (contextTypeFilter ?? this.contextTypeFilter),
+      aiSuggestions: aiSuggestions ?? this.aiSuggestions,
+      selectedAiSuggestion: clearSelectedAiSuggestion ? null : (selectedAiSuggestion ?? this.selectedAiSuggestion),
+      currentAiProviderId: currentAiProviderId ?? this.currentAiProviderId,
+      currentAiConversation: clearCurrentAiConversation
+          ? null
+          : (currentAiConversation ?? this.currentAiConversation),
+      aiProcessingStatus: aiProcessingStatus ?? this.aiProcessingStatus,
     );
   }
 }

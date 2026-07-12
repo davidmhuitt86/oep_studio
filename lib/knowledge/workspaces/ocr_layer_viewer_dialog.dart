@@ -15,6 +15,7 @@ import '../models/source_material.dart';
 import '../models/source_material_type.dart';
 import '../services/ocr_search_service.dart';
 import '../widgets/knowledge_placeholder.dart';
+import 'ai_review_workspace_dialog.dart';
 import 'context_explorer_dialog.dart';
 import 'entity_review_workspace_dialog.dart';
 
@@ -210,6 +211,11 @@ class _OcrLayerViewerDialogState extends ConsumerState<_OcrLayerViewerDialog> {
                     tooltip: 'Extract Entities',
                     icon: const Icon(Icons.rule_outlined, size: 18),
                     onPressed: () => showEntityReviewWorkspaceDialog(context, source: widget.source),
+                  ),
+                  IconButton(
+                    tooltip: 'AI Suggestions',
+                    icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                    onPressed: () => showAiReviewWorkspaceDialog(context, source: widget.source),
                   ),
                   IconButton(
                     tooltip: 'Close',

@@ -27,26 +27,39 @@ STUDIO-TASK-000040 Pattern Library, STUDIO-TASK-000041 Entity
 Validation); extended again in Work Package 015 (STUDIO-TASK-000042
 Context Detection Engine, STUDIO-TASK-000043 Context Explorer,
 STUDIO-TASK-000044 Context Validation, STUDIO-TASK-000045 Context
-Navigation). Validates the architecture defined in SDD-013
+Navigation); extended again in Work Package 016 (STUDIO-TASK-000046 AI
+Provider Architecture, STUDIO-TASK-000047 Prompt Construction Service,
+STUDIO-TASK-000048 AI Review Infrastructure, STUDIO-TASK-000049 Mock AI
+Provider). Validates the architecture defined in SDD-013
 (Knowledge Studio), SDD-014 (Engineering Knowledge Acquisition
 Pipeline), SDD-015 (Engineering Knowledge Model), SDD-016 (Knowledge
 Studio User Experience), SDD-017 (Knowledge Curation Workflow), SDD-018
 (Engineering Knowledge Lifecycle and Provenance), SDD-019 (Engineering
-Object Philosophy), SDD-020 (Engineering Knowledge Review System), and
-— as of Work Package 010 — SDD-021 (Engineering Evidence Model),
-remaining **Studio-only: no AI** through every work package — except
-Repository Commit itself (Work Package 012, a real, transactional write
-into the open Foundation repository — see `docs/REPOSITORY_COMMIT.md`)
-and OCR (Work Package 013 — a real, local Tesseract OCR pipeline that
-augments Source Material with searchable text and positional data,
-never Knowledge Candidates, never Foundation — see `docs/OCR_PIPELINE.md`).
+Object Philosophy), SDD-020 (Engineering Knowledge Review System),
+SDD-021 (Engineering Evidence Model, as of Work Package 010), and
+SDD-022 (Artificial Intelligence Architecture, as of Work Package 016),
+remaining **Studio-only, with no AI through Work Package 015** —
+except Repository Commit itself (Work Package 012, a real,
+transactional write into the open Foundation repository — see
+`docs/REPOSITORY_COMMIT.md`) and OCR (Work Package 013 — a real, local
+Tesseract OCR pipeline that augments Source Material with searchable
+text and positional data, never Knowledge Candidates, never Foundation
+— see `docs/OCR_PIPELINE.md`).
 Work Package 014's Engineering Entity Extraction stays within this same
 no-AI boundary: deterministic regex pattern matching over OCR text,
 never a Knowledge Candidate until explicit engineer acceptance — see
 `docs/ENGINEERING_ENTITY_EXTRACTION.md`. Work Package 015's Engineering
 Context Analysis stays within it too: deterministic document-structure
 grouping of entities, never a Knowledge Candidate and never a
-Foundation Object — see `docs/ENGINEERING_CONTEXT.md`.
+Foundation Object — see `docs/ENGINEERING_CONTEXT.md`. Work Package 016
+is the first work package to introduce genuine AI infrastructure — a
+provider-independent `AiProvider` interface, a Prompt Construction
+Service, and a full review workflow — but **integrates no production AI
+provider**: the only concrete provider is a deterministic, in-process
+`MockAiProvider` making zero network calls and requiring no API
+credentials, and accepting an AI Suggestion still requires explicit
+engineer action, never happening automatically — see
+`docs/AI_PROVIDER_ARCHITECTURE.md`.
 
 For the persisted-file format and the Relationship Candidate model
 reference (including the `KnowledgeCandidateType`/`ObjectCategory`
@@ -68,6 +81,9 @@ Package 014 architectural findings, see
 `docs/ENGINEERING_ENTITY_EXTRACTION.md`. For the Engineering
 Context/Detection/Navigation/Validation model reference and the Work
 Package 015 architectural findings, see `docs/ENGINEERING_CONTEXT.md`.
+For the AI provider abstraction/registry/Prompt Service/review
+workflow reference and the Work Package 016 architectural findings,
+see `docs/AI_PROVIDER_ARCHITECTURE.md`.
 This document covers the workspace layout, session lifecycle, and
 state ownership.
 
@@ -425,21 +441,29 @@ ownership table; as of Work Package 011:
 | `contextValidation` | Derived getter (Work Package 015) — see `docs/ENGINEERING_CONTEXT.md` § Validation Model |
 | `orphanedEntityIdsFor(sourceId)` | Derived getter — entities claimed by no context (Work Package 015) |
 | `childEntitiesFor(contextId)` / `parentContextOf(contextId)` / `contextStatisticsFor(contextId)` | Derived getters for the Property Inspector's Child Entities/Parent Context/Context Statistics (Work Package 015) |
+| `aiSuggestions` | AI Suggestions generated from this session's evidence, persisted (Work Package 016) — see `docs/AI_PROVIDER_ARCHITECTURE.md` |
+| `selectedAiSuggestion` | The AI Suggestion currently selected (Work Package 016) |
+| `currentAiProviderId` | Which `AiProvider` (by `AiProviderRegistry` id) new analysis runs use, ephemeral, defaults to `'mock'` (Work Package 016's "Current AI Provider") |
+| `currentAiConversation` | The most recent `AiConversation` (exact prompt/response), ephemeral (Work Package 016's "AI Review State") — never persisted, see `docs/AI_PROVIDER_ARCHITECTURE.md` § Persistence |
+| `aiProcessingStatus` | Per-source AI analysis state, ephemeral, mirrors `ocrProcessingStatus` (Work Package 016's "AI Processing State") |
+| `aiSuggestionsForSource(sourceId)` | Derived getter, sorted newest first (Work Package 016) |
+| `supportingEntitiesFor(suggestionId)` / `supportingContextsFor(suggestionId)` | Derived getters for the Property Inspector's Supporting Evidence (Work Package 016) |
 
 `knowledgeSourceCount`/`knowledgeCandidateCount`/`knowledgeAcceptedCount`/
 `knowledgeRejectedCount`/`knowledgePendingCount`/
 `knowledgeRelationshipCandidateCount`/`knowledgeEvidenceRegionCount` are
 getters derived from the lists above, not separately stored.
 
-Selection is **ten-way mutually exclusive**: Engineering Context (Work
-Package 015), Engineering Entity (Work Package 014), Knowledge
-Candidate, Relationship Candidate, Source Material, Object,
-Relationship, Evidence Region, Procedure Step (Work Package 010), and
-— the tenth — nothing selected at all. Every `select*` method clears
-the other nine. The Property Inspector's mode order
-(`property_inspector_panel.dart`):
+Selection is **eleven-way mutually exclusive**: AI Suggestion (Work
+Package 016), Engineering Context (Work Package 015), Engineering
+Entity (Work Package 014), Knowledge Candidate, Relationship
+Candidate, Source Material, Object, Relationship, Evidence Region,
+Procedure Step (Work Package 010), and — the eleventh — nothing
+selected at all. Every `select*` method clears the other ten. The
+Property Inspector's mode order (`property_inspector_panel.dart`):
 
 ```
+selectedAiSuggestion? → AI Suggestion mode (Work Package 016)
 selectedContext? → Engineering Context mode (Work Package 015)
 selectedEntity? → Engineering Entity mode (Work Package 014)
 selectedEvidenceRegion? → Evidence Region mode

@@ -392,6 +392,12 @@ abstract final class KnowledgeSessionService {
       // accepted/ignored status and parent/child links) is correct,
       // not merely convenient.
       engineeringContexts: original.engineeringContexts,
+      // Same reasoning again: AI Suggestions are keyed off a combined
+      // fingerprint over OCR/entity/context evidence that still
+      // matches the duplicate's byte-identical copied files, so
+      // carrying them over unchanged (including accept/edit/reject/
+      // defer status and any created Candidate link) is correct.
+      aiSuggestions: original.aiSuggestions,
     );
   }
 }

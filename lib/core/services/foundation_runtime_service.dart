@@ -2,6 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../knowledge/models/ai_analysis_exception.dart';
+import '../../knowledge/models/ai_processing_status.dart';
+import '../../knowledge/models/ai_suggestion.dart';
+import '../../knowledge/models/ai_suggestion_status.dart';
 import '../../knowledge/models/engineering_context.dart';
 import '../../knowledge/models/engineering_context_status.dart';
 import '../../knowledge/models/engineering_context_type.dart';
@@ -26,6 +30,8 @@ import '../../knowledge/models/session_status.dart';
 import '../../knowledge/models/source_material.dart';
 import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/models/specification_type.dart';
+import '../../knowledge/services/ai_analysis_service.dart';
+import '../../knowledge/services/ai_provider_registry.dart';
 import '../../knowledge/services/commit_transaction_service.dart';
 import '../../knowledge/services/context_detection_service.dart';
 import '../../knowledge/services/engineering_entity_extraction_service.dart';
@@ -252,6 +258,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -274,6 +281,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -358,6 +366,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrOverlayVisible: true,
       engineeringEntities: const [],
       engineeringContexts: const [],
+      aiSuggestions: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -371,6 +380,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearOcrErrorMessage: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
       clearContextTypeFilter: true,
     );
     unawaited(_persistActiveSession());
@@ -410,6 +420,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ocrOverlayVisible: true,
       engineeringEntities: const [],
       engineeringContexts: const [],
+      aiSuggestions: const [],
       clearSelectedCandidate: true,
       clearSelectedRelationshipCandidate: true,
       clearSelectedSourceMaterial: true,
@@ -423,6 +434,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearOcrErrorMessage: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
       clearContextTypeFilter: true,
     );
   }
@@ -455,6 +467,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ocrOverlayVisible: true,
         engineeringEntities: record.engineeringEntities,
         engineeringContexts: record.engineeringContexts,
+        aiSuggestions: record.aiSuggestions,
         clearSelectedCandidate: true,
         clearSelectedRelationshipCandidate: true,
         clearSelectedSourceMaterial: true,
@@ -468,6 +481,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearOcrErrorMessage: true,
         clearSelectedEntity: true,
         clearSelectedContext: true,
+        clearSelectedAiSuggestion: true,
         clearContextTypeFilter: true,
       );
     } on KnowledgeValidationException catch (error) {
@@ -519,6 +533,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           ocrPageResults: record.ocrPageResults,
           engineeringEntities: record.engineeringEntities,
           engineeringContexts: record.engineeringContexts,
+          aiSuggestions: record.aiSuggestions,
         ),
       );
       if (state.knowledgeSession?.id == sessionId) {
@@ -576,6 +591,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
           ocrPageResults: state.ocrPageResults,
           engineeringEntities: state.engineeringEntities,
           engineeringContexts: state.engineeringContexts,
+          aiSuggestions: state.aiSuggestions,
         ),
       );
       if (state.knowledgeStorageError != null) {
@@ -811,6 +827,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -917,6 +934,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -988,6 +1006,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       ..remove(sourceId);
     final selectedEntityRemoved = state.selectedEntity != null && state.selectedEntity!.sourceId == sourceId;
     final selectedContextRemoved = state.selectedContext != null && state.selectedContext!.sourceId == sourceId;
+    final selectedAiSuggestionRemoved =
+        state.selectedAiSuggestion != null && state.selectedAiSuggestion!.sourceId == sourceId;
+    final remainingAiProcessingStatus = Map<String, AiProcessingStatus>.from(state.aiProcessingStatus)
+      ..remove(sourceId);
     state = state.copyWith(
       sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
       evidenceRegions: remainingRegions,
@@ -1006,6 +1028,11 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       // Engineering Context organizing this source's now-gone OCR
       // evidence and entities is equally meaningless.
       engineeringContexts: state.engineeringContexts.where((context) => context.sourceId != sourceId).toList(),
+      // Work Package 016: same cascade, one layer further still — an
+      // AI Suggestion analyzed from this source's now-gone evidence is
+      // equally meaningless.
+      aiSuggestions: state.aiSuggestions.where((suggestion) => suggestion.sourceId != sourceId).toList(),
+      aiProcessingStatus: remainingAiProcessingStatus,
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
       clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
       clearCurrentPage: state.openSourceDocument?.id == sourceId,
@@ -1013,6 +1040,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceLink: selectedLinkRemoved,
       clearSelectedEntity: selectedEntityRemoved,
       clearSelectedContext: selectedContextRemoved,
+      clearSelectedAiSuggestion: selectedAiSuggestionRemoved,
     );
     if (matches.isNotEmpty) {
       await SourceMaterialService.removeFile(matches.first);
@@ -1048,6 +1076,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -1195,6 +1224,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -1486,6 +1516,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -1767,6 +1798,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -1880,6 +1912,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEvidenceRegion: true,
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
+      clearSelectedAiSuggestion: true,
     );
   }
 
@@ -2057,6 +2090,199 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ? 0
         : (forward ? (currentIndex + 1) % contexts.length : (currentIndex - 1 + contexts.length) % contexts.length);
     selectContext(contexts[nextIndex]);
+  }
+
+  // ---------------------------------------------------------------------
+  // AI-Assisted Authoring Infrastructure (Work Package 016)
+  // ---------------------------------------------------------------------
+
+  /// Runs AI analysis for [sourceId] (STUDIO-TASK-000046/000047), using
+  /// [providerId] or — if omitted — `FoundationServiceState.currentAiProviderId`.
+  /// Preconditions mirror `detectContextsForSource`: an active session
+  /// and at least one successful OCR result; prior entity/context
+  /// extraction is not required — analysis over OCR text alone, with no
+  /// entities/contexts detected yet, is still valid (the same
+  /// permissive precondition Work Package 015 established for context
+  /// detection). Throws [AiAnalysisException] if the provider id isn't
+  /// registered, the provider fails, or its response cannot be parsed.
+  Future<void> runAiAnalysisForSource(String sourceId, {String? providerId}) async {
+    if (state.knowledgeSession == null) {
+      throw const KnowledgeValidationException(
+        'Create or open a Knowledge Curation Session before running AI analysis.',
+      );
+    }
+    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This source could not be found.');
+    }
+    final ocrResults = state.ocrResultsForSource(sourceId);
+    if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
+      throw const KnowledgeValidationException('Run OCR on this source before running AI analysis.');
+    }
+    final resolvedProviderId = providerId ?? state.currentAiProviderId;
+    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    if (provider == null) {
+      throw AiAnalysisException('No AI provider is registered with id "$resolvedProviderId".');
+    }
+
+    state = state.copyWith(
+      aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.analyzing},
+    );
+    try {
+      final result = await AiAnalysisService.analyzeForSource(
+        source: matches.first,
+        ocrResults: state.ocrPageResults,
+        entities: state.engineeringEntities,
+        contexts: state.engineeringContexts,
+        existingCandidates: state.candidates,
+        existingSuggestions: state.aiSuggestions,
+        provider: provider,
+      );
+      state = state.copyWith(
+        aiSuggestions: [
+          ...state.aiSuggestions.where((suggestion) => suggestion.sourceId != sourceId),
+          ...result.suggestions,
+        ],
+        aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.completed},
+        currentAiConversation: result.conversation ?? state.currentAiConversation,
+      );
+      unawaited(_persistActiveSession());
+    } on AiAnalysisException {
+      state = state.copyWith(aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.failed});
+      rethrow;
+    }
+  }
+
+  /// Selects an AI Suggestion, switching the Property Inspector to AI
+  /// Suggestion mode. Clears every other selection.
+  void selectAiSuggestion(AiSuggestion suggestion) {
+    state = state.copyWith(
+      selectedAiSuggestion: suggestion,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
+      clearSelectedContext: true,
+    );
+  }
+
+  /// Clears the current AI Suggestion selection.
+  void clearAiSuggestionSelection() {
+    state = state.copyWith(clearSelectedAiSuggestion: true);
+  }
+
+  /// Sets which `AiProvider` new analysis runs use (Work Package 016
+  /// Connection Manager: "Current AI Provider").
+  void setCurrentAiProvider(String providerId) {
+    state = state.copyWith(currentAiProviderId: providerId);
+  }
+
+  /// Accepts a suggestion as-is (STUDIO-TASK-000048) — creates a
+  /// Knowledge Candidate using the AI's own suggested (or, if edited,
+  /// corrected) type/name/description. The *only* path from an AI
+  /// Suggestion to a Knowledge Candidate — "No AI-generated Knowledge
+  /// Candidates" means never *automatically*; this explicit engineer
+  /// action is exactly what that rule permits. Returns the newly
+  /// created candidate. Throws [KnowledgeValidationException] if the
+  /// suggestion doesn't exist, was already accepted, or (via
+  /// [addKnowledgeCandidate]) if its name collides with an existing
+  /// candidate's.
+  KnowledgeCandidate acceptAiSuggestion(String suggestionId) {
+    final matches = state.aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This suggestion could not be found.');
+    }
+    final suggestion = matches.first;
+    if (suggestion.isAccepted) {
+      throw const KnowledgeValidationException('This suggestion has already been accepted.');
+    }
+    final sourceMatches = state.sourceMaterials.where((source) => source.id == suggestion.sourceId);
+    final sourceName = sourceMatches.isEmpty ? suggestion.sourceId : sourceMatches.first.originalFileName;
+    final candidate = addKnowledgeCandidate(
+      type: suggestion.effectiveType,
+      name: suggestion.effectiveName,
+      description: suggestion.effectiveDescription,
+      notes:
+          'AI-suggested from "$sourceName" (${suggestion.providerId}/${suggestion.modelId}), confidence '
+          '${(suggestion.confidence * 100).round()}%. Reasoning: ${suggestion.reasoning}',
+    );
+    state = state.copyWith(
+      aiSuggestions: [
+        for (final existing in state.aiSuggestions)
+          if (existing.id == suggestionId)
+            existing.copyWith(status: AiSuggestionStatus.accepted, createdCandidateId: candidate.id)
+          else
+            existing,
+      ],
+    );
+    unawaited(_persistActiveSession());
+    return candidate;
+  }
+
+  /// Corrects a suggestion's type/name/description before acceptance
+  /// (STUDIO-TASK-000048's "Edited" state) — the AI's own original
+  /// `suggestedType`/`suggestedName`/`suggestedDescription` are never
+  /// overwritten; only `editedType`/`editedName`/`editedDescription`
+  /// are set, so the original suggestion stays fully inspectable
+  /// alongside the correction ("No hidden state"). A subsequent
+  /// [acceptAiSuggestion] call uses these edited values.
+  void editAiSuggestion(
+    String suggestionId, {
+    required KnowledgeCandidateType type,
+    required String name,
+    required String description,
+  }) {
+    final matches = state.aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    if (matches.isEmpty) {
+      throw const KnowledgeValidationException('This suggestion could not be found.');
+    }
+    if (name.trim().isEmpty) {
+      throw const KnowledgeValidationException('The suggestion name cannot be empty.');
+    }
+    state = state.copyWith(
+      aiSuggestions: [
+        for (final existing in state.aiSuggestions)
+          if (existing.id == suggestionId)
+            existing.copyWith(
+              status: AiSuggestionStatus.edited,
+              editedType: type,
+              editedName: name.trim(),
+              editedDescription: description.trim(),
+            )
+          else
+            existing,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Rejects a suggestion — "Rejected suggestions remain available for
+  /// auditing," never deleted (the same non-destructive precedent
+  /// `ignoreEntity`/`ignoreContext` already established).
+  void rejectAiSuggestion(String suggestionId) {
+    state = state.copyWith(
+      aiSuggestions: [
+        for (final suggestion in state.aiSuggestions)
+          if (suggestion.id == suggestionId) suggestion.copyWith(status: AiSuggestionStatus.rejected) else suggestion,
+      ],
+    );
+    unawaited(_persistActiveSession());
+  }
+
+  /// Defers a suggestion — "not now, revisit later," distinct from a
+  /// considered rejection.
+  void deferAiSuggestion(String suggestionId) {
+    state = state.copyWith(
+      aiSuggestions: [
+        for (final suggestion in state.aiSuggestions)
+          if (suggestion.id == suggestionId) suggestion.copyWith(status: AiSuggestionStatus.deferred) else suggestion,
+      ],
+    );
+    unawaited(_persistActiveSession());
   }
 
   void _disposeBridge() {

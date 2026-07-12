@@ -3597,3 +3597,249 @@ reasonable literal reading available and none constituted the kind of
 genuine, irreconcilable architectural conflict this work package's
 instructions say to stop for.
 
+## Work Package 016 — Knowledge Studio (AI Provider Architecture)
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000046 — AI Provider Architecture — Complete
+* STUDIO-TASK-000047 — Prompt Construction Service — Complete
+* STUDIO-TASK-000048 — AI Review Infrastructure — Complete
+* STUDIO-TASK-000049 — Mock AI Provider — Complete
+
+### What Exists
+
+Continues the Work Package 007-015 `lib/knowledge/` module - establishes
+the complete, provider-independent AI infrastructure Knowledge Studio's
+future AI-assisted authoring will run on, per this work package's own
+explicit reauthored instructions: **no production AI provider
+integration, no external AI service calls, no network traffic, no API
+credentials.** The only concrete `AiProvider` is a deterministic,
+in-process `MockAiProvider`. Full detail in
+`docs/AI_PROVIDER_ARCHITECTURE.md`.
+
+* `lib/knowledge/models/ai_model_info.dart`, `ai_request.dart`,
+  `ai_response.dart`, `ai_conversation.dart` (all new, ephemeral, not
+  persisted) - the provider-agnostic request/response/conversation
+  model; a provider never sees a `SourceMaterial`/`EngineeringEntity`/
+  `EngineeringContext` object directly, only these plain-text/plain-data
+  types.
+* `lib/knowledge/models/ai_suggestion_status.dart` (new) -
+  `pending`/`accepted`/`edited`/`rejected`/`deferred`, its own fifth
+  vocabulary distinct from `EngineeringEntityStatus`/
+  `EngineeringContextStatus`.
+* `lib/knowledge/models/ai_suggestion.dart` (new) - the persisted
+  Workspace artifact: suggested type/name/description/confidence/
+  reasoning/supporting evidence ids, provider/model metadata, a
+  `sourceFingerprint` for cache reuse, edited-value fields, and a
+  one-way-set `createdCandidateId`.
+* `lib/knowledge/models/ai_analysis_exception.dart` (new) - a
+  provider/parsing failure, distinct from `KnowledgeValidationException`.
+* `lib/knowledge/services/ai_provider.dart` (new) - the `AiProvider`
+  abstract interface: one method, `Future<AiResponse> complete(AiRequest)`.
+* `lib/knowledge/services/ai_provider_registry.dart` (new) -
+  `AiProviderRegistry`, seeded with only `MockAiProvider` in this work
+  package.
+* `lib/knowledge/services/mock_ai_provider.dart` (new) - the
+  deterministic mock provider: one suggestion per referenced Engineering
+  Context (or, absent contexts, per Engineering Entity), zero
+  suggestions for zero evidence, zero network activity.
+* `lib/knowledge/services/prompt_service.dart` (new, pure) - the *only*
+  place prompt text is constructed, from OCR text/Engineering Entities/
+  Engineering Contexts/existing Knowledge Candidates.
+* `lib/knowledge/services/ai_suggestion_parser.dart` (new, pure) -
+  strict parsing of a provider's raw response text into `AiSuggestion`s,
+  rejecting malformed/incomplete responses rather than guessing.
+* `lib/knowledge/services/ai_analysis_service.dart` (new) - orchestrates
+  `PromptService` → `AiProvider` → `AiSuggestionParser`, with
+  whole-source cache reuse (a combined OCR/entity/context fingerprint).
+* `lib/knowledge/models/knowledge_session_record.dart` - extended with
+  `aiSuggestions`, backward-compatible default `[]`.
+* `lib/knowledge/services/knowledge_session_service.dart` -
+  `buildDuplicate` carries `aiSuggestions` over unchanged.
+* `lib/core/services/foundation_runtime_state.dart` - `aiSuggestions`
+  (persisted), `selectedAiSuggestion` (the eleventh mutually-exclusive
+  selection field - added to all 9 pre-existing `select*` methods plus
+  `selectContext`), `currentAiProviderId`/`currentAiConversation`/
+  `aiProcessingStatus` (ephemeral), plus `aiSuggestionsForSource`/
+  `supportingEntitiesFor`/`supportingContextsFor` derived getters.
+* `lib/core/services/foundation_runtime_service.dart` -
+  `runAiAnalysisForSource` (does not require prior entity/context
+  extraction), `selectAiSuggestion`/`clearAiSuggestionSelection`,
+  `setCurrentAiProvider`, `acceptAiSuggestion` (creates a Knowledge
+  Candidate - the only path from a Suggestion to a Candidate),
+  `editAiSuggestion` (preserves the AI's original values alongside the
+  correction), `rejectAiSuggestion`, `deferAiSuggestion`;
+  `aiSuggestions` wired through create/close/open/archive/persist/
+  duplicate, and cascaded on `removeSourceMaterial`.
+* `lib/knowledge/workspaces/ai_review_workspace_dialog.dart` (new) -
+  the AI Review Workspace: provider picker, "Run Analysis" button,
+  status filter/sort/search, per-row Accept/Edit/Reject/Defer, a
+  two-field Edit dialog.
+* `lib/knowledge/workspaces/ocr_layer_viewer_dialog.dart` - a new
+  "AI Suggestions" toolbar button.
+* `lib/knowledge/inspector/ai_suggestion_properties.dart` (new) - the
+  Property Inspector's AI Suggestion mode (Suggestion fields, AI
+  Review section, Supporting Evidence, Provider Metadata, and - when
+  available - the exact Prompt sent/received).
+* `lib/shared/widgets/property_inspector_panel.dart` - the
+  mutually-exclusive selection switch extended from 10 to 11 cases.
+* `lib/knowledge/workspaces/knowledge_studio_page.dart` - the frozen
+  7-panel layout's "AI Suggestions" panel now shows a real session-wide
+  status summary (counts by review state) instead of the Work Package
+  007-era "No AI implementation exists" placeholder text, which this
+  work package makes literally inaccurate to leave unchanged.
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit reauthored instructions: **no
+production AI provider integration** (no OpenAI/Anthropic/Gemini/
+Ollama/LM Studio/OpenRouter concrete implementation), no external AI
+service calls, no network traffic, no API credentials. No automatic
+Knowledge Candidate creation - Accept is always an explicit engineer
+action. `oep_foundation`/the Public C API are untouched.
+
+### Repository Structure Additions
+
+```
+lib/
+  knowledge/
+    models/
+      ai_model_info.dart                    New
+      ai_request.dart                       New
+      ai_response.dart                       New
+      ai_conversation.dart                   New
+      ai_suggestion_status.dart              New
+      ai_suggestion.dart                     New
+      ai_analysis_exception.dart             New
+      knowledge_session_record.dart          Extended (aiSuggestions)
+    services/
+      ai_provider.dart                       New
+      ai_provider_registry.dart              New
+      mock_ai_provider.dart                  New
+      prompt_service.dart                    New
+      ai_suggestion_parser.dart              New
+      ai_analysis_service.dart               New
+      knowledge_session_service.dart         Extended (buildDuplicate)
+    workspaces/
+      ai_review_workspace_dialog.dart        New
+      ocr_layer_viewer_dialog.dart            Extended (AI Suggestions button)
+      knowledge_studio_page.dart             Extended (real AI Suggestions summary panel)
+    inspector/
+      ai_suggestion_properties.dart          New
+  core/
+    services/
+      foundation_runtime_state.dart          Extended (AI state + getters)
+      foundation_runtime_service.dart        Extended (runAiAnalysisForSource etc.)
+  shared/
+    widgets/
+      property_inspector_panel.dart          Extended (AI Suggestion mode)
+docs/
+  AI_PROVIDER_ARCHITECTURE.md                New
+  design/
+    SDD-022-AI_ARCHITECTURE.md              New (frozen architecture doc)
+```
+
+### Package Decisions
+
+**No new dependencies.** `MockAiProvider` uses `dart:convert`'s
+`jsonEncode`/`jsonDecode` only; the whole-source combined fingerprint
+reuses `package:crypto`'s SHA-256, already a dependency since Work
+Package 013. No HTTP client was added, since no provider in this work
+package performs network I/O.
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 241/241 passing: all prior tests, plus four new test
+  files (`prompt_service_test.dart` - 6 tests covering evidence
+  referencing, prompt content, purity, and the "no fabricated content"
+  behavior with zero evidence; `mock_ai_provider_test.dart` - 7 tests
+  covering zero-network-activity, zero-suggestions-for-zero-evidence,
+  one-suggestion-per-context/entity, field validity, determinism, and
+  type variety; `ai_suggestion_parser_test.dart` - 10 tests covering a
+  well-formed round trip and every malformed-response failure mode
+  (non-JSON, wrong top-level shape, missing "suggestions", missing/
+  invalid required fields, confidence clamping); `ai_analysis_service_test.dart` -
+  4 tests covering end-to-end Mock analysis, whole-source cache reuse,
+  re-analysis on changed context content, and cross-source isolation).
+* flutter build windows - succeeded.
+* **Manual verification using the mock provider only (no external AI,
+  per this work package's own explicit instruction).** The Work Package
+  015 fixture (a 2-page PDF with a Torque Specifications section and a
+  Parts List section, each with an inline Warning/Note callout) was
+  reused, since it already produces real Engineering Entities and
+  Engineering Contexts to feed AI analysis.
+
+  As in Work Packages 007-015, `computer-use` was confirmed unable to
+  target the compiled `oep_studio.exe`. Per this work package's own
+  pre-approved instructions, verification was performed with a
+  temporary `integration_test` (added, run against the real compiled
+  app via `flutter test ... -d windows`, then deleted - `pubspec.yaml`'s
+  `integration_test` dev dependency reverted and `pubspec.lock`
+  regenerated).
+
+  The test drove: create a session, attach the fixture, run real OCR,
+  extract real entities, detect real contexts, open the AI Review
+  Workspace (confirming the provider picker defaults to `'mock'`), Run
+  Analysis (confirming one real suggestion per detected context, and
+  that the exact system/user prompt and the mock's real JSON response
+  are both inspectable via `currentAiConversation` - "No hidden
+  prompts"), Accept a suggestion (confirming a real Knowledge Candidate
+  was created with the suggested name), Reject a suggestion (confirming
+  it remains in the list, never deleted), Edit a suggestion (confirming
+  the AI's own original suggested name survives unchanged alongside the
+  engineer's correction), select a suggestion (confirming the Property
+  Inspector's AI Suggestion mode renders), and finally close and reopen
+  the session and re-run analysis against unchanged evidence (confirming
+  accept/reject/edit status all survive both a session reload *and* a
+  cache-hit re-analysis that correctly skipped calling the provider
+  again).
+
+  No issues were found during this pass - the architecture behaved
+  exactly as designed on the first fully-corrected attempt at the test
+  script itself (see script-only issues below, not Studio defects).
+
+  Two integration-test-script-only issues were fixed along the way (not
+  Studio defects, recorded here since a future verification session
+  hitting the same finder patterns should not have to re-diagnose them
+  from scratch): a row's own text was tapped before `ensureVisible`
+  correctly repositioned it within the AI Review Workspace's own dialog
+  bounds (fixed by tapping the row's `InkWell` ancestor, then - when
+  that still occasionally mis-hit after the dialog's contents had
+  scrolled - by selecting the suggestion via the same notifier method
+  the row's own `onTap` calls, exercising the identical code path more
+  robustly than a screen-coordinate-dependent tap).
+
+### Architectural Observations
+
+See `docs/AI_PROVIDER_ARCHITECTURE.md` § Architectural Observations for
+the full account - summarized here:
+
+* **No production AI provider is integrated, by explicit instruction** -
+  the entire architecture is built and proven end to end using only
+  `MockAiProvider`. A future work package integrating a real provider
+  needs only to implement `AiProvider` and register it.
+* **"Accept creates a Knowledge Candidate" is a judgment call**, grounded
+  in SDD-022's own "Knowledge Candidate Suggestions" naming and this
+  work package's own "no AI-generated" (i.e. not *automatic*) reading -
+  STUDIO-TASK-000048 itself doesn't literally restate this, unlike the
+  original pre-reauthored version of this work package.
+* **The four-part confidence breakdown named in the original,
+  pre-reauthored version of this work package was dropped from the
+  reauthored task list** - `AiSuggestion` keeps a single `confidence`
+  field, per SDD-022's own simpler "Confidence" output. Not
+  reintroduced, since implementing a requirement a superseding revision
+  removed would be scope creep, not fidelity to the spec.
+* **`AiRequest`/`AiResponse`/`AiConversation` are ephemeral by design**,
+  mirroring `CommitPlan`'s own precedent (Work Package 012) - a derived,
+  in-memory-only object, never persisted, since everything SDD-022
+  actually requires to be persisted is already captured on the
+  resulting `AiSuggestion`s themselves.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available and none constituted the kind of
+genuine, irreconcilable architectural conflict this work package's
+instructions say to stop for.
+
