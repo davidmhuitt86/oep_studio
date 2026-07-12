@@ -26,7 +26,9 @@ void main() {
     await tester.tap(find.text('Settings').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Studio Settings will appear here.'), findsOneWidget);
+    // Work Package 017: Settings is now a real Workspace (General page by
+    // default), not a placeholder.
+    expect(find.text('Localization'), findsOneWidget);
 
     // Property Inspector (Work Package 003) is a persistent panel —
     // "No Object Selected" regardless of which page is active.

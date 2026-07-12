@@ -2285,6 +2285,37 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     unawaited(_persistActiveSession());
   }
 
+  // ------------------------------------------------------------------
+  // Settings Workspace Coordination (Work Package 017)
+  // ------------------------------------------------------------------
+  //
+  // Pure navigation/UI coordination state for the Settings Workspace —
+  // "Current Settings Page," "Settings Search," "Settings Modified
+  // State" (STUDIO-TASK "Connection Manager: Add support for..."). The
+  // actual User Configuration draft, its validation, and its
+  // persistence all live in `SettingsController`/`SettingsService`
+  // (`lib/settings/`), a deliberately separate Notifier — see
+  // `docs/STUDIO_SETTINGS.md` Settings Architecture.
+
+  /// Selects the Settings Workspace's currently-visible page (a
+  /// `CoreSettingsPageIds` constant, or a future provider's own id).
+  void setCurrentSettingsPage(String pageId) {
+    state = state.copyWith(currentSettingsPageId: pageId);
+  }
+
+  /// Updates the Settings Workspace's current search text.
+  void setSettingsSearchQuery(String query) {
+    state = state.copyWith(settingsSearchQuery: query);
+  }
+
+  /// Records whether the Settings Workspace's in-memory draft currently
+  /// differs from what's persisted — synced from
+  /// `SettingsControllerState.isModified` by the Settings Workspace
+  /// widget itself.
+  void setSettingsModified(bool modified) {
+    state = state.copyWith(settingsModified: modified);
+  }
+
   void _disposeBridge() {
     final bridge = _bridge;
     if (bridge == null) return;

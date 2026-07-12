@@ -121,6 +121,9 @@ class FoundationServiceState {
     this.currentAiProviderId = 'mock',
     this.currentAiConversation,
     this.aiProcessingStatus = const {},
+    this.currentSettingsPageId,
+    this.settingsSearchQuery = '',
+    this.settingsModified = false,
   });
 
   final FoundationConnectionPhase phase;
@@ -425,6 +428,31 @@ class FoundationServiceState {
   /// Manager: "AI Processing State"). Ephemeral, mirrors
   /// `ocrProcessingStatus`'s exact shape and reasoning.
   final Map<String, AiProcessingStatus> aiProcessingStatus;
+
+  /// The Settings Workspace's currently-selected page (Work Package 017
+  /// Connection Manager: "Current Settings Page") — a
+  /// `CoreSettingsPageIds` constant or a future provider's own id.
+  /// `null` before the Settings Workspace has been opened at least
+  /// once. Pure navigation/coordination state: the actual settings
+  /// *content* being edited lives in `SettingsController`, a separate
+  /// Notifier — see `docs/STUDIO_SETTINGS.md` Settings Architecture.
+  final String? currentSettingsPageId;
+
+  /// The Settings Workspace's current search text (Work Package 017
+  /// Connection Manager: "Settings Search"). Ephemeral UI state, kept
+  /// here rather than as local widget state so it survives navigating
+  /// away from and back to the Settings Workspace within one session,
+  /// consistent with every other workspace's own "current query" field.
+  final String settingsSearchQuery;
+
+  /// Whether the Settings Workspace's in-memory draft currently differs
+  /// from what's persisted on disk (Work Package 017 Connection
+  /// Manager: "Settings Modified State"). Synced from
+  /// `SettingsControllerState.isModified` by the Settings Workspace
+  /// widget — the Connection Manager holds only the plain resulting
+  /// flag, never `SettingsController`'s own draft, keeping "Connection
+  /// Manager coordinates application state only" intact.
+  final bool settingsModified;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
@@ -842,6 +870,10 @@ class FoundationServiceState {
     AiConversation? currentAiConversation,
     bool clearCurrentAiConversation = false,
     Map<String, AiProcessingStatus>? aiProcessingStatus,
+    String? currentSettingsPageId,
+    bool clearCurrentSettingsPageId = false,
+    String? settingsSearchQuery,
+    bool? settingsModified,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -908,6 +940,11 @@ class FoundationServiceState {
           ? null
           : (currentAiConversation ?? this.currentAiConversation),
       aiProcessingStatus: aiProcessingStatus ?? this.aiProcessingStatus,
+      currentSettingsPageId: clearCurrentSettingsPageId
+          ? null
+          : (currentSettingsPageId ?? this.currentSettingsPageId),
+      settingsSearchQuery: settingsSearchQuery ?? this.settingsSearchQuery,
+      settingsModified: settingsModified ?? this.settingsModified,
     );
   }
 }

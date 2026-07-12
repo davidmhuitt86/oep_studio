@@ -3843,3 +3843,229 @@ reasonable literal reading available and none constituted the kind of
 genuine, irreconcilable architectural conflict this work package's
 instructions say to stop for.
 
+## Work Package 017 — Studio Settings Workspace
+
+Status: Implemented
+
+Tasks:
+
+* STUDIO-TASK-000050 — Settings Workspace - Complete
+* STUDIO-TASK-000051 — Settings Framework - Complete
+* STUDIO-TASK-000052 — Core Settings Pages - Complete
+* STUDIO-TASK-000053 — Configuration Storage - Complete
+* STUDIO-TASK-000054 — Settings Search - Complete
+* STUDIO-TASK-000055 — Provider Registration - Complete
+
+### What Exists
+
+A complete Settings Workspace per SDD-023, built as a new `lib/settings/`
+module (parallel to `lib/knowledge/`, not nested inside it - Settings is
+Studio-wide configuration, not a Knowledge Workspace concern). Full
+detail in `docs/STUDIO_SETTINGS.md`.
+
+* `lib/settings/models/` (new) - `UserConfiguration` (the versioned root
+  User Configuration) and ten sub-models (`GeneralSettings`,
+  `AppearanceSettings`, `WorkspaceSettings`, `RepositorySettings`,
+  `KnowledgeStudioSettings`, `AiSettings`, `PluginSettings`,
+  `UpdateSettings`, `DiagnosticsSettings`, `SecuritySettings`), fifteen
+  small enums (`settings_enums.dart`), `CoreSettingsPageIds` (plain
+  `String` page identifiers, not a closed enum - see Architectural
+  Observations), `SettingsEntry` (a searchable setting descriptor), and
+  `SettingsException`.
+* `lib/settings/services/settings_storage.dart` (new) - real `dart:io`
+  persistence to `%APPDATA%/oep_studio/settings.json`.
+* `lib/settings/services/settings_migration_service.dart` (new, pure) -
+  resolves any raw JSON to `UserConfiguration.currentSchemaVersion`,
+  throwing on a schema newer than this build, and wrapping any upgrader
+  failure.
+* `lib/settings/services/settings_validation_service.dart` (new, pure) -
+  validates a `UserConfiguration` before every save, collecting every
+  violation into one message.
+* `lib/settings/services/settings_service.dart` (new) - orchestrates
+  `load`/`save`/`resetToDefaults`/`exportToJson`/`importFromJson`.
+* `lib/settings/services/settings_provider.dart` (new) - the
+  `SettingsProvider` interface (`pageId`/`label`/`icon`/`searchEntries`/
+  `pageBuilder`).
+* `lib/settings/services/settings_registry.dart` (new) - `SettingsRegistry`,
+  structurally identical to Work Package 016's `AiProviderRegistry`;
+  `defaultRegistry` seeded with the eleven core pages.
+* `lib/settings/controllers/settings_controller.dart` (new) - the
+  Settings Workspace's own Riverpod `Notifier` (deliberately separate
+  from `FoundationRuntimeNotifier`), owning the in-memory draft
+  `UserConfiguration` and one update method per leaf setting.
+* `lib/settings/workspace/settings_workspace_page.dart` (new) - the
+  Settings Workspace shell: left navigation + search, right page
+  content, a top action bar (Save/Discard/Reset Defaults/Export/Import),
+  and `?page=` deep-link support.
+* `lib/settings/pages/*.dart` (new, 11 files) - one `SettingsProvider` +
+  page widget per core page.
+* `lib/settings/widgets/settings_rows.dart` (new) - shared row/section
+  widgets (`SettingsSwitchRow`, `SettingsDropdownRow`, `SettingsSliderRow`,
+  `SettingsTextRow`, `SettingsInfoRow`, `SettingsPlaceholderRow`) reused
+  across all eleven pages.
+* `lib/core/services/foundation_runtime_state.dart` /
+  `foundation_runtime_service.dart` - `currentSettingsPageId`/
+  `settingsSearchQuery`/`settingsModified` (Connection Manager
+  coordination state only) plus three corresponding setters.
+* `lib/core/routing/app_router.dart` - the `/settings` route now builds
+  `SettingsWorkspacePage`, reading `?page=` for deep links, replacing the
+  Work Package 001 `SettingsPage` placeholder (`lib/features/settings/`
+  removed entirely).
+
+### What Is Explicitly Not Implemented
+
+Per this work package's explicit instructions: no Foundation changes, no
+Public C API changes, no AI provider integration (the Artificial
+Intelligence page has no dependency on Work Package 016's
+`AiProviderRegistry`), no Plugin implementation (the Plugins page is
+entirely inert). Several settings on Appearance/Workspace/Knowledge
+Studio/Diagnostics are stored, validated, and versioned but have no
+observable effect on Studio's behavior yet - see `docs/STUDIO_SETTINGS.md`'s
+Core Settings Pages table for the full real-vs-placeholder breakdown.
+"Reset Studio" (a full local-state wipe) is a placeholder; only "Reset
+Defaults" (Settings only) is real.
+
+### Repository Structure Additions
+
+```
+lib/
+  settings/
+    models/
+      settings_enums.dart                    New
+      settings_page_id.dart                  New
+      settings_entry.dart                    New
+      settings_exception.dart                New
+      general_settings.dart                  New
+      appearance_settings.dart               New
+      workspace_settings.dart                New
+      repository_settings.dart               New
+      knowledge_studio_settings.dart         New
+      ai_settings.dart                       New
+      plugin_settings.dart                   New
+      update_settings.dart                   New
+      diagnostics_settings.dart              New
+      security_settings.dart                 New
+      user_configuration.dart                New
+    services/
+      settings_storage.dart                  New
+      settings_migration_service.dart        New
+      settings_validation_service.dart       New
+      settings_service.dart                  New
+      settings_provider.dart                 New
+      settings_registry.dart                 New
+    controllers/
+      settings_controller.dart               New
+    workspace/
+      settings_workspace_page.dart           New
+    pages/
+      general_settings_page.dart             New
+      appearance_settings_page.dart          New
+      workspace_settings_page.dart           New
+      repository_settings_page.dart          New
+      knowledge_studio_settings_page.dart    New
+      ai_settings_page.dart                  New
+      plugins_settings_page.dart             New
+      updates_settings_page.dart             New
+      diagnostics_settings_page.dart         New
+      security_settings_page.dart            New
+      about_settings_page.dart               New
+    widgets/
+      settings_rows.dart                     New
+  core/
+    services/
+      foundation_runtime_state.dart          Extended (Settings coordination state)
+      foundation_runtime_service.dart        Extended (three setters)
+    routing/
+      app_router.dart                        Extended (/settings -> SettingsWorkspacePage)
+  features/
+    settings/                                Removed (superseded placeholder)
+docs/
+  STUDIO_SETTINGS.md                         New
+```
+
+### Package Decisions
+
+**No new dependencies.** `SettingsStorage` reuses `dart:io`/`dart:convert`
+exactly like `KnowledgeSessionStorage`; Export/Import reuse
+`package:file_selector`'s `getSaveLocation`/`openFile`, already a
+dependency since Work Package 002, exactly as `commit_report_dialog.dart`
+and `import_queue_panel.dart` already use them.
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 271/271 passing: all prior tests, plus five new test
+  files (`settings_migration_service_test.dart` - 5 tests covering
+  legacy-file upgrade, unmigrated passthrough, version-mismatch and
+  corrupt-schema-version failures, and a full parse-after-migrate round
+  trip; `settings_validation_service_test.dart` - 7 tests covering the
+  default configuration's own validity and every rejection case;
+  `settings_registry_test.dart` - 6 tests covering registration order,
+  `providerFor` resolution, a fake future-provider registering without
+  Settings Workspace changes, and search by name/description/keyword;
+  `settings_controller_state_test.dart` - 4 tests covering
+  `isModified`'s structural comparison; `settings_service_test.dart` - 8
+  tests exercising real `%APPDATA%/oep_studio/settings.json` I/O with
+  backup/restore around every test, mirroring
+  `knowledge_session_storage_test.dart`'s own precedent).
+* flutter build windows - succeeded.
+* **Manual verification** using the pre-approved temporary
+  `integration_test` fallback (`computer-use` again confirmed unable to
+  target the compiled `oep_studio.exe` in this environment) - a single
+  end-to-end test drove the real compiled app through: seeding a legacy
+  (no-`schemaVersion`) settings file and confirming it loaded correctly
+  migrated (Migration); confirming all eleven core pages are present in
+  the left navigation and that switching between them renders each
+  page's own content (Registry, Navigation); typing a query and
+  selecting a search result to jump straight to the Appearance page
+  (Search); changing General's Language, saving, and confirming the
+  exact value landed in the real settings file (Save, Load); and Reset
+  Defaults reverting and persisting the default value (Defaults). The
+  `integration_test` dev dependency and `integration_test/` directory
+  were fully removed afterward, and the real settings file (there wasn't
+  one before this run) was confirmed absent again after teardown.
+
+  One real layout bug was found and fixed during this pass (not a
+  test-script issue): `SettingsDropdownRow`'s `DropdownButton` overflowed
+  at the width available inside the Settings Workspace's own two-pane
+  layout, since a non-`isExpanded` `DropdownButton` sizes to its longest
+  item's natural width rather than the space available - fixed with
+  `isExpanded: true` plus a fixed-width `SizedBox`. The Settings action
+  bar's row of Import/Export/Reset Defaults/Discard/Save buttons had the
+  same class of overflow at narrower widths - fixed by wrapping the
+  trailing button group in a horizontally-scrollable `Expanded` region,
+  mirroring `StudioToolbar`'s own established pattern for its action row.
+
+### Architectural Observations
+
+See `docs/STUDIO_SETTINGS.md` § Architectural Observations for the full
+account - summarized here:
+
+* **`SettingsPageId` was redesigned from a closed `enum` to plain
+  `String` constants (`CoreSettingsPageIds`)** before other code was
+  built on top of it, once SDD-023's "Future modules may register
+  additional pages" was read against STUDIO-TASK-000055's "shall not
+  require modification when new providers are added" - a closed enum
+  cannot admit an id a future provider invents for itself. Mirrors
+  `AiProviderRegistry`'s own plain-`String` `providerId` (Work Package
+  016).
+* **`SettingsProvider.pageBuilder` returns a `Widget` from a
+  services-layer interface** - a deliberate, documented exception to
+  "services never construct widgets," justified the same way
+  `GoRoute.builder` already works in this codebase: the registry only
+  holds the reference, it never inspects or builds the widget tree
+  itself.
+* **The Artificial Intelligence page is deliberately decoupled from Work
+  Package 016's real `AiProviderRegistry`** - connecting them is exactly
+  the "provider-specific settings" this work package's instructions say
+  not to implement yet.
+* **"Reset Studio" was scoped down to a placeholder** rather than
+  implementing a genuine full local-state wipe, since that is a
+  destructive, irreversible action well beyond this work package's own
+  "Reset Defaults" (Settings only) requirement.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available and none constituted the kind of
+genuine, irreconcilable architectural conflict this work package's
+instructions say to stop for.
+
