@@ -4,11 +4,15 @@ Introduced in Work Package 016 (STUDIO-TASK-000046 AI Provider
 Architecture, STUDIO-TASK-000047 Prompt Construction Service,
 STUDIO-TASK-000048 AI Review Infrastructure, STUDIO-TASK-000049 Mock AI
 Provider). Establishes the complete, provider-independent AI
-infrastructure Knowledge Studio's future AI-assisted authoring will run
-on — **without integrating any production AI provider**. No external AI
-service calls. No network traffic. No API credentials. The only
-concrete `AiProvider` this work package ships is `MockAiProvider`, a
-deterministic, in-process implementation with zero I/O.
+infrastructure Knowledge Studio's AI-assisted authoring runs on. Work
+Package 016 shipped it **without integrating any production AI
+provider** — only `MockAiProvider`, a deterministic, in-process
+implementation with zero I/O. As of Work Package 018, `AnthropicProvider`
+is a real, production `AiProvider` implementation using Anthropic's
+Messages API — see `docs/ANTHROPIC_PROVIDER.md` for its own
+authentication/credential-storage/prompt-execution/error-handling detail;
+this document covers the provider-independent architecture both
+providers share.
 
 Validates SDD-022 (Artificial Intelligence Architecture, frozen):
 "Studio shall communicate only with AIProvider... No Workspace
@@ -58,6 +62,11 @@ class AiResponse {
   final DateTime receivedTime;
   final bool success;
   final String? errorMessage;
+  // Work Package 018 — populated by real providers that report them;
+  // null for MockAiProvider, which makes no real call.
+  final int? inputTokens, outputTokens;
+  final String? stopReason;
+  final Map<String, dynamic>? rawMetadata;
 }
 
 class AiConversation {
@@ -84,20 +93,19 @@ received, not a summary or reconstruction of it.
 class AiProviderRegistry {
   AiProvider? providerFor(String providerId);
   List<AiModelInfo> get availableModels;
-  static final AiProviderRegistry defaultRegistry = AiProviderRegistry([MockAiProvider()]);
+  static final AiProviderRegistry defaultRegistry =
+      AiProviderRegistry([MockAiProvider(), AnthropicProvider()]);
 }
 ```
 
 The single place Studio looks up a provider by id (STUDIO-TASK-000046:
-"AIProviderRegistry"). Adding a future real provider (OpenAI, Anthropic,
-Gemini, Ollama, LM Studio, OpenRouter — SDD-022's own named list) means
+"AIProviderRegistry"). Adding a future real provider (OpenAI, Gemini,
+Ollama, LM Studio, OpenRouter — SDD-022's own named list) means
 registering one more entry in `defaultRegistry`'s constructor list;
 nothing in the Connection Manager, the AI Review Workspace, or
-`AiAnalysisService` changes. `defaultRegistry` is seeded with only
-`MockAiProvider` in this work package — "No production provider
-integration" is this work package's own explicit instruction, not a
-limitation of the registry itself, which already supports any number
-of providers.
+`AiAnalysisService` changes — proven for real in Work Package 018, whose
+entire integration point for `AnthropicProvider` was exactly this one
+extra entry.
 
 ---
 
@@ -283,6 +291,19 @@ successful OCR result — but, like context detection, does **not**
 require prior entity/context extraction: analysis over OCR text alone
 is still valid.
 
+**Work Package 018** added three more coordination fields, all pure
+UI/coordination state, never settings content or a credential:
+`aiConnectionStatus` (`AiConnectionStatus`, defaults `notTested`),
+`aiConnectionMessage` (`String?`), `currentAiModel` (`String?` — the
+model actually used by the most recent request, distinct from
+`AiSettings.modelId`, the *configured* model), and
+`activeAiRequestSourceId` (`String?`). `testAiConnection({providerId})`
+and `cancelActiveAiRequest({providerId})` resolve a provider through
+`AiProviderRegistry` exactly like `runAiAnalysisForSource` does, and use
+`provider is TestableAiProvider`/`provider is CancellableAiProvider` to
+discover the optional capability without ever referencing
+`AnthropicProvider` (or any other concrete provider) by name.
+
 ---
 
 ## Architectural Observations
@@ -322,3 +343,11 @@ is still valid.
   mirrors `CommitPlan`'s own precedent (Work Package 012): a derived,
   in-memory-only object, recomputed/regenerated rather than stored,
   when nothing in the frozen architecture requires otherwise.
+* **Work Package 018 proved the "no production provider" boundary was
+  genuinely provider-independent**, not just true in the absence of a
+  real implementation: registering `AnthropicProvider` required zero
+  changes to `AiAnalysisService`, `PromptService`,
+  `AiSuggestionParser`, the AI Review Workspace's review workflow, or
+  the Connection Manager's existing AI methods — only one new registry
+  entry, plus the additive Property Inspector/Settings/Connection
+  Manager extensions documented in `docs/ANTHROPIC_PROVIDER.md`.

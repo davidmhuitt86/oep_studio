@@ -9,12 +9,13 @@ Foundation, a separate repository, via the Foundation Bridge. See
 
 ## Status
 
-Work Packages 001–017 are implemented: Application Shell + Dashboard,
+Work Packages 001–018 are implemented: Application Shell + Dashboard,
 Foundation Bridge + Open Repository Workflow, the Repository Explorer
 / Object Explorer / Property Inspector / Connection Manager, the
 Relationship Explorer / Search Workspace, — across Work Packages
-007–016 — **Knowledge Studio** (SDD-013), and — as of Work Package 017
-— the **Settings Workspace** (SDD-023). Repository Explorer through
+007–016 and 018 — **Knowledge Studio** (SDD-013), and — as of Work
+Package 017 — the **Settings Workspace** (SDD-023). Repository Explorer
+through
 Search Workspace are backed by **live** Foundation data (Engineering
 Object enumeration and statistics since Work Package 004; Engineering
 Relationship enumeration and repository search since Work Package
@@ -90,25 +91,33 @@ orphaned entities, invalid hierarchy) — see
 `docs/ENGINEERING_CONTEXT.md`. As of Work Package 016, a complete,
 provider-independent AI infrastructure layer exists — a common
 `AiProvider` interface, a Prompt Construction Service, and a full
-Accept/Edit/Reject/Defer review workflow — but **no production AI
-provider is integrated**: the only concrete provider is a deterministic,
-in-process `MockAiProvider` that makes zero network calls and needs no
-API credentials. An AI Review Workspace lets an engineer run analysis
-and review suggestions the same way Entity/Context review already
-work; accepting a suggestion creates a normal Knowledge Candidate,
-never automatically — see `docs/AI_PROVIDER_ARCHITECTURE.md`. As of
-Work Package 017, Studio has a real **Settings Workspace** — a
-dedicated navigation destination (not a modal dialog) with eleven core
-pages (General, Appearance, Workspace, Repository, Knowledge Studio,
-Artificial Intelligence, Plugins, Updates, Diagnostics, Security,
-About), full-text search over every setting, and a versioned,
-automatically-migrated User Configuration persisted to
-`%APPDATA%/oep_studio/settings.json`. A `SettingsRegistry` lets future
-subsystems (AI Providers, Plugins) register their own settings pages
-without modifying the Settings Workspace itself. Most pages bind real,
-validated, persisted values; a handful (Plugins, several Appearance/
-Workspace/Diagnostics controls) are honest placeholders where the
-underlying subsystem doesn't exist yet — see `docs/STUDIO_SETTINGS.md`.
+Accept/Edit/Reject/Defer review workflow. An AI Review Workspace lets
+an engineer run analysis and review suggestions the same way
+Entity/Context review already work; accepting a suggestion creates a
+normal Knowledge Candidate, never automatically — see
+`docs/AI_PROVIDER_ARCHITECTURE.md`. As of Work Package 017, Studio has
+a real **Settings Workspace** — a dedicated navigation destination
+(not a modal dialog) with eleven core pages (General, Appearance,
+Workspace, Repository, Knowledge Studio, Artificial Intelligence,
+Plugins, Updates, Diagnostics, Security, About), full-text search over
+every setting, and a versioned, automatically-migrated User
+Configuration persisted to `%APPDATA%/oep_studio/settings.json`. A
+`SettingsRegistry` lets future subsystems (AI Providers, Plugins)
+register their own settings pages without modifying the Settings
+Workspace itself. Most pages bind real, validated, persisted values; a
+handful (Plugins, several Appearance/Workspace/Diagnostics controls)
+are honest placeholders where the underlying subsystem doesn't exist
+yet — see `docs/STUDIO_SETTINGS.md`. As of Work Package 018, Studio has
+its first production AI provider: **`AnthropicProvider`**, using
+Anthropic's Messages API. API keys are stored in Windows Credential
+Manager through a new, reusable `CredentialStore` abstraction
+(`lib/core/security/`, implemented with `dart:ffi` calls directly to
+`advapi32.dll` — no ATL, no COM, no third-party plugin) — never in
+Settings, a Repository, or a Knowledge Session. The Artificial
+Intelligence settings page now has a real provider picker, a real API
+Key field, and a real Test Connection button (Connected/Authentication
+Failed/Network Error/Provider Error). `MockAiProvider` remains the
+default for every automated test — see `docs/ANTHROPIC_PROVIDER.md`.
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
 and *delete* remain unexposed via Foundation from Studio — only
@@ -120,8 +129,9 @@ review workflow itself lives in the AI Review Workspace dialog); PDF
 text extraction/selection, non-rectangle Evidence Region shapes, a
 generalized Source-Material-/Page-Selection-level Evidence Link, OCR
 result editing, true on-screen TIFF preview, Engineering Entity pattern
-editing, Engineering Context pattern/keyword editing, any production AI
-provider integration, and any Plugin implementation are out of scope).
+editing, Engineering Context pattern/keyword editing, any AI provider
+beyond Anthropic (OpenAI, Gemini, Ollama, LM Studio, OpenRouter), and
+any Plugin implementation are out of scope).
 
 The desktop window has a minimum size of 1000×700 logical pixels
 (`windows/runner/win32_window.cpp`) — below that, the Navigation Rail
@@ -174,5 +184,6 @@ Studio Design Documents live under `docs/`:
 * `ENGINEERING_CONTEXT.md` — Context model/Detection rules/Navigation/Validation model/Persistence
 * `AI_PROVIDER_ARCHITECTURE.md` — Provider abstraction/registry/Prompt Service/Mock provider/Review workflow
 * `STUDIO_SETTINGS.md` — Settings architecture/Registry/Search/Storage/Versioning/Migration
+* `ANTHROPIC_PROVIDER.md` — Provider implementation/Authentication/Secure credential storage/Prompt execution/Error handling
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

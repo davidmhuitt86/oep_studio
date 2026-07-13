@@ -157,7 +157,9 @@ class SettingsController extends Notifier<SettingsControllerState> {
   void setReviewSortPreference(ReviewSortPreference value) =>
       _update((c) => c.copyWith(knowledgeStudio: c.knowledgeStudio.copyWith(reviewSortPreference: value)));
 
-  // ---- Artificial Intelligence (inert placeholders — see AiSettings) --
+  // ---- Artificial Intelligence (Work Package 018: providerId/modelId
+  // now genuinely consumed by AnthropicProvider; API key lives in
+  // CredentialStore (lib/core/security/), never here) --------------------
   void setAiEnabled(bool value) => _update((c) => c.copyWith(ai: c.ai.copyWith(enabled: value)));
   void setAiProviderId(String value) => _update((c) => c.copyWith(ai: c.ai.copyWith(providerId: value)));
   void setAiModelId(String value) => _update((c) => c.copyWith(ai: c.ai.copyWith(modelId: value)));
@@ -165,6 +167,7 @@ class SettingsController extends Notifier<SettingsControllerState> {
   void setAiTimeoutSeconds(int value) => _update((c) => c.copyWith(ai: c.ai.copyWith(timeoutSeconds: value)));
   void setAiContextWindowTokens(int value) =>
       _update((c) => c.copyWith(ai: c.ai.copyWith(contextWindowTokens: value)));
+  void setAiMaxOutputTokens(int value) => _update((c) => c.copyWith(ai: c.ai.copyWith(maxOutputTokens: value)));
   void setAiReasoningDepth(ReasoningDepthPreference value) =>
       _update((c) => c.copyWith(ai: c.ai.copyWith(reasoningDepth: value)));
   void setAiPrivacyControlsEnabled(bool value) =>

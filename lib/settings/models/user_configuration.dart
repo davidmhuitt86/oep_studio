@@ -41,7 +41,9 @@ class UserConfiguration {
   /// The schema version this build of Studio writes. Bump this, and add
   /// a corresponding step to `SettingsMigrationService`, whenever a
   /// field is added, renamed, or removed below.
-  static const currentSchemaVersion = 1;
+  ///
+  /// Version 2 (Work Package 018): added `AiSettings.maxOutputTokens`.
+  static const currentSchemaVersion = 2;
 
   factory UserConfiguration.defaults() => UserConfiguration(
     schemaVersion: currentSchemaVersion,

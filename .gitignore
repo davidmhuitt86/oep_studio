@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Credentials — never committed. API keys belong in Windows Credential
+# Manager (lib/core/security/), not in a file in this repository.
+*.env
+
 # Symbolication related
 app.*.symbols
 

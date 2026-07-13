@@ -4069,3 +4069,214 @@ reasonable literal reading available and none constituted the kind of
 genuine, irreconcilable architectural conflict this work package's
 instructions say to stop for.
 
+## Work Package 018 — Anthropic Provider
+
+Status: Complete
+
+Tasks:
+
+* STUDIO-TASK-000056 — Anthropic Provider - Complete
+* STUDIO-TASK-000057 — AI Settings Integration - Complete
+* STUDIO-TASK-000058 — Connection Verification - Complete
+* STUDIO-TASK-000059 — Live AI Analysis - Complete
+
+### What Exists
+
+The first production `AiProvider` implementation, plus a new, reusable
+credential infrastructure. Full detail in `docs/ANTHROPIC_PROVIDER.md`.
+
+* `lib/knowledge/services/anthropic_provider.dart` (new) -
+  `AnthropicProvider implements AiProvider, TestableAiProvider,
+  CancellableAiProvider` - real Anthropic Messages API calls via
+  `package:http`, forced tool-use for structured JSON output (so
+  `AiSuggestionParser` needed no changes), retry/timeout/cancellation,
+  self-configuring (reads `AiSettings` + `CredentialStore` fresh per
+  call via injectable seams for testability).
+* `lib/knowledge/services/testable_ai_provider.dart`,
+  `cancellable_ai_provider.dart` (new) - optional capability interfaces,
+  kept off the frozen `AiProvider` interface itself.
+* `lib/knowledge/models/ai_connection_status.dart`,
+  `ai_connection_test_result.dart` (new) - Connected/Authentication
+  Failed/Network Error/Provider Error, plus a message.
+* `lib/knowledge/models/ai_response.dart` (extended) -
+  `inputTokens`/`outputTokens`/`stopReason`/`rawMetadata`, populated by
+  real providers, `null` for `MockAiProvider`.
+* `lib/knowledge/services/ai_provider_registry.dart` (extended) -
+  `defaultRegistry` now seeds `AnthropicProvider()` alongside
+  `MockAiProvider()` - the entire integration point.
+* `lib/knowledge/services/mock_ai_provider.dart` (extended) - now also
+  implements `TestableAiProvider` (always connected, no network), so
+  Test Connection is exercisable end-to-end through Mock alone.
+* `lib/core/security/` (new module) - `CredentialStore` (interface),
+  `CredentialService` (platform selection), `WindowsCredentialStore`
+  (the Windows backend), `windows_credential_native_types.dart`/
+  `windows_credential_bindings.dart` (the `dart:ffi` → `advapi32.dll`
+  layer, mirroring `oep_api_native_types.dart`/`OepApiBindings`'s own
+  split), `credential_models.dart`. Stores API keys in Windows
+  Credential Manager via `CredWriteW`/`CredReadW`/`CredDeleteW`/
+  `CredEnumerateW` - no ATL, no COM, no third-party plugin.
+* `lib/settings/models/ai_settings.dart` (extended) -
+  `maxOutputTokens` (new field; `contextWindowTokens` remains
+  informational only). Bumped `UserConfiguration.currentSchemaVersion`
+  to 2, with a real `SettingsMigrationService` step backfilling the
+  default for a schema-1 file.
+* `lib/settings/pages/ai_settings_page.dart` (extended) - Provider is
+  now a real dropdown from `AiProviderRegistry`; a new `_ApiKeyRow`
+  (masked field, Save/Remove, backed by `CredentialService.instance`,
+  never `SettingsController`); Max Tokens; a new `_TestConnectionRow`
+  (real, via the Connection Manager) with a status badge.
+* `lib/settings/controllers/settings_controller.dart` (extended) -
+  `setAiMaxOutputTokens`.
+* `lib/core/services/foundation_runtime_state.dart`/
+  `foundation_runtime_service.dart` (extended) - `aiConnectionStatus`/
+  `aiConnectionMessage`/`currentAiModel`/`activeAiRequestSourceId`
+  (coordination state only); `testAiConnection`/`cancelActiveAiRequest`.
+* `lib/knowledge/inspector/ai_suggestion_properties.dart` (extended) -
+  "Token Usage" and "Response Metadata" sections, shown when the
+  current conversation's response carries that data.
+
+### What Is Explicitly Not Implemented
+
+No Foundation changes. No Public C API changes. No architectural
+redesign - `AiProvider` itself is unchanged from Work Package 016; the
+AI Review Workspace's review workflow is unchanged; `PromptService`,
+`AiAnalysisService`, and `AiSuggestionParser` are unchanged. No Cancel
+button was added to the AI Review Workspace dialog (see Architectural
+Observations). No other AI provider (OpenAI, Gemini, Ollama, LM Studio,
+OpenRouter) is implemented - "AnthropicProvider shall be the only
+provider implemented in this work package."
+
+### Repository Structure Additions
+
+```
+lib/
+  core/
+    security/
+      credential_models.dart                 New
+      credential_store.dart                   New
+      credential_service.dart                 New
+      windows_credential_native_types.dart     New
+      windows_credential_bindings.dart         New
+      windows_credential_store.dart            New
+    services/
+      foundation_runtime_state.dart            Extended (AI connection/model/active-request state)
+      foundation_runtime_service.dart          Extended (testAiConnection/cancelActiveAiRequest)
+  knowledge/
+    models/
+      ai_response.dart                         Extended (tokens/stopReason/metadata)
+      ai_connection_status.dart                New
+      ai_connection_test_result.dart           New
+    services/
+      anthropic_provider.dart                  New
+      testable_ai_provider.dart                New
+      cancellable_ai_provider.dart             New
+      ai_provider_registry.dart                Extended (AnthropicProvider registered)
+      mock_ai_provider.dart                    Extended (TestableAiProvider)
+    inspector/
+      ai_suggestion_properties.dart            Extended (Token Usage/Response Metadata)
+  settings/
+    models/
+      ai_settings.dart                         Extended (maxOutputTokens)
+      user_configuration.dart                  Extended (schema v2)
+    services/
+      settings_migration_service.dart          Extended (v1->v2 step)
+    controllers/
+      settings_controller.dart                 Extended (setAiMaxOutputTokens)
+    pages/
+      ai_settings_page.dart                    Extended (Provider dropdown/API Key/Max Tokens/Test Connection)
+docs/
+  ANTHROPIC_PROVIDER.md                        New
+```
+
+### Package Decisions
+
+**Added `http: ^1.2.2`** (Dart-team-maintained) for the Anthropic
+Messages API transport.
+
+**`flutter_secure_storage` was added, then removed.** The Windows
+backend (`flutter_secure_storage_windows`) requires the ATL component
+of the Visual Studio C++ build tools, not installed in this project's
+build environment - `flutter build windows` failed with `Cannot open
+include file: 'atlstr.h'`. Rather than require a new Visual Studio
+component or keep a third-party plugin dependency, the package was
+removed entirely in favor of a direct `dart:ffi` call to
+`advapi32.dll` (`lib/core/security/`) - no new dependency at all, and a
+better fit for this project's own minimal-dependency philosophy and its
+existing FFI-based native-interop precedent (the Foundation Bridge).
+
+### Verification Results
+
+* flutter analyze - no issues found.
+* flutter test - 294/294 passing (2 additional tests self-skip without
+  a real API key - see below): all prior tests, plus
+  `anthropic_provider_test.dart` (17 tests against a fake `http.Client`
+  - no network, no real credential - covering disabled/missing-key
+  failures, request body construction, successful parsing with
+  tokens/stopReason/metadata, HTTP 401 no-retry, HTTP 500 retry-then-fail
+  and retry-then-succeed, malformed/missing-tool-use responses, a
+  `max_tokens`-truncation response, `testConnection`'s four status
+  outcomes, and cancellation during a retry backoff),
+  `windows_credential_store_test.dart` (7 tests against
+  the **real** Windows Credential Manager - not a Flutter plugin, so
+  this runs for real in `flutter test` - using disposable test data,
+  cleaned up in `tearDown`), an extended
+  `settings_migration_service_test.dart` (schema 1 → 2 backfill), and a
+  permanent, self-skipping `anthropic_provider_live_test.dart` (2 tests,
+  skip themselves unless `ANTHROPIC_API_KEY` is set - an "optional
+  integration test using a real API key," never required for `flutter
+  test` to pass).
+* flutter build windows - succeeded (after resolving the ATL build
+  failure by removing `flutter_secure_storage`).
+* **Manual verification with a real Anthropic API key**: performed
+  through the real Studio UI (Settings → Artificial Intelligence → enter
+  API key → Save → Test Connection → Knowledge Studio → live AI analysis
+  → Review Workflow → persistence), not an environment variable, per
+  explicit instruction, since that is how end users will actually
+  configure and use this feature. Confirmed working end-to-end: Test
+  Connection, live AI analysis producing real suggestions, Accept/Edit/
+  Reject/Defer, accepted suggestions becoming Knowledge Candidates, and
+  suggestion persistence across session close/reopen. Two real,
+  undersized defaults were found and fixed along the way - see
+  "Architectural Observations" below and `docs/ANTHROPIC_PROVIDER.md` §
+  Error Handling.
+
+### Architectural Observations
+
+See `docs/ANTHROPIC_PROVIDER.md` § Architectural Observations for the
+full account - summarized here:
+
+* **No Cancel button was added to the AI Review Workspace dialog** -
+  `CancellableAiProvider`/`activeAiRequestSourceId` are real, tested
+  plumbing, but STUDIO-TASK-000059 requires "The review workflow itself
+  shall remain unchanged."
+* **`flutter_secure_storage` was removed and replaced with a native
+  `dart:ffi` implementation** after it broke `flutter build windows` on
+  a missing Visual Studio component - `CredentialStore` is designed as
+  Studio's general-purpose credential infrastructure, not AI-specific.
+* **The Artificial Intelligence settings page now depends on
+  `AiProviderRegistry`**, superseding Work Package 017's own explicit
+  decoupling decision - that decoupling was itself scoped "yet," pending
+  the first production provider, which this work package is.
+* **Work Package 018 proved the Work Package 016 "no production
+  provider" boundary was genuinely provider-independent** - registering
+  `AnthropicProvider` required zero changes to `AiAnalysisService`,
+  `PromptService`, `AiSuggestionParser`, or the AI Review Workspace's
+  review workflow.
+* **Manual verification against a real, evidence-heavy engineering
+  document exposed two undersized defaults** in `AiSettings.defaults()`:
+  `maxOutputTokens` (1024) was too small to finish a real suggestion
+  request (26 entities + 19 contexts + full OCR text to cite), causing
+  Anthropic to truncate the tool call mid-generation - which returns an
+  empty `input: {}`, indistinguishable from "nothing to suggest" unless
+  `stop_reason` is checked explicitly. Once raised, the original
+  `timeoutSeconds` (30) was then too short for the larger completion to
+  finish. Both were raised (`maxOutputTokens` → 4096, `timeoutSeconds` →
+  120) and the `stop_reason == "max_tokens"` case is now surfaced as its
+  own explicit, actionable failure rather than a silent empty result.
+  Configuration tuning, not an architectural change.
+
+None of the observations above blocked implementation - each had a
+reasonable literal reading available and none constituted the kind of
+genuine, irreconcilable architectural conflict this work package's
+instructions say to stop for.
+

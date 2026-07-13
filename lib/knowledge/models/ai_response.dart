@@ -15,6 +15,10 @@ class AiResponse {
     required this.receivedTime,
     required this.success,
     this.errorMessage,
+    this.inputTokens,
+    this.outputTokens,
+    this.stopReason,
+    this.rawMetadata,
   });
 
   final String requestId;
@@ -31,4 +35,22 @@ class AiResponse {
   final bool success;
 
   final String? errorMessage;
+
+  /// Token usage (Work Package 018 STUDIO-TASK-000059; Property
+  /// Inspector: "Token Usage") — `null` for providers that don't report
+  /// usage (`MockAiProvider` makes no real call, so has none to report).
+  final int? inputTokens;
+  final int? outputTokens;
+
+  /// The provider's own reason the response ended (e.g. Anthropic's
+  /// `stop_reason`: `"tool_use"`, `"end_turn"`, `"max_tokens"`) — `null`
+  /// when not reported.
+  final String? stopReason;
+
+  /// Any further provider-specific response fields worth showing in the
+  /// Property Inspector's "Response Metadata" section (e.g. Anthropic's
+  /// own response `id`) — a generic bag so [AiResponse] itself stays
+  /// provider-agnostic rather than growing an Anthropic-shaped field for
+  /// every new provider.
+  final Map<String, dynamic>? rawMetadata;
 }

@@ -1,3 +1,4 @@
+import '../../knowledge/models/ai_connection_status.dart';
 import '../../knowledge/models/ai_conversation.dart';
 import '../../knowledge/models/ai_processing_status.dart';
 import '../../knowledge/models/ai_suggestion.dart';
@@ -124,6 +125,10 @@ class FoundationServiceState {
     this.currentSettingsPageId,
     this.settingsSearchQuery = '',
     this.settingsModified = false,
+    this.aiConnectionStatus = AiConnectionStatus.notTested,
+    this.aiConnectionMessage,
+    this.currentAiModel,
+    this.activeAiRequestSourceId,
   });
 
   final FoundationConnectionPhase phase;
@@ -453,6 +458,34 @@ class FoundationServiceState {
   /// flag, never `SettingsController`'s own draft, keeping "Connection
   /// Manager coordinates application state only" intact.
   final bool settingsModified;
+
+  /// The outcome of the most recent "Test Connection" attempt against
+  /// an `AiProvider` (Work Package 018 STUDIO-TASK-000058; Connection
+  /// Manager: "AI Connection Status"). Defaults to [AiConnectionStatus.notTested]
+  /// — the engineer has not tested a connection yet, distinct from
+  /// having tested and failed.
+  final AiConnectionStatus aiConnectionStatus;
+
+  /// A human-readable detail accompanying [aiConnectionStatus] (e.g.
+  /// "Anthropic rejected the API key (HTTP 401).") — shown on the
+  /// Artificial Intelligence settings page alongside the status badge.
+  final String? aiConnectionMessage;
+
+  /// The model actually used by the most recent AI request (a "Test
+  /// Connection" attempt or a real analysis run) — Work Package 018
+  /// Connection Manager: "Current Model". Distinct from
+  /// `AiSettings.modelId` (the *configured* model): this reflects what
+  /// was genuinely used for the last request, which is not guaranteed
+  /// to equal the current Settings value if it changed mid-session.
+  final String? currentAiModel;
+
+  /// The `SourceMaterial.id` a live AI analysis request is currently in
+  /// flight for, if any (Work Package 018 Connection Manager: "Active
+  /// Request") — `null` when nothing is running. Mirrors
+  /// `aiProcessingStatus[sourceId] == AiProcessingStatus.analyzing` but
+  /// exposed as its own field for coordination purposes beyond
+  /// per-source status (e.g. a future global "AI is busy" indicator).
+  final String? activeAiRequestSourceId;
 
   bool get isConnected => phase == FoundationConnectionPhase.connected;
   bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
@@ -874,6 +907,13 @@ class FoundationServiceState {
     bool clearCurrentSettingsPageId = false,
     String? settingsSearchQuery,
     bool? settingsModified,
+    AiConnectionStatus? aiConnectionStatus,
+    String? aiConnectionMessage,
+    bool clearAiConnectionMessage = false,
+    String? currentAiModel,
+    bool clearCurrentAiModel = false,
+    String? activeAiRequestSourceId,
+    bool clearActiveAiRequestSourceId = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -945,6 +985,12 @@ class FoundationServiceState {
           : (currentSettingsPageId ?? this.currentSettingsPageId),
       settingsSearchQuery: settingsSearchQuery ?? this.settingsSearchQuery,
       settingsModified: settingsModified ?? this.settingsModified,
+      aiConnectionStatus: aiConnectionStatus ?? this.aiConnectionStatus,
+      aiConnectionMessage: clearAiConnectionMessage ? null : (aiConnectionMessage ?? this.aiConnectionMessage),
+      currentAiModel: clearCurrentAiModel ? null : (currentAiModel ?? this.currentAiModel),
+      activeAiRequestSourceId: clearActiveAiRequestSourceId
+          ? null
+          : (activeAiRequestSourceId ?? this.activeAiRequestSourceId),
     );
   }
 }

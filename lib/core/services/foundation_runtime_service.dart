@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../knowledge/models/ai_analysis_exception.dart';
+import '../../knowledge/models/ai_connection_status.dart';
 import '../../knowledge/models/ai_processing_status.dart';
 import '../../knowledge/models/ai_suggestion.dart';
 import '../../knowledge/models/ai_suggestion_status.dart';
@@ -32,6 +33,8 @@ import '../../knowledge/models/specification_details.dart';
 import '../../knowledge/models/specification_type.dart';
 import '../../knowledge/services/ai_analysis_service.dart';
 import '../../knowledge/services/ai_provider_registry.dart';
+import '../../knowledge/services/cancellable_ai_provider.dart';
+import '../../knowledge/services/testable_ai_provider.dart';
 import '../../knowledge/services/commit_transaction_service.dart';
 import '../../knowledge/services/context_detection_service.dart';
 import '../../knowledge/services/engineering_entity_extraction_service.dart';
@@ -2127,6 +2130,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
 
     state = state.copyWith(
       aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.analyzing},
+      activeAiRequestSourceId: sourceId,
     );
     try {
       final result = await AiAnalysisService.analyzeForSource(
@@ -2145,11 +2149,58 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         ],
         aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.completed},
         currentAiConversation: result.conversation ?? state.currentAiConversation,
+        currentAiModel: result.conversation?.response?.modelId ?? state.currentAiModel,
+        clearActiveAiRequestSourceId: true,
       );
       unawaited(_persistActiveSession());
     } on AiAnalysisException {
-      state = state.copyWith(aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.failed});
+      state = state.copyWith(
+        aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.failed},
+        clearActiveAiRequestSourceId: true,
+      );
       rethrow;
+    }
+  }
+
+  /// Tests connectivity for [providerId] (or —if omitted—
+  /// `FoundationServiceState.currentAiProviderId`) (Work Package 018
+  /// STUDIO-TASK-000058: "Test Connection"). Providers that don't
+  /// implement `TestableAiProvider` (nothing to test, or not registered)
+  /// report `AiConnectionStatus.providerError`. Never throws — the
+  /// result is always recorded in `aiConnectionStatus`/
+  /// `aiConnectionMessage` for the Artificial Intelligence settings page
+  /// to display.
+  Future<void> testAiConnection({String? providerId}) async {
+    final resolvedProviderId = providerId ?? state.currentAiProviderId;
+    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    if (provider == null || provider is! TestableAiProvider) {
+      state = state.copyWith(
+        aiConnectionStatus: AiConnectionStatus.providerError,
+        aiConnectionMessage: provider == null
+            ? 'No AI provider is registered with id "$resolvedProviderId".'
+            : 'This provider does not support connection testing.',
+      );
+      return;
+    }
+    final testable = provider as TestableAiProvider;
+    state = state.copyWith(activeAiRequestSourceId: '__test_connection__');
+    final result = await testable.testConnection();
+    state = state.copyWith(
+      aiConnectionStatus: result.status,
+      aiConnectionMessage: result.message,
+      clearActiveAiRequestSourceId: true,
+    );
+  }
+
+  /// Cancels [providerId]'s (or the current provider's) in-flight
+  /// request, if it supports `CancellableAiProvider` and one is active
+  /// (Work Package 018 STUDIO-TASK-000056: "Cancellation"). A no-op
+  /// otherwise.
+  void cancelActiveAiRequest({String? providerId}) {
+    final resolvedProviderId = providerId ?? state.currentAiProviderId;
+    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    if (provider is CancellableAiProvider) {
+      (provider as CancellableAiProvider).cancelActiveRequest();
     }
   }
 

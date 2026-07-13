@@ -1,10 +1,13 @@
 import 'dart:convert';
 
+import '../models/ai_connection_status.dart';
+import '../models/ai_connection_test_result.dart';
 import '../models/ai_model_info.dart';
 import '../models/ai_request.dart';
 import '../models/ai_response.dart';
 import '../models/knowledge_candidate_type.dart';
 import 'ai_provider.dart';
+import 'testable_ai_provider.dart';
 
 /// The Mock AI Provider (Work Package 016 STUDIO-TASK-000049):
 /// "Implement a deterministic mock provider. The mock provider returns
@@ -27,7 +30,7 @@ import 'ai_provider.dart';
 /// about, the same "nothing to report" precedent
 /// `ContextDetectionService`/`EngineeringEntityExtractionService`
 /// already established for empty input.
-class MockAiProvider implements AiProvider {
+class MockAiProvider implements AiProvider, TestableAiProvider {
   @override
   AiModelInfo get modelInfo => const AiModelInfo(
     providerId: 'mock',
@@ -63,6 +66,18 @@ class MockAiProvider implements AiProvider {
       rawText: rawText,
       receivedTime: DateTime.now(),
       success: true,
+    );
+  }
+
+  /// Always reports connected, instantly, with no network activity —
+  /// lets automated tests and manual verification exercise the entire
+  /// "Test Connection" flow (STUDIO-TASK-000058) through Mock alone,
+  /// without ever needing a real provider or API key.
+  @override
+  Future<AiConnectionTestResult> testConnection() async {
+    return const AiConnectionTestResult(
+      status: AiConnectionStatus.connected,
+      message: 'Mock provider is always available — no real connection is made.',
     );
   }
 

@@ -4,6 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:oep_studio/app/studio_app.dart';
 
+/// A bounded stand-in for `pumpAndSettle()`. The Settings Workspace
+/// (Work Package 017/018) shows an indeterminate `CircularProgressIndicator`
+/// while its configuration loads from disk — indeterminate progress
+/// indicators animate forever by design, so `pumpAndSettle()` (which
+/// waits for *no* frame to be scheduled) never converges once one is
+/// on screen and reliably times out. A fixed number of bounded pumps
+/// gives every real async operation (Settings load, dialog transitions,
+/// route animations) ample time to finish without waiting on an
+/// animation that never stops on its own.
+Future<void> settle(WidgetTester tester) async {
+  for (var i = 0; i < 20; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 void main() {
   testWidgets('StudioApp launches on the Dashboard and navigates via the rail', (
     WidgetTester tester,
@@ -18,13 +33,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('Welcome to OEP Studio'), findsOneWidget);
     expect(find.text('Open Repository'), findsWidgets);
 
     await tester.tap(find.text('Settings').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     // Work Package 017: Settings is now a real Workspace (General page by
     // default), not a placeholder.
@@ -46,15 +61,15 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Repository').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Repository Open'), findsOneWidget);
 
     await tester.tap(find.text('Open Repository').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('Welcome to OEP Studio'), findsOneWidget);
   });
@@ -68,15 +83,15 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Objects').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Category Selected'), findsOneWidget);
 
     await tester.tap(find.text('Go to Repository Explorer').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Repository Open'), findsOneWidget);
   });
@@ -90,10 +105,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Relationships').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Repository Open'), findsOneWidget);
   });
@@ -107,10 +122,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Search').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Repository Open'), findsOneWidget);
   });
@@ -124,10 +139,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Knowledge Studio').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('No Knowledge Curation Session'), findsOneWidget);
     expect(find.text('Import Queue'), findsOneWidget);
@@ -150,14 +165,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(const ProviderScope(child: StudioApp()));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.tap(find.text('Knowledge Studio').first);
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     // Create a session.
     await tester.tap(find.widgetWithText(OutlinedButton, 'New Session'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.enterText(findFieldLabeled('Session Name'), 'Timing Chain Manual Import');
     await tester.pump();
@@ -166,7 +181,7 @@ void main() {
     await tester.enterText(findFieldLabeled('Author'), 'jsmith');
     await tester.pump();
     await tester.tap(find.widgetWithText(ElevatedButton, 'Create Session'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(
       find.byType(AlertDialog),
@@ -181,26 +196,26 @@ void main() {
 
     // Add a manual Knowledge Candidate.
     await tester.tap(find.widgetWithText(OutlinedButton, 'New Candidate'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     await tester.enterText(findFieldLabeled('Name'), 'Timing Chain Cover');
     await tester.pump();
     await tester.tap(find.widgetWithText(ElevatedButton, 'Add Candidate'));
-    await tester.pumpAndSettle();
+    await settle(tester);
 
     expect(find.text('Timing Chain Cover'), findsOneWidget);
     expect(find.text('Pending'), findsOneWidget);
 
     // Selecting the candidate updates the Property Inspector.
     await tester.tap(find.text('Timing Chain Cover'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('Knowledge Candidate ID'), findsOneWidget);
 
     // Accept it — the status badge (Engineering Review) and the
     // Property Inspector's Knowledge Candidate mode (still showing this
     // same, now-updated candidate) both read "Accepted".
     await tester.tap(find.widgetWithTooltip('Accept'));
-    await tester.pumpAndSettle();
+    await settle(tester);
     expect(find.text('Accepted'), findsNWidgets(2));
     expect(find.text('Pending'), findsNothing);
   });

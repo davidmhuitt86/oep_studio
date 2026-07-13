@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oep_studio/settings/models/ai_settings.dart';
 import 'package:oep_studio/settings/models/settings_exception.dart';
 import 'package:oep_studio/settings/models/user_configuration.dart';
 import 'package:oep_studio/settings/services/settings_migration_service.dart';
@@ -50,6 +51,25 @@ void main() {
 
     test('a non-integer schemaVersion is treated as corrupt configuration', () {
       expect(() => SettingsMigrationService.migrate({'schemaVersion': 'not-a-number'}), throwsA(isA<SettingsException>()));
+    });
+
+    test('a schema-1 file predating maxOutputTokens is upgraded to schema 2 with the default backfilled', () {
+      final result = SettingsMigrationService.migrate({
+        'schemaVersion': 1,
+        'ai': {'providerId': 'anthropic', 'modelId': 'claude-legacy'},
+      });
+
+      expect(result.migrated, isTrue);
+      expect(result.fromSchemaVersion, 1);
+      expect(result.json['schemaVersion'], 2);
+      final ai = result.json['ai'] as Map<String, dynamic>;
+      expect(ai['providerId'], 'anthropic'); // the legacy value survives
+      expect(ai['modelId'], 'claude-legacy');
+      expect(ai['maxOutputTokens'], isNotNull); // backfilled
+
+      final config = UserConfiguration.fromJson(result.json);
+      expect(config.ai.providerId, 'anthropic');
+      expect(config.ai.maxOutputTokens, AiSettings.defaults().maxOutputTokens);
     });
 
     test('parsing the migrated JSON with UserConfiguration.fromJson produces a valid configuration', () {

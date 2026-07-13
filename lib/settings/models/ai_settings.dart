@@ -5,22 +5,21 @@ import 'settings_enums.dart';
 /// Timeout, Context Window, Reasoning Depth, Privacy Controls, Test
 /// Connection."
 ///
-/// Per this work package's explicit instruction ("Do not implement
-/// provider-specific settings ... yet"), every field here is an inert,
-/// validated placeholder: this model has no dependency on
-/// `lib/knowledge`'s `AiProvider`/`AiProviderRegistry` (Work Package
-/// 016), and changing these values does not yet affect AI analysis
-/// anywhere in Studio. `providerId`/`modelId` are free validated text,
-/// not cross-checked against the real provider registry — wiring that
-/// registry into Settings, so a provider genuinely registers its own
-/// configuration UI per SDD-023 AI Provider Registration, is left to
-/// the work package that introduces the first non-mock provider. See
-/// `docs/STUDIO_SETTINGS.md` Architectural Observations.
+/// As of Work Package 018, `providerId`/`modelId` are genuinely
+/// consumed by `AnthropicProvider` (`lib/knowledge/services/`) —
+/// superseding Work Package 017's deliberate decoupling from
+/// `AiProviderRegistry`, which was itself scoped "yet" pending the
+/// first production provider. See `docs/STUDIO_SETTINGS.md` and
+/// `docs/ANTHROPIC_PROVIDER.md` Architectural Observations.
 ///
-/// No API key or credential field exists on this model, and none shall
-/// ever be added directly here — SDD-023 Security: "AI credentials
-/// shall never be stored inside Knowledge Sessions" and this work
-/// package's own "Do not store secrets in exported configuration."
+/// **No API key or credential field exists on this model, and none
+/// shall ever be added directly here** — SDD-023 Security: "AI
+/// credentials shall never be stored inside Knowledge Sessions," and
+/// this work package's own "Credentials shall never be written into
+/// User Configuration, Repository data, or Knowledge Sessions." The
+/// API key lives only in `CredentialStore` (`lib/core/security/`, OS
+/// secure storage), entirely outside this model and outside
+/// `SettingsService.exportToJson`.
 class AiSettings {
   const AiSettings({
     required this.enabled,
@@ -29,6 +28,7 @@ class AiSettings {
     required this.temperature,
     required this.timeoutSeconds,
     required this.contextWindowTokens,
+    required this.maxOutputTokens,
     required this.reasoningDepth,
     required this.privacyControlsEnabled,
   });
@@ -38,8 +38,9 @@ class AiSettings {
     providerId: 'mock',
     modelId: '',
     temperature: 0.7,
-    timeoutSeconds: 30,
+    timeoutSeconds: 120,
     contextWindowTokens: 8192,
+    maxOutputTokens: 4096,
     reasoningDepth: ReasoningDepthPreference.standard,
     privacyControlsEnabled: true,
   );
@@ -49,7 +50,17 @@ class AiSettings {
   final String modelId;
   final double temperature;
   final int timeoutSeconds;
+
+  /// Informational only — Anthropic's context window is a fixed model
+  /// property, not a request parameter, so this value is displayed but
+  /// not sent to the provider. Distinct from [maxOutputTokens], which
+  /// genuinely is a request parameter (`max_tokens`).
   final int contextWindowTokens;
+
+  /// The maximum number of tokens a provider may generate in one
+  /// response — Anthropic's Messages API requires this on every
+  /// request (Work Package 018 STUDIO-TASK-000057: "Max Tokens").
+  final int maxOutputTokens;
   final ReasoningDepthPreference reasoningDepth;
   final bool privacyControlsEnabled;
 
@@ -60,6 +71,7 @@ class AiSettings {
     double? temperature,
     int? timeoutSeconds,
     int? contextWindowTokens,
+    int? maxOutputTokens,
     ReasoningDepthPreference? reasoningDepth,
     bool? privacyControlsEnabled,
   }) {
@@ -70,6 +82,7 @@ class AiSettings {
       temperature: temperature ?? this.temperature,
       timeoutSeconds: timeoutSeconds ?? this.timeoutSeconds,
       contextWindowTokens: contextWindowTokens ?? this.contextWindowTokens,
+      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
       reasoningDepth: reasoningDepth ?? this.reasoningDepth,
       privacyControlsEnabled: privacyControlsEnabled ?? this.privacyControlsEnabled,
     );
@@ -82,6 +95,7 @@ class AiSettings {
     'temperature': temperature,
     'timeoutSeconds': timeoutSeconds,
     'contextWindowTokens': contextWindowTokens,
+    'maxOutputTokens': maxOutputTokens,
     'reasoningDepth': reasoningDepth.name,
     'privacyControlsEnabled': privacyControlsEnabled,
   };
@@ -95,6 +109,7 @@ class AiSettings {
       temperature: (json['temperature'] as num?)?.toDouble() ?? defaults.temperature,
       timeoutSeconds: json['timeoutSeconds'] as int? ?? defaults.timeoutSeconds,
       contextWindowTokens: json['contextWindowTokens'] as int? ?? defaults.contextWindowTokens,
+      maxOutputTokens: json['maxOutputTokens'] as int? ?? defaults.maxOutputTokens,
       reasoningDepth: ReasoningDepthPreference.values.firstWhere(
         (value) => value.name == json['reasoningDepth'],
         orElse: () => defaults.reasoningDepth,

@@ -25,16 +25,18 @@ abstract final class AiSuggestionParser {
     try {
       final parsed = jsonDecode(rawText);
       if (parsed is! Map<String, dynamic>) {
-        throw const AiAnalysisException('The AI response was not a JSON object.');
+        throw AiAnalysisException('The AI response was not a JSON object. Raw response: ${_truncate(rawText)}');
       }
       decoded = parsed;
     } on FormatException {
-      throw const AiAnalysisException('The AI response was not valid JSON.');
+      throw AiAnalysisException('The AI response was not valid JSON. Raw response: ${_truncate(rawText)}');
     }
 
     final suggestionsJson = decoded['suggestions'];
     if (suggestionsJson is! List) {
-      throw const AiAnalysisException('The AI response did not contain a "suggestions" list.');
+      throw AiAnalysisException(
+        'The AI response did not contain a "suggestions" list. Raw response: ${_truncate(rawText)}',
+      );
     }
 
     final now = DateTime.now();
@@ -111,4 +113,9 @@ abstract final class AiSuggestionParser {
     if (value is! List) return const [];
     return [for (final entry in value) if (entry is String) entry];
   }
+
+  /// Caps how much of a malformed raw response an error message quotes
+  /// — enough to diagnose the actual shape a provider returned, without
+  /// an unbounded response blowing up the error banner.
+  static String _truncate(String text) => text.length > 500 ? '${text.substring(0, 500)}…' : text;
 }

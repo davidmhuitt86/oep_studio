@@ -30,6 +30,10 @@ dependencies:
   # BSD-3, no native code.
   crypto: ^3.0.6
 
+  # AnthropicProvider (Work Package 018 STUDIO-TASK-000056) — the
+  # Messages API request/response transport. Dart-team-maintained.
+  http: ^1.2.2
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

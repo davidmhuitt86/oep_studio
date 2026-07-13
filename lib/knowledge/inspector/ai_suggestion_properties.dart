@@ -90,6 +90,21 @@ class AiSuggestionProperties extends StatelessWidget {
         PropertyField(label: 'Provider', value: suggestion.providerId),
         PropertyField(label: 'Model', value: suggestion.modelId),
         PropertyField(label: 'Generated', value: formatDateTime(suggestion.createdTime)),
+        if (matchingConversation?.response case final response? when response.inputTokens != null || response.outputTokens != null) ...[
+          const SizedBox(height: 8),
+          const Text('Token Usage', style: TextStyle(color: StudioColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          PropertyField(label: 'Input Tokens', value: response.inputTokens?.toString() ?? '—'),
+          PropertyField(label: 'Output Tokens', value: response.outputTokens?.toString() ?? '—'),
+        ],
+        if (matchingConversation?.response case final response? when response.stopReason != null || (response.rawMetadata?.isNotEmpty ?? false)) ...[
+          const SizedBox(height: 8),
+          const Text('Response Metadata', style: TextStyle(color: StudioColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          if (response.stopReason != null) PropertyField(label: 'Stop Reason', value: response.stopReason!),
+          for (final entry in (response.rawMetadata ?? const {}).entries)
+            PropertyField(label: entry.key, value: entry.value.toString()),
+        ],
         if (matchingConversation != null) ...[
           const SizedBox(height: 8),
           const Text('Prompt', style: TextStyle(color: StudioColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700)),

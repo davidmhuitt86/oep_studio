@@ -218,7 +218,7 @@ exist yet:
 | Workspace | Default Workspace path, Window Behavior, Restore Layout | Recent Workspaces (nothing tracks visit history yet), Docking, Multi-monitor |
 | Repository | Default Repository path, Auto-open, Cache, Validation Defaults | Backup, Snapshots |
 | Knowledge Studio | Autosave preference, OCR Overlay default, Evidence Colors, Default Zoom, Context/Entity Display, Review Preferences | These are stored preferences not yet consumed by the actual Knowledge Studio workspace (Work Packages 007-016) |
-| Artificial Intelligence | Enable AI, Provider/Model id, Temperature, Timeout, Context Window, Reasoning Depth, Privacy Controls | Entirely inert — no dependency on `lib/knowledge`'s `AiProviderRegistry`; API Configuration, Local Server Configuration, Test Connection |
+| Artificial Intelligence | Enable AI, Provider (real dropdown from `AiProviderRegistry`), Model id, API Key (real, via `CredentialStore` — Work Package 018), Temperature, Timeout, Max Tokens (Work Package 018), Test Connection (real, via the Connection Manager — Work Package 018), Reasoning Depth, Privacy Controls | Context Window (informational only — not a configurable request parameter), Local Server Configuration (future Ollama/LM Studio) |
 | Plugins | Enable Plugins toggle | Installed Plugins (always empty — no install mechanism), Permissions, Updates, Marketplace |
 | Updates | Automatic Updates, Update Channel | No updater component exists yet — values are stored for a future release |
 | Diagnostics | Foundation Runtime / Studio Runtime (live, read-only, from the Connection Manager) | Performance/Memory/GPU Monitoring, Reset Studio (a full reset is a destructive action out of this work package's scope — use "Reset Defaults" for Settings only) |
@@ -258,14 +258,16 @@ exist yet:
   wiring each individual preference into the subsystem it describes is
   each subsystem's own future work, done through the registry rather
   than by modifying the Settings Workspace.
-- **Artificial Intelligence's page is deliberately decoupled from Work
-  Package 016's real `AiProviderRegistry`.** `AiSettings.providerId` is
-  free text, not cross-checked against the actual registry — connecting
-  the two is exactly the kind of "provider-specific settings" this work
-  package's own instructions say not to implement yet, and doing so here
-  would blur the boundary SDD-023 itself draws (AI Provider Registration
-  is its own numbered section, distinct from this work package's Core
-  Settings Pages task).
+- **Artificial Intelligence's page was deliberately decoupled from
+  `AiProviderRegistry` in Work Package 017** — scoped "yet," pending the
+  first production provider. **Work Package 018 supersedes that
+  decoupling on purpose**: its own instructions explicitly require
+  "Provider Selection" integration, and `AnthropicProvider` is that
+  first production provider. The Provider field is now a real dropdown
+  sourced from `AiProviderRegistry.defaultRegistry.availableModels`; the
+  API Key field is real, backed by `CredentialStore` (`lib/core/security/`);
+  Test Connection is real, via the Connection Manager. See
+  `docs/ANTHROPIC_PROVIDER.md`.
 - **"Reset Studio" (Diagnostics) is a placeholder, not a real
   reset-everything action.** Wiping all local Studio state (every
   Knowledge Session, the settings file, caches) is destructive and

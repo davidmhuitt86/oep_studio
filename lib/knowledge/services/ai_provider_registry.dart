@@ -1,5 +1,6 @@
 import '../models/ai_model_info.dart';
 import 'ai_provider.dart';
+import 'anthropic_provider.dart';
 import 'mock_ai_provider.dart';
 
 /// The AI Provider Registry (Work Package 016 STUDIO-TASK-000046:
@@ -10,11 +11,12 @@ import 'mock_ai_provider.dart';
 /// providers may be added without changing Knowledge Workspace
 /// architecture," SDD-022).
 ///
-/// Seeded with only `MockAiProvider` in this work package — "No
-/// production provider integration" (this work package's own explicit
-/// instruction). The registry itself already supports any number of
-/// providers; only the concrete implementations are deliberately
-/// limited here.
+/// Seeded with `MockAiProvider` and — as of Work Package 018 —
+/// `AnthropicProvider`, the first production provider. Registering it
+/// here is the *entire* integration point: the AI Review Workspace's
+/// provider picker (`AiProviderRegistry.defaultRegistry.availableModels`)
+/// and `AiAnalysisService` already work with whatever this list
+/// contains, unmodified.
 class AiProviderRegistry {
   AiProviderRegistry(List<AiProvider> providers) : _providers = {for (final p in providers) p.modelInfo.providerId: p};
 
@@ -29,5 +31,5 @@ class AiProviderRegistry {
   /// single, shared instance (not re-constructed per lookup) so a
   /// future provider requiring setup (e.g. loading cached model lists)
   /// only does so once.
-  static final AiProviderRegistry defaultRegistry = AiProviderRegistry([MockAiProvider()]);
+  static final AiProviderRegistry defaultRegistry = AiProviderRegistry([MockAiProvider(), AnthropicProvider()]);
 }
