@@ -1,3 +1,4 @@
+import '../../diagram_studio/settings/diagram_studio_settings_page.dart';
 import '../models/settings_entry.dart';
 import '../pages/about_settings_page.dart';
 import '../pages/ai_settings_page.dart';
@@ -52,6 +53,7 @@ class SettingsRegistry {
     const WorkspaceSettingsProvider(),
     const RepositorySettingsProvider(),
     const KnowledgeStudioSettingsProvider(),
+    const DiagramStudioSettingsProvider(),
     const AiSettingsProvider(),
     const PluginsSettingsProvider(),
     const UpdatesSettingsProvider(),

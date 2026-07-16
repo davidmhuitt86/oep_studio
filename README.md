@@ -118,6 +118,26 @@ Intelligence settings page now has a real provider picker, a real API
 Key field, and a real Test Connection button (Connected/Authentication
 Failed/Network Error/Provider Error). `MockAiProvider` remains the
 default for every automated test — see `docs/ANTHROPIC_PROVIDER.md`.
+As of Work Package 024, Studio has **Diagram Studio** (SDD-024 through
+SDD-030) — the second major Primary Workspace, and the production
+diagram-editing experience for the Open Engineering Platform's
+Engineering Engine (`oep_engine`, a separate repository). Diagram
+Studio is built entirely on the Engineering Engine's public API: node/
+relationship editing, multi-selection, undo/redo, clipboard, orthogonal
+routing, manual wire editing, annotations, drafting layers, placement
+tools (rotate/mirror/array-place/replace-symbol), advisory editing
+constraints, and Engineering Graph + Diagram Layout search, all wired
+into Studio's own toolbars, dockable panels (Diagram Explorer, Layer,
+Search, Validation, Annotation, Recent Commands), and the shared
+Property Inspector (one new bridging field, `selectedEngineeringInspectable`,
+rather than a duplicated selection system). Diagram documents
+(Engineering Graph + Diagram Layout together) persist independently of
+the Foundation repository, mirroring Knowledge Studio's own
+Studio-owned-persistence-plus-ambient-Foundation-repository precedent —
+see `docs/DIAGRAM_STUDIO_INTEGRATION.md`, `STUDIO_ENGINE_HOST.md`,
+`WORKSPACE_INTEGRATION.md`, `PROPERTY_INSPECTOR_INTEGRATION.md`, and
+`REPOSITORY_INTEGRATION.md`.
+
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
 and *delete* remain unexposed via Foundation from Studio — only
@@ -185,5 +205,10 @@ Studio Design Documents live under `docs/`:
 * `AI_PROVIDER_ARCHITECTURE.md` — Provider abstraction/registry/Prompt Service/Mock provider/Review workflow
 * `STUDIO_SETTINGS.md` — Settings architecture/Registry/Search/Storage/Versioning/Migration
 * `ANTHROPIC_PROVIDER.md` — Provider implementation/Authentication/Secure credential storage/Prompt execution/Error handling
+* `DIAGRAM_STUDIO_INTEGRATION.md` — Diagram Studio overview, ownership boundary, module layout, reuse-vs-duplication decisions
+* `STUDIO_ENGINE_HOST.md` — `EngineHost`'s role, lifecycle, and what it deliberately does not do
+* `WORKSPACE_INTEGRATION.md` — routing, toolbars, panels, settings, workspace persistence
+* `PROPERTY_INSPECTOR_INTEGRATION.md` — the `EngineeringInspectable` bridge and the seven new inspector modes
+* `REPOSITORY_INTEGRATION.md` — `DiagramDocument`, the Foundation schema gap, and how it's resolved
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

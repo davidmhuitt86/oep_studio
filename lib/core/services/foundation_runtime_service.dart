@@ -46,6 +46,7 @@ import '../../knowledge/services/source_material_service.dart';
 import '../foundation/foundation_bridge.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
+import '../models/engineering_inspectable.dart';
 import '../models/engineering_object_summary.dart';
 import '../models/object_category.dart';
 import '../models/relationship_summary.dart';
@@ -101,7 +102,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         abiVersion: bridge.abiVersion,
       );
     } on FoundationBridgeException catch (error) {
-      return FoundationServiceState(phase: FoundationConnectionPhase.error, lastError: error);
+      return FoundationServiceState(
+          phase: FoundationConnectionPhase.error, lastError: error);
     } catch (error) {
       // Anything below FoundationBridgeException — e.g. dart:ffi's
       // ArgumentError when oep_foundation_bridge.dll can't be found or
@@ -195,7 +197,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       state = state.copyWith(lastError: error, clearObjectList: true);
     }
     try {
-      final relationships = bridge.listRelationships(objectNamesById: _objectNamesById());
+      final relationships =
+          bridge.listRelationships(objectNamesById: _objectNamesById());
       state = state.copyWith(relationshipList: relationships);
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error, clearRelationshipList: true);
@@ -242,7 +245,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Selection). Clears any previously selected object, since it
   /// belonged to a different category's list.
   void selectCategory(ObjectCategory category) {
-    state = state.copyWith(selectedCategory: category, clearSelectedObject: true);
+    state =
+        state.copyWith(selectedCategory: category, clearSelectedObject: true);
   }
 
   /// Selects an Object Explorer row, switching the Property Inspector to
@@ -262,6 +266,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -285,6 +290,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -312,11 +318,14 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     try {
       final objectNamesById = _objectNamesById();
       final results = switch (scope) {
-        SearchScope.repository => bridge.searchRepository(trimmed, objectNamesById: objectNamesById),
+        SearchScope.repository =>
+          bridge.searchRepository(trimmed, objectNamesById: objectNamesById),
         SearchScope.objects => bridge.searchObjects(trimmed),
-        SearchScope.relationships => bridge.searchRelationships(trimmed, objectNamesById: objectNamesById),
+        SearchScope.relationships =>
+          bridge.searchRelationships(trimmed, objectNamesById: objectNamesById),
       };
-      state = state.copyWith(searchQuery: trimmed, searchResults: results, clearError: true);
+      state = state.copyWith(
+          searchQuery: trimmed, searchResults: results, clearError: true);
     } on FoundationBridgeException catch (error) {
       state = state.copyWith(lastError: error);
       rethrow;
@@ -342,7 +351,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     required String author,
     String description = '',
   }) {
-    KnowledgeSessionService.validateNewSession(name: name, repositoryName: repositoryName);
+    KnowledgeSessionService.validateNewSession(
+        name: name, repositoryName: repositoryName);
     final now = DateTime.now();
     state = state.copyWith(
       knowledgeSession: KnowledgeSession(
@@ -384,6 +394,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
       clearContextTypeFilter: true,
     );
     unawaited(_persistActiveSession());
@@ -438,13 +449,15 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
       clearContextTypeFilter: true,
     );
   }
 
   /// Lists every persisted session for the Session Browser (Work
   /// Package 008 Session Browser).
-  Future<SessionBrowserListing> listKnowledgeSessions() => KnowledgeSessionStorage.listAll();
+  Future<SessionBrowserListing> listKnowledgeSessions() =>
+      KnowledgeSessionStorage.listAll();
 
   /// Opens (reopens) a previously-saved session as the active one (Work
   /// Package 008: Sessions may be "Reopened"). Throws
@@ -485,6 +498,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         clearSelectedEntity: true,
         clearSelectedContext: true,
         clearSelectedAiSuggestion: true,
+        clearSelectedEngineeringInspectable: true,
         clearContextTypeFilter: true,
       );
     } on KnowledgeValidationException catch (error) {
@@ -516,10 +530,12 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Archives or unarchives a persisted session (Work Package 008
   /// Session Browser: "Archive"). Updates the active session's state
   /// too if it happens to be the one archived.
-  Future<void> setKnowledgeSessionArchived(String sessionId, {required bool archived}) async {
+  Future<void> setKnowledgeSessionArchived(String sessionId,
+      {required bool archived}) async {
     try {
       final record = await KnowledgeSessionStorage.load(sessionId);
-      final updatedSession = record.session.copyWith(archived: archived, lastModified: DateTime.now());
+      final updatedSession = record.session
+          .copyWith(archived: archived, lastModified: DateTime.now());
       await KnowledgeSessionStorage.save(
         KnowledgeSessionRecord(
           session: updatedSession,
@@ -605,7 +621,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
   }
 
-  void _recordDecision(String candidateId, String candidateName, ReviewDecisionKind kind) {
+  void _recordDecision(
+      String candidateId, String candidateName, ReviewDecisionKind kind) {
     final session = state.knowledgeSession;
     if (session == null) return;
     state = state.copyWith(
@@ -641,7 +658,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     List<String> tags = const [],
   }) {
     if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding candidates.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before adding candidates.');
     }
     KnowledgeSessionService.validateCandidateName(name, state.candidates);
     final candidate = KnowledgeCandidate(
@@ -674,7 +692,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     List<String>? tags,
   }) {
     if (name != null) {
-      KnowledgeSessionService.validateCandidateName(name, state.candidates, excludingId: candidateId);
+      KnowledgeSessionService.validateCandidateName(name, state.candidates,
+          excludingId: candidateId);
     }
     KnowledgeCandidate? updated;
     final candidates = <KnowledgeCandidate>[];
@@ -696,9 +715,11 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       candidates: candidates,
-      selectedCandidate: state.selectedCandidate?.id == candidateId ? updated : null,
+      selectedCandidate:
+          state.selectedCandidate?.id == candidateId ? updated : null,
     );
-    if (updated != null) _recordDecision(updated.id, updated.name, ReviewDecisionKind.edited);
+    if (updated != null)
+      _recordDecision(updated.id, updated.name, ReviewDecisionKind.edited);
     unawaited(_persistActiveSession());
   }
 
@@ -737,17 +758,21 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 
   /// Accepts a candidate (Engineering Review: Accept).
-  void acceptKnowledgeCandidate(String candidateId) => _setCandidateStatus(candidateId, KnowledgeCandidateStatus.accepted);
+  void acceptKnowledgeCandidate(String candidateId) =>
+      _setCandidateStatus(candidateId, KnowledgeCandidateStatus.accepted);
 
   /// Rejects a candidate (Engineering Review: Reject).
-  void rejectKnowledgeCandidate(String candidateId) => _setCandidateStatus(candidateId, KnowledgeCandidateStatus.rejected);
+  void rejectKnowledgeCandidate(String candidateId) =>
+      _setCandidateStatus(candidateId, KnowledgeCandidateStatus.rejected);
 
-  void _setCandidateStatus(String candidateId, KnowledgeCandidateStatus status) {
+  void _setCandidateStatus(
+      String candidateId, KnowledgeCandidateStatus status) {
     KnowledgeCandidate? updated;
     final candidates = <KnowledgeCandidate>[];
     for (final candidate in state.candidates) {
       if (candidate.id == candidateId) {
-        updated = candidate.copyWith(status: status, modifiedTime: DateTime.now());
+        updated =
+            candidate.copyWith(status: status, modifiedTime: DateTime.now());
         candidates.add(updated);
       } else {
         candidates.add(candidate);
@@ -755,13 +780,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       candidates: candidates,
-      selectedCandidate: state.selectedCandidate?.id == candidateId ? updated : null,
+      selectedCandidate:
+          state.selectedCandidate?.id == candidateId ? updated : null,
     );
     if (updated != null) {
       _recordDecision(
         updated.id,
         updated.name,
-        status == KnowledgeCandidateStatus.accepted ? ReviewDecisionKind.accepted : ReviewDecisionKind.rejected,
+        status == KnowledgeCandidateStatus.accepted
+            ? ReviewDecisionKind.accepted
+            : ReviewDecisionKind.rejected,
       );
     }
     unawaited(_persistActiveSession());
@@ -777,32 +805,43 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Evidence Link referencing this candidate (Work Package 009) — an
   /// evidence link to a deleted candidate would be equally dangling.
   void deleteKnowledgeCandidate(String candidateId) {
-    final removed = state.candidates.where((candidate) => candidate.id == candidateId);
+    final removed =
+        state.candidates.where((candidate) => candidate.id == candidateId);
     final removedName = removed.isEmpty ? candidateId : removed.first.name;
     final remainingRelationships = state.relationshipCandidates
         .where(
           (relationship) =>
-              relationship.sourceCandidateId != candidateId && relationship.targetCandidateId != candidateId,
+              relationship.sourceCandidateId != candidateId &&
+              relationship.targetCandidateId != candidateId,
         )
         .toList();
     final selectedRelationshipRemoved =
         state.selectedRelationshipCandidate != null &&
-        !remainingRelationships.any((relationship) => relationship.id == state.selectedRelationshipCandidate!.id);
-    final remainingLinks = state.evidenceLinks.where((link) => link.candidateId != candidateId).toList();
-    final selectedLinkRemoved =
-        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
+            !remainingRelationships.any((relationship) =>
+                relationship.id == state.selectedRelationshipCandidate!.id);
+    final remainingLinks = state.evidenceLinks
+        .where((link) => link.candidateId != candidateId)
+        .toList();
+    final selectedLinkRemoved = state.selectedEvidenceLink != null &&
+        !remainingLinks
+            .any((link) => link.id == state.selectedEvidenceLink!.id);
     // Work Package 010: a Procedure's steps and a Specification's
     // details are meaningless once their owning candidate is gone —
     // cascaded the same way Evidence Links already are above.
-    final remainingSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
-    final selectedStepRemoved =
-        state.selectedProcedureStep != null && !remainingSteps.any((step) => step.id == state.selectedProcedureStep!.id);
+    final remainingSteps = state.procedureSteps
+        .where((step) => step.candidateId != candidateId)
+        .toList();
+    final selectedStepRemoved = state.selectedProcedureStep != null &&
+        !remainingSteps
+            .any((step) => step.id == state.selectedProcedureStep!.id);
     final openProcedureRemoved = state.openProcedure?.id == candidateId;
     final remainingSpecificationDetails = state.specificationDetails
         .where((details) => details.candidateId != candidateId)
         .toList();
     state = state.copyWith(
-      candidates: state.candidates.where((candidate) => candidate.id != candidateId).toList(),
+      candidates: state.candidates
+          .where((candidate) => candidate.id != candidateId)
+          .toList(),
       relationshipCandidates: remainingRelationships,
       evidenceLinks: remainingLinks,
       procedureSteps: remainingSteps,
@@ -831,6 +870,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -857,7 +897,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     String description = '',
   }) {
     if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding relationships.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before adding relationships.');
     }
     KnowledgeSessionService.validateRelationshipCandidate(
       sourceCandidateId: sourceCandidateId,
@@ -872,7 +913,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       description: description.trim(),
       createdTime: DateTime.now(),
     );
-    state = state.copyWith(relationshipCandidates: [...state.relationshipCandidates, relationship]);
+    state = state.copyWith(relationshipCandidates: [
+      ...state.relationshipCandidates,
+      relationship
+    ]);
     unawaited(_persistActiveSession());
   }
 
@@ -908,7 +952,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       relationshipCandidates: relationships,
-      selectedRelationshipCandidate: state.selectedRelationshipCandidate?.id == relationshipId ? updated : null,
+      selectedRelationshipCandidate:
+          state.selectedRelationshipCandidate?.id == relationshipId
+              ? updated
+              : null,
     );
     unawaited(_persistActiveSession());
   }
@@ -919,7 +966,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       relationshipCandidates: state.relationshipCandidates
           .where((relationship) => relationship.id != relationshipId)
           .toList(),
-      clearSelectedRelationshipCandidate: state.selectedRelationshipCandidate?.id == relationshipId,
+      clearSelectedRelationshipCandidate:
+          state.selectedRelationshipCandidate?.id == relationshipId,
     );
     unawaited(_persistActiveSession());
   }
@@ -938,6 +986,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -995,46 +1044,69 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// along with any Evidence Link referencing one of the removed
   /// regions.
   Future<void> removeSourceMaterial(String sourceId) async {
-    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
-    final remainingRegions = state.evidenceRegions.where((region) => region.sourceId != sourceId).toList();
+    final matches =
+        state.sourceMaterials.where((source) => source.id == sourceId);
+    final remainingRegions = state.evidenceRegions
+        .where((region) => region.sourceId != sourceId)
+        .toList();
     final removedRegionIds = state.evidenceRegions
         .where((region) => region.sourceId == sourceId)
         .map((region) => region.id)
         .toSet();
-    final remainingLinks = state.evidenceLinks.where((link) => !removedRegionIds.contains(link.regionId)).toList();
-    final selectedRegionRemoved = state.selectedEvidenceRegion != null && removedRegionIds.contains(state.selectedEvidenceRegion!.id);
-    final selectedLinkRemoved =
-        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
-    final remainingOcrProcessingStatus = Map<String, OcrProcessingStatus>.from(state.ocrProcessingStatus)
-      ..remove(sourceId);
-    final selectedEntityRemoved = state.selectedEntity != null && state.selectedEntity!.sourceId == sourceId;
-    final selectedContextRemoved = state.selectedContext != null && state.selectedContext!.sourceId == sourceId;
-    final selectedAiSuggestionRemoved =
-        state.selectedAiSuggestion != null && state.selectedAiSuggestion!.sourceId == sourceId;
-    final remainingAiProcessingStatus = Map<String, AiProcessingStatus>.from(state.aiProcessingStatus)
-      ..remove(sourceId);
+    final remainingLinks = state.evidenceLinks
+        .where((link) => !removedRegionIds.contains(link.regionId))
+        .toList();
+    final selectedRegionRemoved = state.selectedEvidenceRegion != null &&
+        removedRegionIds.contains(state.selectedEvidenceRegion!.id);
+    final selectedLinkRemoved = state.selectedEvidenceLink != null &&
+        !remainingLinks
+            .any((link) => link.id == state.selectedEvidenceLink!.id);
+    final remainingOcrProcessingStatus =
+        Map<String, OcrProcessingStatus>.from(state.ocrProcessingStatus)
+          ..remove(sourceId);
+    final selectedEntityRemoved = state.selectedEntity != null &&
+        state.selectedEntity!.sourceId == sourceId;
+    final selectedContextRemoved = state.selectedContext != null &&
+        state.selectedContext!.sourceId == sourceId;
+    final selectedAiSuggestionRemoved = state.selectedAiSuggestion != null &&
+        state.selectedAiSuggestion!.sourceId == sourceId;
+    final remainingAiProcessingStatus =
+        Map<String, AiProcessingStatus>.from(state.aiProcessingStatus)
+          ..remove(sourceId);
     state = state.copyWith(
-      sourceMaterials: state.sourceMaterials.where((source) => source.id != sourceId).toList(),
+      sourceMaterials: state.sourceMaterials
+          .where((source) => source.id != sourceId)
+          .toList(),
       evidenceRegions: remainingRegions,
       evidenceLinks: remainingLinks,
-      pageSelections: state.pageSelections.where((selection) => selection.sourceId != sourceId).toList(),
+      pageSelections: state.pageSelections
+          .where((selection) => selection.sourceId != sourceId)
+          .toList(),
       // Work Package 013: a source's OCR results are meaningless once
       // the source itself is gone — cascaded the same way Evidence
       // Regions/Page Selections already are above.
-      ocrPageResults: state.ocrPageResults.where((result) => result.sourceId != sourceId).toList(),
+      ocrPageResults: state.ocrPageResults
+          .where((result) => result.sourceId != sourceId)
+          .toList(),
       ocrProcessingStatus: remainingOcrProcessingStatus,
       // Work Package 014: an Engineering Entity extracted from this
       // source's OCR is meaningless once the source itself is gone —
       // same cascade, one layer further.
-      engineeringEntities: state.engineeringEntities.where((entity) => entity.sourceId != sourceId).toList(),
+      engineeringEntities: state.engineeringEntities
+          .where((entity) => entity.sourceId != sourceId)
+          .toList(),
       // Work Package 015: same cascade, one layer further still — an
       // Engineering Context organizing this source's now-gone OCR
       // evidence and entities is equally meaningless.
-      engineeringContexts: state.engineeringContexts.where((context) => context.sourceId != sourceId).toList(),
+      engineeringContexts: state.engineeringContexts
+          .where((context) => context.sourceId != sourceId)
+          .toList(),
       // Work Package 016: same cascade, one layer further still — an
       // AI Suggestion analyzed from this source's now-gone evidence is
       // equally meaningless.
-      aiSuggestions: state.aiSuggestions.where((suggestion) => suggestion.sourceId != sourceId).toList(),
+      aiSuggestions: state.aiSuggestions
+          .where((suggestion) => suggestion.sourceId != sourceId)
+          .toList(),
       aiProcessingStatus: remainingAiProcessingStatus,
       clearSelectedSourceMaterial: state.selectedSourceMaterial?.id == sourceId,
       clearOpenSourceDocument: state.openSourceDocument?.id == sourceId,
@@ -1080,6 +1152,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -1132,7 +1205,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     String? label,
   }) {
     if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before adding evidence.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before adding evidence.');
     }
     final resolvedLabel = (label == null || label.trim().isEmpty)
         ? 'Region ${state.evidenceRegions.length + 1}'
@@ -1161,7 +1235,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final regions = <EvidenceRegion>[];
     for (final region in state.evidenceRegions) {
       if (region.id == regionId) {
-        updated = region.copyWith(label: label.trim(), modifiedTime: DateTime.now());
+        updated =
+            region.copyWith(label: label.trim(), modifiedTime: DateTime.now());
         regions.add(updated);
       } else {
         regions.add(region);
@@ -1169,7 +1244,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       evidenceRegions: regions,
-      selectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId ? updated : null,
+      selectedEvidenceRegion:
+          state.selectedEvidenceRegion?.id == regionId ? updated : null,
     );
     unawaited(_persistActiveSession());
   }
@@ -1180,7 +1256,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final regions = <EvidenceRegion>[];
     for (final region in state.evidenceRegions) {
       if (region.id == regionId) {
-        updated = region.copyWith(notes: notes.trim(), modifiedTime: DateTime.now());
+        updated =
+            region.copyWith(notes: notes.trim(), modifiedTime: DateTime.now());
         regions.add(updated);
       } else {
         regions.add(region);
@@ -1188,7 +1265,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       evidenceRegions: regions,
-      selectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId ? updated : null,
+      selectedEvidenceRegion:
+          state.selectedEvidenceRegion?.id == regionId ? updated : null,
     );
     unawaited(_persistActiveSession());
   }
@@ -1197,11 +1275,15 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Cascades: every Evidence Link referencing this region is removed
   /// too.
   void deleteEvidenceRegion(String regionId) {
-    final remainingLinks = state.evidenceLinks.where((link) => link.regionId != regionId).toList();
-    final selectedLinkRemoved =
-        state.selectedEvidenceLink != null && !remainingLinks.any((link) => link.id == state.selectedEvidenceLink!.id);
+    final remainingLinks =
+        state.evidenceLinks.where((link) => link.regionId != regionId).toList();
+    final selectedLinkRemoved = state.selectedEvidenceLink != null &&
+        !remainingLinks
+            .any((link) => link.id == state.selectedEvidenceLink!.id);
     state = state.copyWith(
-      evidenceRegions: state.evidenceRegions.where((region) => region.id != regionId).toList(),
+      evidenceRegions: state.evidenceRegions
+          .where((region) => region.id != regionId)
+          .toList(),
       evidenceLinks: remainingLinks,
       clearSelectedEvidenceRegion: state.selectedEvidenceRegion?.id == regionId,
       clearSelectedEvidenceLink: selectedLinkRemoved,
@@ -1228,12 +1310,14 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
   /// Clears the current Evidence Region selection.
   void clearEvidenceRegionSelection() {
-    state = state.copyWith(clearSelectedEvidenceRegion: true, clearSelectedEvidenceLink: true);
+    state = state.copyWith(
+        clearSelectedEvidenceRegion: true, clearSelectedEvidenceLink: true);
   }
 
   // ---------------------------------------------------------------------
@@ -1266,7 +1350,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Removes an Evidence Link.
   void unlinkEvidence(String linkId) {
     state = state.copyWith(
-      evidenceLinks: state.evidenceLinks.where((link) => link.id != linkId).toList(),
+      evidenceLinks:
+          state.evidenceLinks.where((link) => link.id != linkId).toList(),
       clearSelectedEvidenceLink: state.selectedEvidenceLink?.id == linkId,
     );
     unawaited(_persistActiveSession());
@@ -1298,14 +1383,17 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// session is active.
   void togglePageSelection({required String sourceId, required int page}) {
     if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before selecting pages.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before selecting pages.');
     }
     final existing = state.pageSelections.where(
       (selection) => selection.sourceId == sourceId && selection.page == page,
     );
     if (existing.isNotEmpty) {
       state = state.copyWith(
-        pageSelections: state.pageSelections.where((selection) => selection.id != existing.first.id).toList(),
+        pageSelections: state.pageSelections
+            .where((selection) => selection.id != existing.first.id)
+            .toList(),
       );
     } else {
       state = state.copyWith(
@@ -1343,15 +1431,18 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         break;
       }
     }
-    if (candidate == null || candidate.type != KnowledgeCandidateType.procedure) {
-      throw const KnowledgeValidationException('Only a Procedure candidate can be opened in the Procedure Builder.');
+    if (candidate == null ||
+        candidate.type != KnowledgeCandidateType.procedure) {
+      throw const KnowledgeValidationException(
+          'Only a Procedure candidate can be opened in the Procedure Builder.');
     }
     state = state.copyWith(openProcedure: candidate);
   }
 
   /// Closes the Procedure Builder (Work Package 010).
   void closeProcedureBuilder() {
-    state = state.copyWith(clearOpenProcedure: true, clearSelectedProcedureStep: true);
+    state = state.copyWith(
+        clearOpenProcedure: true, clearSelectedProcedureStep: true);
   }
 
   /// Appends a new step to [candidateId]'s Procedure (Work Package 010:
@@ -1379,8 +1470,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
 
   /// Edits a step's title/description/notes. Throws
   /// [KnowledgeValidationException] for an empty title.
-  void updateProcedureStep(String stepId, {String? title, String? description, String? notes}) {
-    if (title != null) KnowledgeSessionService.validateProcedureStepTitle(title);
+  void updateProcedureStep(String stepId,
+      {String? title, String? description, String? notes}) {
+    if (title != null)
+      KnowledgeSessionService.validateProcedureStepTitle(title);
     ProcedureStep? updated;
     final steps = <ProcedureStep>[];
     for (final step in state.procedureSteps) {
@@ -1398,7 +1491,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       procedureSteps: steps,
-      selectedProcedureStep: state.selectedProcedureStep?.id == stepId ? updated : null,
+      selectedProcedureStep:
+          state.selectedProcedureStep?.id == stepId ? updated : null,
     );
     unawaited(_persistActiveSession());
   }
@@ -1427,7 +1521,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     state = state.copyWith(
       procedureSteps: steps,
-      selectedProcedureStep: state.selectedProcedureStep?.id == stepId ? updated : null,
+      selectedProcedureStep:
+          state.selectedProcedureStep?.id == stepId ? updated : null,
     );
     unawaited(_persistActiveSession());
   }
@@ -1435,7 +1530,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Deletes a step (Work Package 010: "Delete step").
   void deleteProcedureStep(String stepId) {
     state = state.copyWith(
-      procedureSteps: state.procedureSteps.where((step) => step.id != stepId).toList(),
+      procedureSteps:
+          state.procedureSteps.where((step) => step.id != stepId).toList(),
       clearSelectedProcedureStep: state.selectedProcedureStep?.id == stepId,
     );
     unawaited(_persistActiveSession());
@@ -1473,7 +1569,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     final insertAt = candidateSteps.indexWhere((step) => step.id == stepId) + 1;
     candidateSteps.insert(insertAt, copy);
-    final otherSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
+    final otherSteps = state.procedureSteps
+        .where((step) => step.candidateId != candidateId)
+        .toList();
     state = state.copyWith(procedureSteps: [...otherSteps, ...candidateSteps]);
     unawaited(_persistActiveSession());
     return copy;
@@ -1492,13 +1590,18 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     if (target == null) return;
     final candidateId = target.candidateId;
-    final candidateSteps = state.procedureSteps.where((step) => step.candidateId == candidateId).toList();
+    final candidateSteps = state.procedureSteps
+        .where((step) => step.candidateId == candidateId)
+        .toList();
     if (newIndex < 0 || newIndex >= candidateSteps.length) {
-      throw const KnowledgeValidationException('Cannot move a step outside the procedure\'s step list.');
+      throw const KnowledgeValidationException(
+          'Cannot move a step outside the procedure\'s step list.');
     }
     candidateSteps.removeWhere((step) => step.id == stepId);
     candidateSteps.insert(newIndex, target);
-    final otherSteps = state.procedureSteps.where((step) => step.candidateId != candidateId).toList();
+    final otherSteps = state.procedureSteps
+        .where((step) => step.candidateId != candidateId)
+        .toList();
     state = state.copyWith(procedureSteps: [...otherSteps, ...candidateSteps]);
     unawaited(_persistActiveSession());
   }
@@ -1520,6 +1623,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedEntity: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -1543,8 +1647,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     required String unit,
     String notes = '',
   }) {
-    KnowledgeSessionService.validateSpecificationDetails(value: value, unit: unit);
-    final existing = state.specificationDetails.where((entry) => entry.candidateId == candidateId);
+    KnowledgeSessionService.validateSpecificationDetails(
+        value: value, unit: unit);
+    final existing = state.specificationDetails
+        .where((entry) => entry.candidateId == candidateId);
     final now = DateTime.now();
     final details = SpecificationDetails(
       candidateId: candidateId,
@@ -1557,7 +1663,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     );
     state = state.copyWith(
       specificationDetails: [
-        ...state.specificationDetails.where((entry) => entry.candidateId != candidateId),
+        ...state.specificationDetails
+            .where((entry) => entry.candidateId != candidateId),
         details,
       ],
     );
@@ -1636,7 +1743,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final session = state.knowledgeSession;
     final plan = state.commitPlan;
     if (bridge == null || session == null || plan == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before committing.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before committing.');
     }
     if (!plan.canCommit) {
       throw const KnowledgeValidationException(
@@ -1653,24 +1761,29 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
 
     if (report.success) {
       final objectIdByCandidateId = {
-        for (final record in report.objectsCreated) record.candidateId: record.objectId,
+        for (final record in report.objectsCreated)
+          record.candidateId: record.objectId,
       };
       final relationshipIdByCandidateId = {
-        for (final record in report.relationshipsCreated) record.relationshipCandidateId: record.relationshipId,
+        for (final record in report.relationshipsCreated)
+          record.relationshipCandidateId: record.relationshipId,
       };
       final now = DateTime.now();
       state = state.copyWith(
         candidates: [
           for (final candidate in state.candidates)
             if (objectIdByCandidateId[candidate.id] case final objectId?)
-              candidate.copyWith(committedObjectId: objectId, committedTime: now)
+              candidate.copyWith(
+                  committedObjectId: objectId, committedTime: now)
             else
               candidate,
         ],
         relationshipCandidates: [
           for (final relationship in state.relationshipCandidates)
-            if (relationshipIdByCandidateId[relationship.id] case final relationshipId?)
-              relationship.copyWith(committedRelationshipId: relationshipId, committedTime: now)
+            if (relationshipIdByCandidateId[relationship.id]
+                case final relationshipId?)
+              relationship.copyWith(
+                  committedRelationshipId: relationshipId, committedTime: now)
             else
               relationship,
         ],
@@ -1701,35 +1814,49 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// not from inside a form it needs to keep open on failure.
   Future<void> runOcrForSource(String sourceId) async {
     if (state.knowledgeSession == null) {
-      throw const KnowledgeValidationException('Create or open a Knowledge Curation Session before running OCR.');
+      throw const KnowledgeValidationException(
+          'Create or open a Knowledge Curation Session before running OCR.');
     }
-    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    final matches =
+        state.sourceMaterials.where((source) => source.id == sourceId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This source could not be found.');
+      throw const KnowledgeValidationException(
+          'This source could not be found.');
     }
     final source = matches.first;
 
     state = state.copyWith(
-      ocrProcessingStatus: {...state.ocrProcessingStatus, sourceId: OcrProcessingStatus.processing},
+      ocrProcessingStatus: {
+        ...state.ocrProcessingStatus,
+        sourceId: OcrProcessingStatus.processing
+      },
       clearOcrErrorMessage: true,
     );
     try {
-      final results = await OcrPipelineService.processSource(source: source, existingResults: state.ocrPageResults);
-      final allSucceeded = results.isNotEmpty && results.every((result) => result.success);
+      final results = await OcrPipelineService.processSource(
+          source: source, existingResults: state.ocrPageResults);
+      final allSucceeded =
+          results.isNotEmpty && results.every((result) => result.success);
       state = state.copyWith(
         ocrPageResults: [
-          ...state.ocrPageResults.where((result) => result.sourceId != sourceId),
+          ...state.ocrPageResults
+              .where((result) => result.sourceId != sourceId),
           ...results,
         ],
         ocrProcessingStatus: {
           ...state.ocrProcessingStatus,
-          sourceId: allSucceeded ? OcrProcessingStatus.completed : OcrProcessingStatus.failed,
+          sourceId: allSucceeded
+              ? OcrProcessingStatus.completed
+              : OcrProcessingStatus.failed,
         },
       );
       unawaited(_persistActiveSession());
     } on OcrProcessingException catch (error) {
       state = state.copyWith(
-        ocrProcessingStatus: {...state.ocrProcessingStatus, sourceId: OcrProcessingStatus.failed},
+        ocrProcessingStatus: {
+          ...state.ocrProcessingStatus,
+          sourceId: OcrProcessingStatus.failed
+        },
         ocrErrorMessage: error.message,
       );
     }
@@ -1766,13 +1893,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         'Create or open a Knowledge Curation Session before extracting engineering entities.',
       );
     }
-    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    final matches =
+        state.sourceMaterials.where((source) => source.id == sourceId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This source could not be found.');
+      throw const KnowledgeValidationException(
+          'This source could not be found.');
     }
     final ocrResults = state.ocrResultsForSource(sourceId);
     if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
-      throw const KnowledgeValidationException('Run OCR on this source before extracting engineering entities.');
+      throw const KnowledgeValidationException(
+          'Run OCR on this source before extracting engineering entities.');
     }
     final updated = EngineeringEntityExtractionService.extractForSource(
       source: matches.first,
@@ -1781,7 +1911,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     );
     state = state.copyWith(
       engineeringEntities: [
-        ...state.engineeringEntities.where((entity) => entity.sourceId != sourceId),
+        ...state.engineeringEntities
+            .where((entity) => entity.sourceId != sourceId),
         ...updated,
       ],
     );
@@ -1802,6 +1933,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedContext: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -1818,28 +1950,40 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// already accepted, or (via [addKnowledgeCandidate]) if its
   /// normalized value collides with an existing candidate's name.
   KnowledgeCandidate acceptEntity(String entityId) {
-    final matches = state.engineeringEntities.where((entity) => entity.id == entityId);
+    final matches =
+        state.engineeringEntities.where((entity) => entity.id == entityId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This entity could not be found.');
+      throw const KnowledgeValidationException(
+          'This entity could not be found.');
     }
     final entity = matches.first;
     if (entity.isAccepted) {
-      throw const KnowledgeValidationException('This entity has already been accepted.');
+      throw const KnowledgeValidationException(
+          'This entity has already been accepted.');
     }
-    final sourceMatches = state.sourceMaterials.where((source) => source.id == entity.sourceId);
-    final sourceName = sourceMatches.isEmpty ? entity.sourceId : sourceMatches.first.originalFileName;
-    final patternLabel = EngineeringPatternLibrary.byId(entity.matchedPatternId)?.label ?? entity.matchedPatternId;
+    final sourceMatches =
+        state.sourceMaterials.where((source) => source.id == entity.sourceId);
+    final sourceName = sourceMatches.isEmpty
+        ? entity.sourceId
+        : sourceMatches.first.originalFileName;
+    final patternLabel =
+        EngineeringPatternLibrary.byId(entity.matchedPatternId)?.label ??
+            entity.matchedPatternId;
     final candidate = addKnowledgeCandidate(
       type: entity.type.defaultCandidateType,
       name: entity.normalizedValue,
-      description: 'Extracted from "$sourceName", page ${entity.page} (${entity.type.label}).',
-      notes: 'Matched pattern: $patternLabel. Extracted text: "${entity.extractedText}".',
+      description:
+          'Extracted from "$sourceName", page ${entity.page} (${entity.type.label}).',
+      notes:
+          'Matched pattern: $patternLabel. Extracted text: "${entity.extractedText}".',
     );
     state = state.copyWith(
       engineeringEntities: [
         for (final existing in state.engineeringEntities)
           if (existing.id == entityId)
-            existing.copyWith(status: EngineeringEntityStatus.accepted, createdCandidateId: candidate.id)
+            existing.copyWith(
+                status: EngineeringEntityStatus.accepted,
+                createdCandidateId: candidate.id)
           else
             existing,
       ],
@@ -1855,7 +1999,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(
       engineeringEntities: [
         for (final entity in state.engineeringEntities)
-          if (entity.id == entityId) entity.copyWith(status: EngineeringEntityStatus.ignored) else entity,
+          if (entity.id == entityId)
+            entity.copyWith(status: EngineeringEntityStatus.ignored)
+          else
+            entity,
       ],
     );
     unawaited(_persistActiveSession());
@@ -1879,13 +2026,16 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
         'Create or open a Knowledge Curation Session before detecting engineering contexts.',
       );
     }
-    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    final matches =
+        state.sourceMaterials.where((source) => source.id == sourceId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This source could not be found.');
+      throw const KnowledgeValidationException(
+          'This source could not be found.');
     }
     final ocrResults = state.ocrResultsForSource(sourceId);
     if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
-      throw const KnowledgeValidationException('Run OCR on this source before detecting engineering contexts.');
+      throw const KnowledgeValidationException(
+          'Run OCR on this source before detecting engineering contexts.');
     }
     final updated = ContextDetectionService.detectForSource(
       source: matches.first,
@@ -1895,7 +2045,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     );
     state = state.copyWith(
       engineeringContexts: [
-        ...state.engineeringContexts.where((context) => context.sourceId != sourceId),
+        ...state.engineeringContexts
+            .where((context) => context.sourceId != sourceId),
         ...updated,
       ],
     );
@@ -1916,6 +2067,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedAiSuggestion: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
@@ -1937,14 +2089,19 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// Knowledge Candidates," so accepting one is purely a review-status
   /// marker meaning "I reviewed this grouping and agree it is correct."
   void acceptContext(String contextId) {
-    final matches = state.engineeringContexts.where((context) => context.id == contextId);
+    final matches =
+        state.engineeringContexts.where((context) => context.id == contextId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This context could not be found.');
+      throw const KnowledgeValidationException(
+          'This context could not be found.');
     }
     state = state.copyWith(
       engineeringContexts: [
         for (final context in state.engineeringContexts)
-          if (context.id == contextId) context.copyWith(status: EngineeringContextStatus.accepted) else context,
+          if (context.id == contextId)
+            context.copyWith(status: EngineeringContextStatus.accepted)
+          else
+            context,
       ],
     );
     unawaited(_persistActiveSession());
@@ -1956,7 +2113,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(
       engineeringContexts: [
         for (final context in state.engineeringContexts)
-          if (context.id == contextId) context.copyWith(status: EngineeringContextStatus.ignored) else context,
+          if (context.id == contextId)
+            context.copyWith(status: EngineeringContextStatus.ignored)
+          else
+            context,
       ],
     );
     unawaited(_persistActiveSession());
@@ -1972,17 +2132,22 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// within it. Throws [KnowledgeValidationException] if the context
   /// doesn't exist or [atPage] isn't strictly inside its page range.
   void splitContext(String contextId, int atPage) {
-    final matches = state.engineeringContexts.where((context) => context.id == contextId);
+    final matches =
+        state.engineeringContexts.where((context) => context.id == contextId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This context could not be found.');
+      throw const KnowledgeValidationException(
+          'This context could not be found.');
     }
     final original = matches.first;
     if (atPage < original.pageStart || atPage >= original.pageEnd) {
-      throw const KnowledgeValidationException('This context cannot be split at that page.');
+      throw const KnowledgeValidationException(
+          'This context cannot be split at that page.');
     }
     final childEntities = state.childEntitiesFor(contextId);
-    final firstEntities = childEntities.where((e) => e.page <= atPage).map((e) => e.id).toList();
-    final secondEntities = childEntities.where((e) => e.page > atPage).map((e) => e.id).toList();
+    final firstEntities =
+        childEntities.where((e) => e.page <= atPage).map((e) => e.id).toList();
+    final secondEntities =
+        childEntities.where((e) => e.page > atPage).map((e) => e.id).toList();
     final now = DateTime.now();
     final first = EngineeringContext(
       id: KnowledgeSessionService.generateId('context'),
@@ -2015,7 +2180,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     final selectionRemoved = state.selectedContext?.id == contextId;
     state = state.copyWith(
       engineeringContexts: [
-        ...state.engineeringContexts.where((context) => context.id != contextId),
+        ...state.engineeringContexts
+            .where((context) => context.id != contextId),
         first,
         second,
       ],
@@ -2033,17 +2199,22 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// merged context top-level. Throws [KnowledgeValidationException] if
   /// either context doesn't exist or they belong to different sources.
   EngineeringContext mergeContexts(String contextIdA, String contextIdB) {
-    final matchesA = state.engineeringContexts.where((context) => context.id == contextIdA);
-    final matchesB = state.engineeringContexts.where((context) => context.id == contextIdB);
+    final matchesA =
+        state.engineeringContexts.where((context) => context.id == contextIdA);
+    final matchesB =
+        state.engineeringContexts.where((context) => context.id == contextIdB);
     if (matchesA.isEmpty || matchesB.isEmpty) {
-      throw const KnowledgeValidationException('One or both contexts could not be found.');
+      throw const KnowledgeValidationException(
+          'One or both contexts could not be found.');
     }
     final a = matchesA.first;
     final b = matchesB.first;
     if (a.sourceId != b.sourceId) {
-      throw const KnowledgeValidationException('Contexts from different sources cannot be merged.');
+      throw const KnowledgeValidationException(
+          'Contexts from different sources cannot be merged.');
     }
-    final mergedChildEntityIds = {...a.childEntityIds, ...b.childEntityIds}.toList();
+    final mergedChildEntityIds =
+        {...a.childEntityIds, ...b.childEntityIds}.toList();
     final merged = EngineeringContext(
       id: KnowledgeSessionService.generateId('context'),
       type: a.type,
@@ -2051,17 +2222,21 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       sourceId: a.sourceId,
       pageStart: a.pageStart < b.pageStart ? a.pageStart : b.pageStart,
       pageEnd: a.pageEnd > b.pageEnd ? a.pageEnd : b.pageEnd,
-      boundingRegion: ContextDetectionService.unionBoundingBoxOf([a.boundingRegion, b.boundingRegion]),
+      boundingRegion: ContextDetectionService.unionBoundingBoxOf(
+          [a.boundingRegion, b.boundingRegion]),
       childEntityIds: mergedChildEntityIds,
       confidence: (a.confidence + b.confidence) / 2,
       sourceFingerprint: a.sourceFingerprint,
       detectedTime: DateTime.now(),
-      parentContextId: a.parentContextId == b.parentContextId ? a.parentContextId : null,
+      parentContextId:
+          a.parentContextId == b.parentContextId ? a.parentContextId : null,
     );
-    final selectionRemoved = state.selectedContext?.id == contextIdA || state.selectedContext?.id == contextIdB;
+    final selectionRemoved = state.selectedContext?.id == contextIdA ||
+        state.selectedContext?.id == contextIdB;
     state = state.copyWith(
       engineeringContexts: [
-        ...state.engineeringContexts.where((context) => context.id != contextIdA && context.id != contextIdB),
+        ...state.engineeringContexts.where(
+            (context) => context.id != contextIdA && context.id != contextIdB),
         merged,
       ],
       clearSelectedContext: selectionRemoved,
@@ -2088,10 +2263,14 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     }
     if (contexts.isEmpty) return;
     final currentId = state.selectedContext?.id;
-    final currentIndex = currentId == null ? -1 : contexts.indexWhere((context) => context.id == currentId);
+    final currentIndex = currentId == null
+        ? -1
+        : contexts.indexWhere((context) => context.id == currentId);
     final nextIndex = currentIndex == -1
         ? 0
-        : (forward ? (currentIndex + 1) % contexts.length : (currentIndex - 1 + contexts.length) % contexts.length);
+        : (forward
+            ? (currentIndex + 1) % contexts.length
+            : (currentIndex - 1 + contexts.length) % contexts.length);
     selectContext(contexts[nextIndex]);
   }
 
@@ -2108,28 +2287,37 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// permissive precondition Work Package 015 established for context
   /// detection). Throws [AiAnalysisException] if the provider id isn't
   /// registered, the provider fails, or its response cannot be parsed.
-  Future<void> runAiAnalysisForSource(String sourceId, {String? providerId}) async {
+  Future<void> runAiAnalysisForSource(String sourceId,
+      {String? providerId}) async {
     if (state.knowledgeSession == null) {
       throw const KnowledgeValidationException(
         'Create or open a Knowledge Curation Session before running AI analysis.',
       );
     }
-    final matches = state.sourceMaterials.where((source) => source.id == sourceId);
+    final matches =
+        state.sourceMaterials.where((source) => source.id == sourceId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This source could not be found.');
+      throw const KnowledgeValidationException(
+          'This source could not be found.');
     }
     final ocrResults = state.ocrResultsForSource(sourceId);
     if (ocrResults.isEmpty || ocrResults.every((result) => !result.success)) {
-      throw const KnowledgeValidationException('Run OCR on this source before running AI analysis.');
+      throw const KnowledgeValidationException(
+          'Run OCR on this source before running AI analysis.');
     }
     final resolvedProviderId = providerId ?? state.currentAiProviderId;
-    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    final provider =
+        AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
     if (provider == null) {
-      throw AiAnalysisException('No AI provider is registered with id "$resolvedProviderId".');
+      throw AiAnalysisException(
+          'No AI provider is registered with id "$resolvedProviderId".');
     }
 
     state = state.copyWith(
-      aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.analyzing},
+      aiProcessingStatus: {
+        ...state.aiProcessingStatus,
+        sourceId: AiProcessingStatus.analyzing
+      },
       activeAiRequestSourceId: sourceId,
     );
     try {
@@ -2144,18 +2332,27 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       );
       state = state.copyWith(
         aiSuggestions: [
-          ...state.aiSuggestions.where((suggestion) => suggestion.sourceId != sourceId),
+          ...state.aiSuggestions
+              .where((suggestion) => suggestion.sourceId != sourceId),
           ...result.suggestions,
         ],
-        aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.completed},
-        currentAiConversation: result.conversation ?? state.currentAiConversation,
-        currentAiModel: result.conversation?.response?.modelId ?? state.currentAiModel,
+        aiProcessingStatus: {
+          ...state.aiProcessingStatus,
+          sourceId: AiProcessingStatus.completed
+        },
+        currentAiConversation:
+            result.conversation ?? state.currentAiConversation,
+        currentAiModel:
+            result.conversation?.response?.modelId ?? state.currentAiModel,
         clearActiveAiRequestSourceId: true,
       );
       unawaited(_persistActiveSession());
     } on AiAnalysisException {
       state = state.copyWith(
-        aiProcessingStatus: {...state.aiProcessingStatus, sourceId: AiProcessingStatus.failed},
+        aiProcessingStatus: {
+          ...state.aiProcessingStatus,
+          sourceId: AiProcessingStatus.failed
+        },
         clearActiveAiRequestSourceId: true,
       );
       rethrow;
@@ -2172,7 +2369,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// to display.
   Future<void> testAiConnection({String? providerId}) async {
     final resolvedProviderId = providerId ?? state.currentAiProviderId;
-    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    final provider =
+        AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
     if (provider == null || provider is! TestableAiProvider) {
       state = state.copyWith(
         aiConnectionStatus: AiConnectionStatus.providerError,
@@ -2198,7 +2396,8 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// otherwise.
   void cancelActiveAiRequest({String? providerId}) {
     final resolvedProviderId = providerId ?? state.currentAiProviderId;
-    final provider = AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
+    final provider =
+        AiProviderRegistry.defaultRegistry.providerFor(resolvedProviderId);
     if (provider is CancellableAiProvider) {
       (provider as CancellableAiProvider).cancelActiveRequest();
     }
@@ -2218,12 +2417,51 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       clearSelectedProcedureStep: true,
       clearSelectedEntity: true,
       clearSelectedContext: true,
+      clearSelectedEngineeringInspectable: true,
     );
   }
 
   /// Clears the current AI Suggestion selection.
   void clearAiSuggestionSelection() {
     state = state.copyWith(clearSelectedAiSuggestion: true);
+  }
+
+  // ------------------------------------------------------------------
+  // Diagram Studio (WORK_PACKAGE_024, ENGINE-TASK-000110)
+  // ------------------------------------------------------------------
+  //
+  // Selection itself is owned by the Engineering Engine (`GraphSelection`/
+  // `FocusState`, resolved through `EngineRegistry.selection` —
+  // `docs/SELECTION_MODEL.md` in oep_engine) — this is a *display bridge*
+  // only. Diagram Studio's workspace listens to the Engine's own
+  // selection/focus streams and calls this whenever the single object the
+  // Property Inspector should show changes; it never reimplements
+  // selection state itself.
+
+  /// Shows [inspectable] in the Property Inspector, switching it to
+  /// Engineering Inspectable mode. Clears every other selection field —
+  /// mutually exclusive with every other Property Inspector mode, same
+  /// as every `select*` method above.
+  void selectEngineeringInspectable(EngineeringInspectable inspectable) {
+    state = state.copyWith(
+      selectedEngineeringInspectable: inspectable,
+      clearSelectedObject: true,
+      clearSelectedRelationship: true,
+      clearSelectedCandidate: true,
+      clearSelectedRelationshipCandidate: true,
+      clearSelectedSourceMaterial: true,
+      clearSelectedEvidenceRegion: true,
+      clearSelectedProcedureStep: true,
+      clearSelectedEntity: true,
+      clearSelectedContext: true,
+      clearSelectedAiSuggestion: true,
+    );
+  }
+
+  /// Clears the current Engineering Inspectable selection (e.g. when
+  /// Diagram Studio's own selection becomes empty).
+  void clearEngineeringInspectableSelection() {
+    state = state.copyWith(clearSelectedEngineeringInspectable: true);
   }
 
   /// Sets which `AiProvider` new analysis runs use (Work Package 016
@@ -2243,16 +2481,22 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   /// [addKnowledgeCandidate]) if its name collides with an existing
   /// candidate's.
   KnowledgeCandidate acceptAiSuggestion(String suggestionId) {
-    final matches = state.aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    final matches = state.aiSuggestions
+        .where((suggestion) => suggestion.id == suggestionId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This suggestion could not be found.');
+      throw const KnowledgeValidationException(
+          'This suggestion could not be found.');
     }
     final suggestion = matches.first;
     if (suggestion.isAccepted) {
-      throw const KnowledgeValidationException('This suggestion has already been accepted.');
+      throw const KnowledgeValidationException(
+          'This suggestion has already been accepted.');
     }
-    final sourceMatches = state.sourceMaterials.where((source) => source.id == suggestion.sourceId);
-    final sourceName = sourceMatches.isEmpty ? suggestion.sourceId : sourceMatches.first.originalFileName;
+    final sourceMatches = state.sourceMaterials
+        .where((source) => source.id == suggestion.sourceId);
+    final sourceName = sourceMatches.isEmpty
+        ? suggestion.sourceId
+        : sourceMatches.first.originalFileName;
     final candidate = addKnowledgeCandidate(
       type: suggestion.effectiveType,
       name: suggestion.effectiveName,
@@ -2265,7 +2509,9 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
       aiSuggestions: [
         for (final existing in state.aiSuggestions)
           if (existing.id == suggestionId)
-            existing.copyWith(status: AiSuggestionStatus.accepted, createdCandidateId: candidate.id)
+            existing.copyWith(
+                status: AiSuggestionStatus.accepted,
+                createdCandidateId: candidate.id)
           else
             existing,
       ],
@@ -2287,12 +2533,15 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     required String name,
     required String description,
   }) {
-    final matches = state.aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    final matches = state.aiSuggestions
+        .where((suggestion) => suggestion.id == suggestionId);
     if (matches.isEmpty) {
-      throw const KnowledgeValidationException('This suggestion could not be found.');
+      throw const KnowledgeValidationException(
+          'This suggestion could not be found.');
     }
     if (name.trim().isEmpty) {
-      throw const KnowledgeValidationException('The suggestion name cannot be empty.');
+      throw const KnowledgeValidationException(
+          'The suggestion name cannot be empty.');
     }
     state = state.copyWith(
       aiSuggestions: [
@@ -2318,7 +2567,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(
       aiSuggestions: [
         for (final suggestion in state.aiSuggestions)
-          if (suggestion.id == suggestionId) suggestion.copyWith(status: AiSuggestionStatus.rejected) else suggestion,
+          if (suggestion.id == suggestionId)
+            suggestion.copyWith(status: AiSuggestionStatus.rejected)
+          else
+            suggestion,
       ],
     );
     unawaited(_persistActiveSession());
@@ -2330,7 +2582,10 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
     state = state.copyWith(
       aiSuggestions: [
         for (final suggestion in state.aiSuggestions)
-          if (suggestion.id == suggestionId) suggestion.copyWith(status: AiSuggestionStatus.deferred) else suggestion,
+          if (suggestion.id == suggestionId)
+            suggestion.copyWith(status: AiSuggestionStatus.deferred)
+          else
+            suggestion,
       ],
     );
     unawaited(_persistActiveSession());
@@ -2382,6 +2637,7 @@ class FoundationRuntimeNotifier extends Notifier<FoundationServiceState> {
   }
 }
 
-final foundationRuntimeServiceProvider = NotifierProvider<FoundationRuntimeNotifier, FoundationServiceState>(
+final foundationRuntimeServiceProvider =
+    NotifierProvider<FoundationRuntimeNotifier, FoundationServiceState>(
   FoundationRuntimeNotifier.new,
 );

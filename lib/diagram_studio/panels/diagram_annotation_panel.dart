@@ -1,0 +1,70 @@
+import 'package:flutter/material.dart';
+import 'package:engineering_engine/engineering_engine.dart';
+
+import '../../core/theme/studio_colors.dart';
+
+/// Annotation panel — a flat list of every Diagram Layout annotation,
+/// tap to select, double-tap to edit its text (WORK_PACKAGE_024,
+/// ENGINE-TASK-000114; `oep_engine/docs/ANNOTATION_SYSTEM.md`).
+class DiagramAnnotationPanel extends StatelessWidget {
+  const DiagramAnnotationPanel({
+    required this.annotations,
+    required this.selectedAnnotationIds,
+    required this.onSelectAnnotation,
+    required this.onEditAnnotation,
+    required this.onDeleteAnnotation,
+    super.key,
+  });
+
+  final List<DiagramAnnotation> annotations;
+  final Set<String> selectedAnnotationIds;
+  final void Function(String annotationId) onSelectAnnotation;
+  final void Function(String annotationId) onEditAnnotation;
+  final void Function(String annotationId) onDeleteAnnotation;
+
+  @override
+  Widget build(BuildContext context) {
+    if (annotations.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'No annotations yet. Add one from the Annotations toolbar.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: StudioColors.textSecondary, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      itemCount: annotations.length,
+      itemBuilder: (context, index) {
+        final annotation = annotations[index];
+        final isSelected = selectedAnnotationIds.contains(annotation.id);
+        return ListTile(
+          dense: true,
+          selected: isSelected,
+          selectedTileColor: StudioColors.selection.withValues(alpha: 0.15),
+          title: Text(
+            annotation.text.isEmpty ? '(empty)' : annotation.text,
+            style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(
+            annotation.type.name,
+            style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+          ),
+          onTap: () => onSelectAnnotation(annotation.id),
+          onLongPress: () => onEditAnnotation(annotation.id),
+          trailing: IconButton(
+            iconSize: 16,
+            tooltip: 'Delete annotation',
+            icon: const Icon(Icons.delete_outline, color: StudioColors.error),
+            onPressed: () => onDeleteAnnotation(annotation.id),
+          ),
+        );
+      },
+    );
+  }
+}

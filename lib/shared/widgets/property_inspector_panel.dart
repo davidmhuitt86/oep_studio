@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/engineering_inspectable.dart';
 import '../../core/models/engineering_object_summary.dart';
 import '../../core/models/relationship_summary.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
+import '../../diagram_studio/inspector/diagram_annotation_properties.dart';
+import '../../diagram_studio/inspector/diagram_layer_properties.dart';
+import '../../diagram_studio/inspector/engineering_group_properties.dart';
+import '../../diagram_studio/inspector/engineering_node_properties.dart';
+import '../../diagram_studio/inspector/engineering_port_properties.dart';
+import '../../diagram_studio/inspector/engineering_relationship_properties.dart';
+import '../../diagram_studio/inspector/wire_override_properties.dart';
 import '../../knowledge/inspector/ai_suggestion_properties.dart';
 import '../../knowledge/inspector/engineering_context_properties.dart';
 import '../../knowledge/inspector/engineering_entity_properties.dart';
@@ -55,6 +63,7 @@ class PropertyInspectorPanel extends ConsumerWidget {
     final selectedSourceMaterial = foundation.selectedSourceMaterial;
     final selectedObject = foundation.selectedObject;
     final selectedRelationship = foundation.selectedRelationship;
+    final selectedEngineeringInspectable = foundation.selectedEngineeringInspectable;
     final knowledgeSession = foundation.knowledgeSession;
 
     return Container(
@@ -90,16 +99,17 @@ class PropertyInspectorPanel extends ConsumerWidget {
               selectedSourceMaterial,
               selectedObject,
               selectedRelationship,
+              selectedEngineeringInspectable,
               knowledgeSession,
             )) {
-              (final suggestion?, _, _, _, _, _, _, _, _, _, _) => AiSuggestionProperties(
+              (final suggestion?, _, _, _, _, _, _, _, _, _, _, _) => AiSuggestionProperties(
                 suggestion: suggestion,
                 sourceName: _sourceName(foundation.sourceMaterials, suggestion.sourceId),
                 supportingEntities: foundation.supportingEntitiesFor(suggestion.id),
                 supportingContexts: foundation.supportingContextsFor(suggestion.id),
                 conversation: foundation.currentAiConversation,
               ),
-              (_, final context?, _, _, _, _, _, _, _, _, _) => EngineeringContextProperties(
+              (_, final context?, _, _, _, _, _, _, _, _, _, _) => EngineeringContextProperties(
                 context: context,
                 sourceName: _sourceName(foundation.sourceMaterials, context.sourceId),
                 statistics: foundation.contextStatisticsFor(context.id),
@@ -107,18 +117,18 @@ class PropertyInspectorPanel extends ConsumerWidget {
                 parentContext: foundation.parentContextOf(context.id),
                 validation: foundation.contextValidation[context.id],
               ),
-              (_, _, final entity?, _, _, _, _, _, _, _, _) => EngineeringEntityProperties(
+              (_, _, final entity?, _, _, _, _, _, _, _, _, _) => EngineeringEntityProperties(
                 entity: entity,
                 sourceName: _sourceName(foundation.sourceMaterials, entity.sourceId),
                 pattern: foundation.patternFor(entity.id),
                 validation: foundation.entityValidation[entity.id],
               ),
-              (_, _, _, final region?, _, _, _, _, _, _, _) => EvidenceRegionProperties(
+              (_, _, _, final region?, _, _, _, _, _, _, _, _) => EvidenceRegionProperties(
                 region: region,
                 sourceName: _sourceName(foundation.sourceMaterials, region.sourceId),
                 links: _linkedCandidates(foundation.evidenceLinks, foundation.candidates, region.id),
               ),
-              (_, _, _, _, final candidate?, _, _, _, _, _, _) => KnowledgeCandidateProperties(
+              (_, _, _, _, final candidate?, _, _, _, _, _, _, _) => KnowledgeCandidateProperties(
                 candidate: candidate,
                 links: _linkedRegions(
                   foundation.evidenceLinks,
@@ -127,13 +137,13 @@ class PropertyInspectorPanel extends ConsumerWidget {
                   candidate.id,
                 ),
               ),
-              (_, _, _, _, _, final step?, _, _, _, _, _) => ProcedureStepProperties(step: step),
-              (_, _, _, _, _, _, final relationship?, _, _, _, _) => RelationshipCandidateProperties(
+              (_, _, _, _, _, final step?, _, _, _, _, _, _) => ProcedureStepProperties(step: step),
+              (_, _, _, _, _, _, final relationship?, _, _, _, _, _) => RelationshipCandidateProperties(
                 relationship: relationship,
                 sourceName: _candidateName(foundation.candidates, relationship.sourceCandidateId),
                 targetName: _candidateName(foundation.candidates, relationship.targetCandidateId),
               ),
-              (_, _, _, _, _, _, _, final source?, _, _, _) => SourceMaterialProperties(
+              (_, _, _, _, _, _, _, final source?, _, _, _, _) => SourceMaterialProperties(
                 source: source,
                 evidenceRegionCount: foundation.evidenceRegions
                     .where((region) => region.sourceId == source.id)
@@ -148,9 +158,11 @@ class PropertyInspectorPanel extends ConsumerWidget {
                 ocrResults: foundation.ocrResultsForSource(source.id),
                 ocrAverageConfidence: foundation.ocrAverageConfidenceFor(source.id),
               ),
-              (_, _, _, _, _, _, _, _, final object?, _, _) => _ObjectProperties(object: object),
-              (_, _, _, _, _, _, _, _, _, final relationship?, _) => _RelationshipProperties(relationship: relationship),
-              (_, _, _, _, _, _, _, _, _, _, final session?) => SessionProperties(
+              (_, _, _, _, _, _, _, _, final object?, _, _, _) => _ObjectProperties(object: object),
+              (_, _, _, _, _, _, _, _, _, final relationship?, _, _) => _RelationshipProperties(relationship: relationship),
+              (_, _, _, _, _, _, _, _, _, _, final inspectable?, _) =>
+                _engineeringInspectableProperties(inspectable),
+              (_, _, _, _, _, _, _, _, _, _, _, final session?) => SessionProperties(
                 session: session,
                 sourceCount: foundation.knowledgeSourceCount,
                 candidateCount: foundation.knowledgeCandidateCount,
@@ -168,6 +180,39 @@ class PropertyInspectorPanel extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Dispatches a Diagram Studio selection to its own `*Properties`
+  /// widget (WORK_PACKAGE_024, ENGINE-TASK-000110) — the single tuple
+  /// slot bridging Engine-owned Selection into this otherwise
+  /// Knowledge-Studio-flavored Property Inspector.
+  static Widget _engineeringInspectableProperties(EngineeringInspectable inspectable) {
+    switch (inspectable.kind) {
+      case EngineeringInspectableKind.node:
+        return EngineeringNodeProperties(node: inspectable.node!);
+      case EngineeringInspectableKind.relationship:
+        return EngineeringRelationshipProperties(
+          relationship: inspectable.relationship!,
+          sourceNodeName: inspectable.relationship!.sourceNode,
+          targetNodeName: inspectable.relationship!.targetNode,
+        );
+      case EngineeringInspectableKind.group:
+        return EngineeringGroupProperties(group: inspectable.group!);
+      case EngineeringInspectableKind.port:
+        return EngineeringPortProperties(
+          port: inspectable.port!,
+          ownerNodeId: inspectable.portOwnerNodeId!,
+        );
+      case EngineeringInspectableKind.layer:
+        return DiagramLayerProperties(layer: inspectable.layer!);
+      case EngineeringInspectableKind.annotation:
+        return DiagramAnnotationProperties(annotation: inspectable.annotation!);
+      case EngineeringInspectableKind.wireOverride:
+        return WireOverrideProperties(
+          relationshipId: inspectable.wireOverrideRelationshipId!,
+          points: inspectable.wireOverridePoints!,
+        );
+    }
   }
 
   static String _candidateName(List<KnowledgeCandidate> candidates, String candidateId) {

@@ -19,6 +19,27 @@ Future<void> settle(WidgetTester tester) async {
   }
 }
 
+/// Like [settle], but for `DiagramStudioPage`'s bootstrap specifically
+/// (WORK_PACKAGE_024): `EngineHost.create()` awaits `rootBundle.loadString`
+/// for each of the 14 seed symbols. Under `testWidgets`'s fake-async
+/// test binding, a plain `tester.pump(duration)` loop advances the fake
+/// clock but does not reliably drive forward the real asynchronous
+/// gaps those platform-channel asset reads go through — the resulting
+/// `Future`s never resolve and the page is left showing its loading
+/// spinner forever. `tester.runAsync` bridges into the real event loop
+/// for the duration of its callback; interleaving real delays with
+/// `tester.pump()` calls inside that one real-async window lets both
+/// the pending asset-load Futures and the widget's own frame scheduling
+/// progress together.
+Future<void> settleDiagramStudioBootstrap(WidgetTester tester) async {
+  await tester.runAsync(() async {
+    for (var i = 0; i < 40; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      await tester.pump();
+    }
+  });
+}
+
 void main() {
   testWidgets('StudioApp launches on the Dashboard and navigates via the rail', (
     WidgetTester tester,
@@ -218,6 +239,40 @@ void main() {
     await settle(tester);
     expect(find.text('Accepted'), findsNWidgets(2));
     expect(find.text('Pending'), findsNothing);
+  });
+
+  testWidgets('Diagram Studio opens to a blank untitled document with its toolbars and panels', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ProviderScope(child: StudioApp()));
+    await settle(tester);
+
+    await tester.tap(find.text('Diagram Studio'));
+    await tester.pump();
+    await settleDiagramStudioBootstrap(tester);
+
+    // The document bar (WORK_PACKAGE_024, ENGINE-TASK-000111) — a fresh
+    // Engine session starts on a blank, unsaved document.
+    expect(find.text('Untitled Diagram'), findsOneWidget);
+
+    // Toolbar groups (ENGINE-TASK-000113) and dockable panels
+    // (ENGINE-TASK-000114) rendered. "Validation" also labels the
+    // unrelated `/validation` Navigation Rail destination, so two
+    // matches (rail label + panel title) is the correct count here.
+    expect(find.text('Diagram Explorer'), findsOneWidget);
+    expect(find.text('Layers'), findsOneWidget);
+    expect(find.text('Validation'), findsNWidgets(2));
+    expect(find.text('Annotations'), findsOneWidget);
+    expect(find.text('Recent Commands'), findsOneWidget);
+
+    // The shared Property Inspector (docked at the StudioShell level,
+    // untouched by Diagram Studio) still shows its own default state.
+    expect(find.text('No Object Selected'), findsOneWidget);
   });
 }
 

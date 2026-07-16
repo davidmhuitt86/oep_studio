@@ -7,7 +7,8 @@ import 'package:oep_studio/settings/services/settings_registry.dart';
 
 void main() {
   group('SettingsRegistry.defaultRegistry', () {
-    test('registers all eleven core pages, in SDD-023\'s own listed order', () {
+    test('registers all eleven core pages, in SDD-023\'s own listed order, '
+        'plus Diagram Studio (WORK_PACKAGE_024) immediately after Knowledge Studio', () {
       final ids = SettingsRegistry.defaultRegistry.providers.map((provider) => provider.pageId).toList();
       expect(ids, [
         CoreSettingsPageIds.general,
@@ -15,6 +16,7 @@ void main() {
         CoreSettingsPageIds.workspace,
         CoreSettingsPageIds.repository,
         CoreSettingsPageIds.knowledgeStudio,
+        'diagram_studio',
         CoreSettingsPageIds.artificialIntelligence,
         CoreSettingsPageIds.plugins,
         CoreSettingsPageIds.updates,

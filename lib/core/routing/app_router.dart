@@ -9,6 +9,7 @@ import '../../features/relationships/relationships_page.dart';
 import '../../features/repository/repository_page.dart';
 import '../../features/search/search_page.dart';
 import '../../features/validation/validation_page.dart';
+import '../../diagram_studio/workspaces/diagram_studio_page.dart';
 import '../../knowledge/workspaces/knowledge_studio_page.dart';
 import '../../settings/workspace/settings_workspace_page.dart';
 import 'studio_destination.dart';
@@ -37,6 +38,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: StudioDestination.knowledge.path,
           builder: (context, state) => const KnowledgeStudioPage(),
+        ),
+        GoRoute(
+          path: StudioDestination.diagram.path,
+          builder: (context, state) => const DiagramStudioPage(),
         ),
         GoRoute(
           path: StudioDestination.repository.path,

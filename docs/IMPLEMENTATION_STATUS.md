@@ -4280,3 +4280,96 @@ reasonable literal reading available and none constituted the kind of
 genuine, irreconcilable architectural conflict this work package's
 instructions say to stop for.
 
+---
+
+## Work Package 024 — Diagram Studio Integration
+
+Status: Implemented
+
+The first work package spanning two repositories: `oep_engine` (the
+Engineering Engine) and `oep_studio` (this package). Diagram Studio —
+the second major Primary Workspace after Knowledge Studio — is now the
+production diagram-editing experience, built entirely on the
+Engineering Engine's existing public API. No engineering behavior was
+implemented in Studio; no repository/Studio behavior was implemented in
+the Engine.
+
+### What Exists
+
+* `lib/diagram_studio/` — the new module, mirroring Knowledge Studio's
+  own top-level shape:
+  * `host/engine_host.dart` — thin `EngineeringEngine` lifecycle wrapper
+    (create/initialize/seed symbols/begin session/dispose). No
+    engineering logic of its own.
+  * `host/diagram_document.dart` — Open/Save/Save As/Close/Dirty State
+    for a diagram document (Engineering Graph + Diagram Layout,
+    persisted together as one JSON file via the Engine's own
+    `toJson()`/`fromJson()` — see `docs/REPOSITORY_INTEGRATION.md`).
+  * `workspaces/diagram_studio_page.dart` — the workspace page/route
+    target; owns the Engine instance, the editing session, and every
+    interaction handler (node/port/wire/annotation drag, box-select,
+    drag-to-connect/reconnect, "Edit Route" mode), ported from the
+    Engine's own Demonstration Host to Studio idiom.
+  * `toolbars/diagram_toolbars.dart` — the nine toolbar groups
+    (Selection, Navigation, Placement, Wire Editing, Layers,
+    Annotations, View, Search, Constraints), Studio-styled
+    (`StudioColors`), living inside Diagram Studio's own workspace page.
+  * `panels/` — six panels (Diagram Explorer, Layer, Search, Validation,
+    Annotation, Recent Commands), each wrapped in the existing
+    `KnowledgePanel` chrome widget — reusing Knowledge Studio's own
+    panel-chrome pattern rather than building a new docking framework.
+  * `inspector/` — seven new Property Inspector modes (Node,
+    Relationship, Group, Port, Layer, Annotation, Wire Override) — see
+    `docs/PROPERTY_INSPECTOR_INTEGRATION.md`.
+  * `commands/studio_command_actions.dart` — Undo/Redo/Copy/Cut/Paste/
+    Delete/Duplicate, direct calls into `engine.editing`/
+    `engine.clipboard`/`engine.registry.selection` (no new command bus).
+  * `settings/` — a `DiagramStudioSettingsProvider` (new-document ViewState
+    defaults: grid/snap/guides visibility), appended to
+    `SettingsRegistry.defaultRegistry`, persisted independently of
+    `UserConfiguration` (its own small JSON file — see
+    `docs/WORKSPACE_INTEGRATION.md`).
+  * `persistence/` — `DiagramWorkspaceState`/`WorkspaceStateStorage`:
+    last-open document path, panel visibility, panel widths, and
+    ViewState, restored on next launch.
+  * `ai/` — `DiagramPromptContext` (pure prompt assembly from
+    Selection/graph/evidence) + `DiagramAiService` (calls the existing
+    `AiProviderRegistry` directly — no new provider infrastructure).
+* `pubspec.yaml` — added `engineering_engine: { path: ../oep_engine }`
+  and `flutter_svg`.
+* One new field on `FoundationServiceState`:
+  `selectedEngineeringInspectable` (a small sum-type value,
+  `EngineeringInspectable`), bridging Engine-owned Selection into the
+  shared Property Inspector without Studio reimplementing selection.
+* `StudioDestination.diagram` + its `GoRoute`, alongside every other
+  workspace destination.
+
+### What Changed in `oep_engine`
+
+* Canvas presentation widgets (`GraphViewPanel` and ten supporting
+  files) and three drafting dialogs, previously living only in
+  `example/lib/`, were promoted into the package itself
+  (`lib/views/widgets/`, `lib/views/dialogs/`) so Diagram Studio reuses
+  them instead of duplicating ~1,000 lines of rendering/dialog code.
+  See `oep_engine/docs/ARCHITECTURE_DECISIONS.md` ADR-023. This is the
+  only Engine code change WP024 made; no engineering behavior changed.
+* The Demonstration Host's framing was updated (doc comments + its own
+  `docs/DIAGRAM_STUDIO.md`) to state it is now regression-only.
+
+### What Is Explicitly Not Implemented
+
+* Align/Distribute commands have no toolbar exposure yet in Diagram
+  Studio (reachable via the Engine API, just not wired to a button) —
+  flagged as a recommendation for future work.
+* No on-screen rulers (the Demonstration Host's `HorizontalRuler`/
+  `VerticalRuler` were not promoted or ported — a minor polish gap, not
+  a functional one).
+* `EngineeringRelationshipProperties` in the Property Inspector shows
+  raw node ids for source/target rather than resolved display names
+  (the dispatch helper has no graph reference) — a known, minor
+  display-quality gap.
+* No dedicated AI chat/review UI panel — `ai/` is the integration point
+  (prompt assembly + provider call) only, matching the approved plan's
+  own scope ("builds its own local prompt-context assembler... calls
+  the existing AiProviderRegistry").
+

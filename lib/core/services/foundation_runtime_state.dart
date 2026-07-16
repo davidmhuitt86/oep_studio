@@ -41,6 +41,7 @@ import '../../knowledge/services/provenance_service.dart';
 import '../../knowledge/services/session_health_service.dart';
 import '../foundation/foundation_bridge_exception.dart';
 import '../foundation/oep_api_types.dart';
+import '../models/engineering_inspectable.dart';
 import '../models/engineering_object_summary.dart';
 import '../models/object_category.dart';
 import '../models/relationship_summary.dart';
@@ -129,6 +130,7 @@ class FoundationServiceState {
     this.aiConnectionMessage,
     this.currentAiModel,
     this.activeAiRequestSourceId,
+    this.selectedEngineeringInspectable,
   });
 
   final FoundationConnectionPhase phase;
@@ -487,8 +489,17 @@ class FoundationServiceState {
   /// per-source status (e.g. a future global "AI is busy" indicator).
   final String? activeAiRequestSourceId;
 
+  /// The single Engineering Graph/Diagram Layout object currently shown
+  /// in the Property Inspector (WORK_PACKAGE_024, ENGINE-TASK-000110),
+  /// bridged from Diagram Studio's own Engine-owned selection — see
+  /// `EngineeringInspectable`'s doc comment. Mutually exclusive with
+  /// every other `selected*` field above, the same as every other
+  /// Property Inspector mode.
+  final EngineeringInspectable? selectedEngineeringInspectable;
+
   bool get isConnected => phase == FoundationConnectionPhase.connected;
-  bool get isRepositoryOpen => runtimeState == FoundationRuntimeState.repositoryOpen;
+  bool get isRepositoryOpen =>
+      runtimeState == FoundationRuntimeState.repositoryOpen;
 
   /// Objects belonging to [selectedCategory], or all objects if none is
   /// selected. `null` (not yet loaded / load failed) propagates as `null`.
@@ -502,12 +513,18 @@ class FoundationServiceState {
 
   int get knowledgeSourceCount => sourceMaterials.length;
   int get knowledgeCandidateCount => candidates.length;
-  int get knowledgeAcceptedCount =>
-      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.accepted).length;
-  int get knowledgeRejectedCount =>
-      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.rejected).length;
-  int get knowledgePendingCount =>
-      candidates.where((candidate) => candidate.status == KnowledgeCandidateStatus.pending).length;
+  int get knowledgeAcceptedCount => candidates
+      .where(
+          (candidate) => candidate.status == KnowledgeCandidateStatus.accepted)
+      .length;
+  int get knowledgeRejectedCount => candidates
+      .where(
+          (candidate) => candidate.status == KnowledgeCandidateStatus.rejected)
+      .length;
+  int get knowledgePendingCount => candidates
+      .where(
+          (candidate) => candidate.status == KnowledgeCandidateStatus.pending)
+      .length;
   int get knowledgeRelationshipCandidateCount => relationshipCandidates.length;
   int get knowledgeEvidenceRegionCount => evidenceRegions.length;
 
@@ -534,13 +551,16 @@ class FoundationServiceState {
   /// The Current Commit Report (Work Package 012 STUDIO-TASK-000033) —
   /// the most recent entry in [commitReports], `null` if this session
   /// has never been committed.
-  CommitReport? get latestCommitReport => commitReports.isEmpty ? null : commitReports.last;
+  CommitReport? get latestCommitReport =>
+      commitReports.isEmpty ? null : commitReports.last;
 
   /// Evidence Regions belonging to [sourceId]'s page [page] (Work
   /// Package 009: the Source Viewer only ever needs a single page's
   /// regions at a time to render its overlay).
   List<EvidenceRegion> evidenceRegionsForPage(String sourceId, int page) =>
-      evidenceRegions.where((region) => region.sourceId == sourceId && region.page == page).toList();
+      evidenceRegions
+          .where((region) => region.sourceId == sourceId && region.page == page)
+          .toList();
 
   /// Every Evidence Region linked to [candidateId] (Work Package 009 §
   /// Source Viewer Interaction: selecting a Knowledge Candidate
@@ -550,7 +570,9 @@ class FoundationServiceState {
         .where((link) => link.candidateId == candidateId)
         .map((link) => link.regionId)
         .toSet();
-    return evidenceRegions.where((region) => regionIds.contains(region.id)).toList();
+    return evidenceRegions
+        .where((region) => regionIds.contains(region.id))
+        .toList();
   }
 
   /// Every Knowledge Candidate linked to [regionId] (Work Package 009 §
@@ -561,7 +583,9 @@ class FoundationServiceState {
         .where((link) => link.regionId == regionId)
         .map((link) => link.candidateId)
         .toSet();
-    return candidates.where((candidate) => candidateIds.contains(candidate.id)).toList();
+    return candidates
+        .where((candidate) => candidateIds.contains(candidate.id))
+        .toList();
   }
 
   /// How many Knowledge Candidates reference [regionId] (Work Package
@@ -671,7 +695,9 @@ class FoundationServiceState {
   /// both need "every result for this one source," never the full
   /// cross-session list).
   List<OcrPageResult> ocrResultsForSource(String sourceId) {
-    final results = ocrPageResults.where((result) => result.sourceId == sourceId).toList()
+    final results = ocrPageResults
+        .where((result) => result.sourceId == sourceId)
+        .toList()
       ..sort((a, b) => a.page.compareTo(b.page));
     return results;
   }
@@ -685,9 +711,14 @@ class FoundationServiceState {
   /// [OcrPageResult.averageConfidence] for [sourceId], or `0` if none
   /// have been processed yet (Property Inspector "Confidence").
   double ocrAverageConfidenceFor(String sourceId) {
-    final successful = ocrResultsForSource(sourceId).where((result) => result.success).toList();
+    final successful = ocrResultsForSource(sourceId)
+        .where((result) => result.success)
+        .toList();
     if (successful.isEmpty) return 0;
-    return successful.map((result) => result.averageConfidence).reduce((a, b) => a + b) / successful.length;
+    return successful
+            .map((result) => result.averageConfidence)
+            .reduce((a, b) => a + b) /
+        successful.length;
   }
 
   /// [sourceId]'s extracted Engineering Entities, sorted by page then
@@ -695,10 +726,14 @@ class FoundationServiceState {
   /// Workspace's own natural reading order, and the reason no separate
   /// sort-by-position UI control is needed for the default view).
   List<EngineeringEntity> engineeringEntitiesForSource(String sourceId) {
-    final entities = engineeringEntities.where((entity) => entity.sourceId == sourceId).toList()
+    final entities = engineeringEntities
+        .where((entity) => entity.sourceId == sourceId)
+        .toList()
       ..sort((a, b) {
         final pageCompare = a.page.compareTo(b.page);
-        return pageCompare != 0 ? pageCompare : a.characterStart.compareTo(b.characterStart);
+        return pageCompare != 0
+            ? pageCompare
+            : a.characterStart.compareTo(b.characterStart);
       });
     return entities;
   }
@@ -717,7 +752,8 @@ class FoundationServiceState {
   /// entity's own recorded `matchedPatternId`, never re-derived by
   /// re-matching.
   EngineeringPattern? patternFor(String entityId) {
-    final matches = engineeringEntities.where((entity) => entity.id == entityId);
+    final matches =
+        engineeringEntities.where((entity) => entity.id == entityId);
     if (matches.isEmpty) return null;
     return EngineeringPatternLibrary.byId(matches.first.matchedPatternId);
   }
@@ -727,7 +763,9 @@ class FoundationServiceState {
   /// `ContextDetectionService` itself produces, so the Context
   /// Explorer's default view needs no separate sort step).
   List<EngineeringContext> engineeringContextsForSource(String sourceId) {
-    final contexts = engineeringContexts.where((context) => context.sourceId == sourceId).toList()
+    final contexts = engineeringContexts
+        .where((context) => context.sourceId == sourceId)
+        .toList()
       ..sort((a, b) {
         final pageCompare = a.pageStart.compareTo(b.pageStart);
         return pageCompare != 0 ? pageCompare : a.title.compareTo(b.title);
@@ -741,7 +779,8 @@ class FoundationServiceState {
   /// `ContextValidationService`; "Validation remains informational
   /// only" extends to "no automatic caching that could go stale."
   Map<String, ContextValidationResult> get contextValidation =>
-      ContextValidationService.computeValidation(contexts: engineeringContexts, entities: engineeringEntities);
+      ContextValidationService.computeValidation(
+          contexts: engineeringContexts, entities: engineeringEntities);
 
   /// [sourceId]'s Engineering Entities not claimed by any Engineering
   /// Context (Work Package 015 STUDIO-TASK-000044: "Orphaned
@@ -757,21 +796,26 @@ class FoundationServiceState {
   /// `EngineeringContext.childEntityIds` (Property Inspector "Child
   /// Entities") — never re-derived by re-detecting proximity.
   List<EngineeringEntity> childEntitiesFor(String contextId) {
-    final matches = engineeringContexts.where((context) => context.id == contextId);
+    final matches =
+        engineeringContexts.where((context) => context.id == contextId);
     if (matches.isEmpty) return const [];
     final ids = matches.first.childEntityIds.toSet();
-    return engineeringEntities.where((entity) => ids.contains(entity.id)).toList();
+    return engineeringEntities
+        .where((entity) => ids.contains(entity.id))
+        .toList();
   }
 
   /// [contextId]'s enclosing context, if any (Property Inspector
   /// "Parent Context") — resolved from its own recorded
   /// `EngineeringContext.parentContextId`.
   EngineeringContext? parentContextOf(String contextId) {
-    final matches = engineeringContexts.where((context) => context.id == contextId);
+    final matches =
+        engineeringContexts.where((context) => context.id == contextId);
     if (matches.isEmpty) return null;
     final parentId = matches.first.parentContextId;
     if (parentId == null) return null;
-    final parentMatches = engineeringContexts.where((context) => context.id == parentId);
+    final parentMatches =
+        engineeringContexts.where((context) => context.id == parentId);
     return parentMatches.isEmpty ? null : parentMatches.first;
   }
 
@@ -779,7 +823,8 @@ class FoundationServiceState {
   /// Inspector "Context Statistics") — `null` if the context doesn't
   /// exist. Never stored.
   ContextStatistics? contextStatisticsFor(String contextId) {
-    final matches = engineeringContexts.where((context) => context.id == contextId);
+    final matches =
+        engineeringContexts.where((context) => context.id == contextId);
     if (matches.isEmpty) return null;
     final children = childEntitiesFor(contextId);
     final countByType = <EngineeringEntityType, int>{};
@@ -788,7 +833,8 @@ class FoundationServiceState {
     }
     final averageConfidence = children.isEmpty
         ? 0.0
-        : children.map((e) => e.confidence).reduce((a, b) => a + b) / children.length;
+        : children.map((e) => e.confidence).reduce((a, b) => a + b) /
+            children.length;
     return ContextStatistics(
       childEntityCount: children.length,
       averageChildConfidence: averageConfidence,
@@ -801,7 +847,9 @@ class FoundationServiceState {
   /// recently generated suggestions are what an engineer opening the
   /// workspace after a fresh analysis run wants to see first).
   List<AiSuggestion> aiSuggestionsForSource(String sourceId) {
-    final suggestions = aiSuggestions.where((suggestion) => suggestion.sourceId == sourceId).toList()
+    final suggestions = aiSuggestions
+        .where((suggestion) => suggestion.sourceId == sourceId)
+        .toList()
       ..sort((a, b) => b.createdTime.compareTo(a.createdTime));
     return suggestions;
   }
@@ -811,19 +859,25 @@ class FoundationServiceState {
   /// Inspector "Supporting Evidence") — never re-derived by re-running
   /// analysis.
   List<EngineeringEntity> supportingEntitiesFor(String suggestionId) {
-    final matches = aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    final matches =
+        aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
     if (matches.isEmpty) return const [];
     final ids = matches.first.supportingEntityIds.toSet();
-    return engineeringEntities.where((entity) => ids.contains(entity.id)).toList();
+    return engineeringEntities
+        .where((entity) => ids.contains(entity.id))
+        .toList();
   }
 
   /// [suggestionId]'s supporting Engineering Contexts, resolved from
   /// its own recorded `AiSuggestion.supportingContextIds`.
   List<EngineeringContext> supportingContextsFor(String suggestionId) {
-    final matches = aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
+    final matches =
+        aiSuggestions.where((suggestion) => suggestion.id == suggestionId);
     if (matches.isEmpty) return const [];
     final ids = matches.first.supportingContextIds.toSet();
-    return engineeringContexts.where((context) => ids.contains(context.id)).toList();
+    return engineeringContexts
+        .where((context) => ids.contains(context.id))
+        .toList();
   }
 
   FoundationServiceState copyWith({
@@ -914,6 +968,8 @@ class FoundationServiceState {
     bool clearCurrentAiModel = false,
     String? activeAiRequestSourceId,
     bool clearActiveAiRequestSourceId = false,
+    EngineeringInspectable? selectedEngineeringInspectable,
+    bool clearSelectedEngineeringInspectable = false,
   }) {
     return FoundationServiceState(
       phase: phase ?? this.phase,
@@ -921,32 +977,48 @@ class FoundationServiceState {
       foundationVersion: foundationVersion ?? this.foundationVersion,
       apiVersion: apiVersion ?? this.apiVersion,
       abiVersion: abiVersion ?? this.abiVersion,
-      repositoryStatus: clearRepositoryStatus ? null : (repositoryStatus ?? this.repositoryStatus),
+      repositoryStatus: clearRepositoryStatus
+          ? null
+          : (repositoryStatus ?? this.repositoryStatus),
       repositoryStatistics: clearRepositoryStatistics
           ? null
           : (repositoryStatistics ?? this.repositoryStatistics),
       objectList: clearObjectList ? null : (objectList ?? this.objectList),
-      relationshipList: clearRelationshipList ? null : (relationshipList ?? this.relationshipList),
+      relationshipList: clearRelationshipList
+          ? null
+          : (relationshipList ?? this.relationshipList),
       lastError: clearError ? null : (lastError ?? this.lastError),
-      selectedCategory: clearSelectedCategory ? null : (selectedCategory ?? this.selectedCategory),
-      selectedObject: clearSelectedObject ? null : (selectedObject ?? this.selectedObject),
+      selectedCategory: clearSelectedCategory
+          ? null
+          : (selectedCategory ?? this.selectedCategory),
+      selectedObject:
+          clearSelectedObject ? null : (selectedObject ?? this.selectedObject),
       selectedRelationship: clearSelectedRelationship
           ? null
           : (selectedRelationship ?? this.selectedRelationship),
       searchQuery: searchQuery ?? this.searchQuery,
-      searchResults: clearSearchResults ? null : (searchResults ?? this.searchResults),
-      knowledgeSession: clearKnowledgeSession ? null : (knowledgeSession ?? this.knowledgeSession),
+      searchResults:
+          clearSearchResults ? null : (searchResults ?? this.searchResults),
+      knowledgeSession: clearKnowledgeSession
+          ? null
+          : (knowledgeSession ?? this.knowledgeSession),
       candidates: candidates ?? this.candidates,
-      selectedCandidate: clearSelectedCandidate ? null : (selectedCandidate ?? this.selectedCandidate),
-      relationshipCandidates: relationshipCandidates ?? this.relationshipCandidates,
+      selectedCandidate: clearSelectedCandidate
+          ? null
+          : (selectedCandidate ?? this.selectedCandidate),
+      relationshipCandidates:
+          relationshipCandidates ?? this.relationshipCandidates,
       selectedRelationshipCandidate: clearSelectedRelationshipCandidate
           ? null
-          : (selectedRelationshipCandidate ?? this.selectedRelationshipCandidate),
+          : (selectedRelationshipCandidate ??
+              this.selectedRelationshipCandidate),
       sourceMaterials: sourceMaterials ?? this.sourceMaterials,
       selectedSourceMaterial: clearSelectedSourceMaterial
           ? null
           : (selectedSourceMaterial ?? this.selectedSourceMaterial),
-      openSourceDocument: clearOpenSourceDocument ? null : (openSourceDocument ?? this.openSourceDocument),
+      openSourceDocument: clearOpenSourceDocument
+          ? null
+          : (openSourceDocument ?? this.openSourceDocument),
       reviewDecisions: reviewDecisions ?? this.reviewDecisions,
       knowledgeStorageError: clearKnowledgeStorageError
           ? null
@@ -956,25 +1028,39 @@ class FoundationServiceState {
           ? null
           : (selectedEvidenceRegion ?? this.selectedEvidenceRegion),
       evidenceLinks: evidenceLinks ?? this.evidenceLinks,
-      selectedEvidenceLink: clearSelectedEvidenceLink ? null : (selectedEvidenceLink ?? this.selectedEvidenceLink),
+      selectedEvidenceLink: clearSelectedEvidenceLink
+          ? null
+          : (selectedEvidenceLink ?? this.selectedEvidenceLink),
       pageSelections: pageSelections ?? this.pageSelections,
       currentPage: clearCurrentPage ? null : (currentPage ?? this.currentPage),
       procedureSteps: procedureSteps ?? this.procedureSteps,
       specificationDetails: specificationDetails ?? this.specificationDetails,
-      openProcedure: clearOpenProcedure ? null : (openProcedure ?? this.openProcedure),
-      selectedProcedureStep: clearSelectedProcedureStep ? null : (selectedProcedureStep ?? this.selectedProcedureStep),
+      openProcedure:
+          clearOpenProcedure ? null : (openProcedure ?? this.openProcedure),
+      selectedProcedureStep: clearSelectedProcedureStep
+          ? null
+          : (selectedProcedureStep ?? this.selectedProcedureStep),
       commitReports: commitReports ?? this.commitReports,
       ocrPageResults: ocrPageResults ?? this.ocrPageResults,
       ocrProcessingStatus: ocrProcessingStatus ?? this.ocrProcessingStatus,
       ocrOverlayVisible: ocrOverlayVisible ?? this.ocrOverlayVisible,
-      ocrErrorMessage: clearOcrErrorMessage ? null : (ocrErrorMessage ?? this.ocrErrorMessage),
+      ocrErrorMessage: clearOcrErrorMessage
+          ? null
+          : (ocrErrorMessage ?? this.ocrErrorMessage),
       engineeringEntities: engineeringEntities ?? this.engineeringEntities,
-      selectedEntity: clearSelectedEntity ? null : (selectedEntity ?? this.selectedEntity),
+      selectedEntity:
+          clearSelectedEntity ? null : (selectedEntity ?? this.selectedEntity),
       engineeringContexts: engineeringContexts ?? this.engineeringContexts,
-      selectedContext: clearSelectedContext ? null : (selectedContext ?? this.selectedContext),
-      contextTypeFilter: clearContextTypeFilter ? null : (contextTypeFilter ?? this.contextTypeFilter),
+      selectedContext: clearSelectedContext
+          ? null
+          : (selectedContext ?? this.selectedContext),
+      contextTypeFilter: clearContextTypeFilter
+          ? null
+          : (contextTypeFilter ?? this.contextTypeFilter),
       aiSuggestions: aiSuggestions ?? this.aiSuggestions,
-      selectedAiSuggestion: clearSelectedAiSuggestion ? null : (selectedAiSuggestion ?? this.selectedAiSuggestion),
+      selectedAiSuggestion: clearSelectedAiSuggestion
+          ? null
+          : (selectedAiSuggestion ?? this.selectedAiSuggestion),
       currentAiProviderId: currentAiProviderId ?? this.currentAiProviderId,
       currentAiConversation: clearCurrentAiConversation
           ? null
@@ -986,11 +1072,18 @@ class FoundationServiceState {
       settingsSearchQuery: settingsSearchQuery ?? this.settingsSearchQuery,
       settingsModified: settingsModified ?? this.settingsModified,
       aiConnectionStatus: aiConnectionStatus ?? this.aiConnectionStatus,
-      aiConnectionMessage: clearAiConnectionMessage ? null : (aiConnectionMessage ?? this.aiConnectionMessage),
-      currentAiModel: clearCurrentAiModel ? null : (currentAiModel ?? this.currentAiModel),
+      aiConnectionMessage: clearAiConnectionMessage
+          ? null
+          : (aiConnectionMessage ?? this.aiConnectionMessage),
+      currentAiModel:
+          clearCurrentAiModel ? null : (currentAiModel ?? this.currentAiModel),
       activeAiRequestSourceId: clearActiveAiRequestSourceId
           ? null
           : (activeAiRequestSourceId ?? this.activeAiRequestSourceId),
+      selectedEngineeringInspectable: clearSelectedEngineeringInspectable
+          ? null
+          : (selectedEngineeringInspectable ??
+              this.selectedEngineeringInspectable),
     );
   }
 }

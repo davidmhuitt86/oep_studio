@@ -13,6 +13,12 @@ enum StudioDestination {
     Icons.auto_awesome_outlined,
     Icons.auto_awesome,
   ),
+  diagram(
+    'Diagram Studio',
+    '/diagram',
+    Icons.polyline_outlined,
+    Icons.polyline,
+  ),
   repository('Repository', '/repository', Icons.folder_outlined, Icons.folder),
   objects('Objects', '/objects', Icons.category_outlined, Icons.category),
   relationships(

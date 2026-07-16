@@ -36,6 +36,17 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Diagram Studio (WORK_PACKAGE_024, ENGINE-TASK-000108): the
+  # Engineering Engine's public API. Studio never imports anything under
+  # `package:engineering_engine/core/` — only this single root barrel.
+  engineering_engine:
+    path: ../oep_engine
+
+  # Symbol rendering for Diagram Studio's canvas (the Engine ships symbol
+  # *geometry* data only, per SDD-025/026 — no Flutter in `lib/core`).
+  # Same version the Engineering Engine Demonstration Host already uses.
+  flutter_svg: ^2.0.10+1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
