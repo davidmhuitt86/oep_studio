@@ -134,7 +134,10 @@ void main() {
     expect(find.text('No Repository Open'), findsOneWidget);
   });
 
-  testWidgets('Search Workspace shows No Repository Open when disconnected', (
+  testWidgets(
+      'Search Workspace stays usable (not blocked) with no repository open '
+      'and no diagram loaded yet — WORK_PACKAGE_025 unifies Foundation and '
+      'Engine search, so a repository is no longer a hard prerequisite', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1000, 700);
@@ -148,7 +151,11 @@ void main() {
     await tester.tap(find.text('Search').first);
     await settle(tester);
 
-    expect(find.text('No Repository Open'), findsOneWidget);
+    expect(find.text('Search across the whole platform'), findsOneWidget);
+    expect(
+      find.text('No repository open and no diagram loaded yet — search will still work once either is available.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Knowledge Studio opens with placeholder panels and no active session', (

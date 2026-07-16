@@ -8,6 +8,7 @@ import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
 import '../../diagram_studio/inspector/diagram_annotation_properties.dart';
 import '../../diagram_studio/inspector/diagram_layer_properties.dart';
+import '../../diagram_studio/inspector/engineering_evidence_link_properties.dart';
 import '../../diagram_studio/inspector/engineering_group_properties.dart';
 import '../../diagram_studio/inspector/engineering_node_properties.dart';
 import '../../diagram_studio/inspector/engineering_port_properties.dart';
@@ -211,6 +212,11 @@ class PropertyInspectorPanel extends ConsumerWidget {
         return WireOverrideProperties(
           relationshipId: inspectable.wireOverrideRelationshipId!,
           points: inspectable.wireOverridePoints!,
+        );
+      case EngineeringInspectableKind.evidenceLink:
+        return EngineeringEvidenceLinkProperties(
+          link: inspectable.evidenceLink!,
+          ownerId: inspectable.evidenceLinkOwnerId!,
         );
     }
   }

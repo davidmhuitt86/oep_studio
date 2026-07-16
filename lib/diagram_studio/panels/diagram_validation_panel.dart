@@ -2,16 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:engineering_engine/engineering_engine.dart';
 
 import '../../core/theme/studio_colors.dart';
+import '../../shared/widgets/validation_findings_list.dart';
 
 /// Validation panel — shows `ValidationReport` findings for the current
 /// graph, with a manual revalidate action (WORK_PACKAGE_024,
 /// ENGINE-TASK-000114). A Studio-styled port of the Demonstration
-/// Host's `ValidationPanel`.
+/// Host's `ValidationPanel`. As of WORK_PACKAGE_025 (ENGINE-TASK-000125),
+/// row rendering itself is shared with the global Validation page via
+/// `ValidationFindingsList`, so "Suggested Fixes" and Click-to-navigate
+/// behave identically in both places.
 class DiagramValidationPanel extends StatelessWidget {
-  const DiagramValidationPanel({required this.report, required this.onRevalidate, super.key});
+  const DiagramValidationPanel({
+    required this.report,
+    required this.onRevalidate,
+    this.onFindingTap,
+    super.key,
+  });
 
   final ValidationReport? report;
   final VoidCallback onRevalidate;
+  final void Function(ValidationFinding finding)? onFindingTap;
 
   @override
   Widget build(BuildContext context) {
@@ -37,31 +47,7 @@ class DiagramValidationPanel extends StatelessWidget {
             ],
           ),
         ),
-        Expanded(
-          child: findings.isEmpty
-              ? const Center(
-                  child: Icon(Icons.check_circle_outline, color: StudioColors.success, size: 28),
-                )
-              : ListView.builder(
-                  itemCount: findings.length,
-                  itemBuilder: (context, index) {
-                    final finding = findings[index];
-                    final color = switch (finding.severity) {
-                      ValidationSeverity.error => StudioColors.error,
-                      ValidationSeverity.warning => StudioColors.warning,
-                      ValidationSeverity.info => StudioColors.info,
-                    };
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(Icons.circle, size: 8, color: color),
-                      title: Text(
-                        finding.message,
-                        style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12),
-                      ),
-                    );
-                  },
-                ),
-        ),
+        Expanded(child: ValidationFindingsList(report: report, onFindingTap: onFindingTap)),
       ],
     );
   }

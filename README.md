@@ -137,6 +137,27 @@ Studio-owned-persistence-plus-ambient-Foundation-repository precedent —
 see `docs/DIAGRAM_STUDIO_INTEGRATION.md`, `STUDIO_ENGINE_HOST.md`,
 `WORKSPACE_INTEGRATION.md`, `PROPERTY_INSPECTOR_INTEGRATION.md`, and
 `REPOSITORY_INTEGRATION.md`.
+As of Work Package 025, Knowledge Studio and Diagram Studio are
+synchronized views of one **Engineering Project** rather than two
+independent workspaces: the Engineering Engine instance was hoisted out
+of Diagram Studio's own page into a shared, app-lifetime service, so
+selection, validation, and recent history stay live and consistent no
+matter which workspace is active. A new **Project Explorer** workspace
+(`/project`, second item in the Navigation Rail) gives one tree view
+across Knowledge, Diagrams, Evidence, Components, Validation, and AI
+Sessions. The Search Workspace now searches both Foundation and the
+Engineering Engine and no longer requires an open repository. Evidence
+Links gained their own Property Inspector mode with a "Go to Evidence"
+action navigating to the Knowledge Session material/region they
+reference. The global Validation page is real (previously a stub),
+sharing its findings list and Suggested Fixes with Diagram Studio's own
+validation panel, with click-to-navigate and an "Ask AI" entry point
+that adds validation and evidence context to the same AI request
+pipeline Diagram Studio already used. No new engineering editing
+features, repository features, Marketplace, or Simulation were added —
+see `docs/ENGINEERING_PROJECT.md`, `WORKSPACE_SYNCHRONIZATION.md`,
+`UNIFIED_SEARCH.md`, `PROJECT_EXPLORER.md`, and
+`WORKFLOW_ARCHITECTURE.md`.
 
 `docs/IMPLEMENTATION_STATUS.md` has the full picture of what exists
 today and what is still a placeholder (object/relationship *update*
@@ -210,5 +231,10 @@ Studio Design Documents live under `docs/`:
 * `WORKSPACE_INTEGRATION.md` — routing, toolbars, panels, settings, workspace persistence
 * `PROPERTY_INSPECTOR_INTEGRATION.md` — the `EngineeringInspectable` bridge and the seven new inspector modes
 * `REPOSITORY_INTEGRATION.md` — `DiagramDocument`, the Foundation schema gap, and how it's resolved
+* `ENGINEERING_PROJECT.md` — what an Engineering Project is and why it lives in Studio
+* `WORKSPACE_SYNCHRONIZATION.md` — the shared Engine service, and what does/doesn't stay synchronized across workspaces
+* `UNIFIED_SEARCH.md` — `UnifiedSearchResult`, merging Foundation and Engine search without touching either source type
+* `PROJECT_EXPLORER.md` — the `/project` workspace's tree structure and its "New Project" flow
+* `WORKFLOW_ARCHITECTURE.md` — Evidence/Validation/AI integration, and the composed cross-workspace workflow test
 * `UI_MOCKUPS.md` — authoritative visual references
 * `IMPLEMENTATION_STATUS.md` — current implementation status

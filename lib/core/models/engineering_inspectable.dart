@@ -8,7 +8,14 @@ enum EngineeringInspectableKind {
   port,
   layer,
   annotation,
-  wireOverride
+  wireOverride,
+
+  /// WORK_PACKAGE_025, ENGINE-TASK-000122 — an `EvidenceLink` attached to
+  /// a node or relationship. Previously only shown nested/summarized
+  /// inside node/relationship properties ("N linked"); this gives it its
+  /// own inspector mode so evidence navigation (ENGINE-TASK-000123) has
+  /// somewhere to land.
+  evidenceLink,
 }
 
 /// A single Engineering Graph/Diagram Layout object currently selected in
@@ -42,6 +49,13 @@ class EngineeringInspectable {
   final String? wireOverrideRelationshipId;
   final List<Point2D>? wireOverridePoints;
 
+  final EvidenceLink? evidenceLink;
+
+  /// The id of the node or relationship [evidenceLink] is attached to —
+  /// an `EvidenceLink` has no owner reference of its own (SDD-024: it's
+  /// carried in the owning node/relationship's own `evidenceLinks` list).
+  final String? evidenceLinkOwnerId;
+
   const EngineeringInspectable._({
     required this.kind,
     this.node,
@@ -53,6 +67,8 @@ class EngineeringInspectable {
     this.annotation,
     this.wireOverrideRelationshipId,
     this.wireOverridePoints,
+    this.evidenceLink,
+    this.evidenceLinkOwnerId,
   });
 
   factory EngineeringInspectable.node(EngineeringNode node) =>
@@ -90,5 +106,12 @@ class EngineeringInspectable {
         kind: EngineeringInspectableKind.wireOverride,
         wireOverrideRelationshipId: relationshipId,
         wireOverridePoints: points,
+      );
+
+  factory EngineeringInspectable.evidenceLink(String ownerId, EvidenceLink link) =>
+      EngineeringInspectable._(
+        kind: EngineeringInspectableKind.evidenceLink,
+        evidenceLink: link,
+        evidenceLinkOwnerId: ownerId,
       );
 }

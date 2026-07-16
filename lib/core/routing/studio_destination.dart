@@ -7,6 +7,12 @@ import 'package:flutter/material.dart';
 /// rather than duplicating it.
 enum StudioDestination {
   dashboard('Dashboard', '/', Icons.dashboard_outlined, Icons.dashboard),
+  projectExplorer(
+    'Project Explorer',
+    '/project',
+    Icons.workspaces_outlined,
+    Icons.workspaces,
+  ),
   knowledge(
     'Knowledge Studio',
     '/knowledge',

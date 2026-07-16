@@ -41,27 +41,30 @@ class DiagramAnnotationPanel extends StatelessWidget {
       itemBuilder: (context, index) {
         final annotation = annotations[index];
         final isSelected = selectedAnnotationIds.contains(annotation.id);
-        return ListTile(
-          dense: true,
-          selected: isSelected,
-          selectedTileColor: StudioColors.selection.withValues(alpha: 0.15),
-          title: Text(
-            annotation.text.isEmpty ? '(empty)' : annotation.text,
-            style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Text(
-            annotation.type.name,
-            style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
-          ),
-          onTap: () => onSelectAnnotation(annotation.id),
-          onLongPress: () => onEditAnnotation(annotation.id),
-          trailing: IconButton(
-            iconSize: 16,
-            tooltip: 'Delete annotation',
-            icon: const Icon(Icons.delete_outline, color: StudioColors.error),
-            onPressed: () => onDeleteAnnotation(annotation.id),
+        return Material(
+          color: Colors.transparent,
+          child: ListTile(
+            dense: true,
+            selected: isSelected,
+            selectedTileColor: StudioColors.selection.withValues(alpha: 0.15),
+            title: Text(
+              annotation.text.isEmpty ? '(empty)' : annotation.text,
+              style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              annotation.type.name,
+              style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+            ),
+            onTap: () => onSelectAnnotation(annotation.id),
+            onLongPress: () => onEditAnnotation(annotation.id),
+            trailing: IconButton(
+              iconSize: 16,
+              tooltip: 'Delete annotation',
+              icon: const Icon(Icons.delete_outline, color: StudioColors.error),
+              onPressed: () => onDeleteAnnotation(annotation.id),
+            ),
           ),
         );
       },

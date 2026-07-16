@@ -4373,3 +4373,94 @@ the Engine.
   own scope ("builds its own local prompt-context assembler... calls
   the existing AiProviderRegistry").
 
+## Work Package 025 — Unified Engineering Workspace
+
+Status: Implemented
+
+Pure workflow integration over WORK_PACKAGE_024's foundation — no new
+engineering/editing features, no new repository features, no
+Marketplace, no Simulation. Every ownership boundary from the Platform
+Constitution (Foundation: Repository/Knowledge/Evidence/Provenance;
+Engine: Graph/Layout/ViewState/Commands/Search/Validation/Navigation;
+Studio: orchestration/UI/persistence) stays exactly as it was.
+
+### What Exists
+
+* `lib/core/models/engineering_project.dart` +
+  `lib/core/services/engineering_project_storage.dart` — the
+  `EngineeringProject` reference-data model and its file-per-record
+  persistence, mirroring `KnowledgeSessionStorage`'s own convention.
+  See `docs/ENGINEERING_PROJECT.md`.
+* `lib/core/services/engineering_project_service.dart` — the
+  `EngineeringProjectNotifier`/`engineeringProjectServiceProvider` that
+  now owns the `EngineHost`/`DiagramDocument`/editing session/
+  selection/validation report, hoisted out of `DiagramStudioPage`'s
+  previously-private `State` so every route can reach the same live
+  Engine instance. See `docs/WORKSPACE_SYNCHRONIZATION.md`.
+* `lib/shared/navigation/unified_navigation.dart` +
+  `lib/shared/navigation/evidence_navigation.dart` — cross-workspace
+  navigation helpers (`goToKnowledgeObject`, `goToDiagramElement`,
+  `goToValidationResult`, `goToSearchResult`, `goToEvidence`), each
+  recording a shared, capped `RecentHistoryEntry` list.
+* `lib/core/models/unified_search_result.dart` +
+  `lib/features/search/unified_search_service.dart` — merges
+  Foundation and Engineering Engine search into one result list without
+  touching either source `SearchResult` type; `search_page.dart`
+  rewritten to use it, and to no longer require an open repository.
+  See `docs/UNIFIED_SEARCH.md`.
+* `EngineeringInspectableKind.evidenceLink` (`lib/core/models/
+  engineering_inspectable.dart`) + `lib/diagram_studio/inspector/
+  engineering_evidence_link_properties.dart` — an eighth Property
+  Inspector mode, additive to the existing 12-slot tuple switch, with a
+  "Go to Evidence" action. `engineering_node_properties.dart`/
+  `engineering_relationship_properties.dart` rewritten so each evidence
+  link is its own tappable row rather than a bare count.
+* `lib/shared/widgets/validation_findings_list.dart` +
+  `lib/features/validation/suggested_fixes.dart` — shared finding-row
+  rendering and a presentation-only Suggested Fix lookup, used by both
+  the rewritten `lib/features/validation/validation_page.dart`
+  (previously a 16-line stub) and Diagram Studio's own
+  `diagram_validation_panel.dart`.
+* `lib/core/services/unified_ai_context_service.dart` — appends
+  validation findings and resolved evidence to whichever existing
+  prompt assembler already applies, before handing the request to the
+  existing `AiProviderRegistry` unchanged. Backs `ValidationPage`'s new
+  "Ask AI" action.
+* `lib/features/project_explorer/project_explorer_page.dart` +
+  `StudioDestination.projectExplorer` — a new `/project` workspace, a
+  flat `ExpansionTile` tree (Knowledge/Diagrams/Evidence/Components/
+  Validation/AI Sessions/disabled Simulation placeholder), second item
+  in the Navigation Rail. See `docs/PROJECT_EXPLORER.md`.
+* `test/workflow/unified_workflow_test.dart` — a composition test
+  proving the above actually work together end to end, not just in
+  isolation. See `docs/WORKFLOW_ARCHITECTURE.md`.
+
+### What Changed in `oep_engine`
+
+Nothing. Every change this work package made is Studio-side; the
+Engineering Engine's public API was consumed exactly as WORK_PACKAGE_024
+left it. New architectural decisions this work package's Studio-side
+code embodies (the EngineHost hoist, `EngineeringProject`'s shape,
+`UnifiedSearchResult`, the evidence `sourceReference`/`locator`
+convention) are still recorded as ADRs in `oep_engine/docs/
+ARCHITECTURE_DECISIONS.md` (ADR-024 through ADR-027) — the platform's
+one existing formal decision log, since `oep_studio` has none of its
+own and this work package did not start one.
+
+### What Is Explicitly Not Implemented
+
+* No UI to create or attach an `EvidenceLink` from Diagram Studio —
+  attaching evidence is a graph mutation, and this work package
+  excludes new engineering editing features. Only navigation/
+  resolution of already-existing links is built.
+* Project Explorer's Diagrams branch shows exactly one leaf (the
+  current document) — Diagram Studio has no multi-document concept to
+  enumerate today.
+* "New Project" only creates and activates an `EngineeringProject`
+  record; it does not create a Knowledge Session, open a repository, or
+  create a diagram document. Wiring those together into one guided flow
+  is a reasonable future work item, not something this work package's
+  text required.
+* No Simulation implementation — Project Explorer's Simulation branch
+  is a disabled placeholder, matching the work package's explicit
+  exclusion.

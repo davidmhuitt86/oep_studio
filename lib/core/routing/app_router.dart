@@ -5,6 +5,7 @@ import '../../features/dashboard/dashboard_page.dart';
 import '../../features/graph/graph_page.dart';
 import '../../features/objects/objects_page.dart';
 import '../../features/packages/packages_page.dart';
+import '../../features/project_explorer/project_explorer_page.dart';
 import '../../features/relationships/relationships_page.dart';
 import '../../features/repository/repository_page.dart';
 import '../../features/search/search_page.dart';
@@ -34,6 +35,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: StudioDestination.dashboard.path,
           builder: (context, state) => const DashboardPage(),
+        ),
+        GoRoute(
+          path: StudioDestination.projectExplorer.path,
+          builder: (context, state) => const ProjectExplorerPage(),
         ),
         GoRoute(
           path: StudioDestination.knowledge.path,

@@ -7,12 +7,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:engineering_engine/engineering_engine.dart';
 
 import '../../core/models/engineering_inspectable.dart';
+import '../../core/services/engineering_project_service.dart';
 import '../../core/services/foundation_runtime_service.dart';
 import '../../core/theme/studio_colors.dart';
 import '../../knowledge/widgets/knowledge_panel.dart';
+import '../../shared/navigation/unified_navigation.dart';
 import '../commands/studio_command_actions.dart';
 import '../host/diagram_document.dart';
-import '../host/engine_host.dart';
 import '../panels/diagram_annotation_panel.dart';
 import '../panels/diagram_explorer_panel.dart';
 import '../panels/diagram_layer_panel.dart';
@@ -21,7 +22,6 @@ import '../panels/diagram_search_panel.dart';
 import '../panels/diagram_validation_panel.dart';
 import '../persistence/diagram_workspace_state.dart';
 import '../persistence/workspace_state_storage.dart';
-import '../settings/diagram_studio_settings_provider.dart';
 import '../toolbars/diagram_toolbars.dart';
 
 const double _nodeSize = 100; // DiagramLayout.nodeSize, mirrored for hit-testing.
@@ -31,13 +31,19 @@ const _diagramFileTypeGroup = XTypeGroup(label: 'Diagram', extensions: ['json'])
 /// The Diagram Studio workspace (WORK_PACKAGE_024, ENGINE-TASK-000108) —
 /// the production diagram-editing experience, registered as a Studio
 /// workspace exactly like Knowledge Studio (same Navigation Rail,
-/// Connection Manager, theme, window layout via `StudioShell`). Owns an
-/// Engine instance and an editing session; every editing/selection/
-/// routing/search/validation behavior is a direct call into the
-/// Engineering Engine's public API — this page only orchestrates
-/// Studio-side chrome (toolbars, panels, document open/save, Property
-/// Inspector bridging), per WP024's "Studio orchestrates, Engine
-/// executes."
+/// Connection Manager, theme, window layout via `StudioShell`).
+///
+/// As of WORK_PACKAGE_025 (ENGINE-TASK-000118), this page no longer
+/// *owns* the Engine instance — it *reads* it from the shared
+/// `engineeringProjectServiceProvider`, which outlives this page's own
+/// mount/unmount so Validation, Search, and Project Explorer can reach
+/// the same live engine/session/selection/validation report. Every
+/// editing/selection/routing/search/validation call is still a direct
+/// call into the Engineering Engine's public API — this page only
+/// orchestrates Studio-side chrome (toolbars, panels, Property
+/// Inspector bridging) plus its own view-local gesture state (drag
+/// deltas, box-select rect, panel widths), per "Studio orchestrates,
+/// Engine executes."
 class DiagramStudioPage extends ConsumerStatefulWidget {
   const DiagramStudioPage({super.key});
 
@@ -46,15 +52,9 @@ class DiagramStudioPage extends ConsumerStatefulWidget {
 }
 
 class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
-  EngineHost? _engineHost;
-  final DiagramDocument _document = DiagramDocument();
   StudioCommandActions? _commands;
   final TransformationController _transformController = TransformationController();
 
-  EditingSession? _session;
-  ValidationReport? _report;
-  GraphSelection _selection = GraphSelection.empty;
-  ViewState _viewState = ViewState.initial;
   bool _loading = true;
   int _spawnCounter = 0;
 
@@ -83,6 +83,15 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
   double _explorerWidth = 220;
   double _sidePanelsWidth = 300;
 
+  /// A build-time snapshot of the shared provider's document
+  /// path/ViewState, refreshed on every `build()` — `dispose()` uses
+  /// these instead of the `ref.read`-based getters above, since Riverpod
+  /// marks a `ConsumerStatefulElement` disposed before delegating to
+  /// this widget's own `dispose()`, making `ref.read` unusable there
+  /// (same constraint documented on `_foundationNotifier`).
+  String? _cachedDocumentPath;
+  ViewState _cachedViewState = ViewState.initial;
+
   String? _draggingAnnotationId;
   Point2D? _annotationDragStartPosition;
   Point2D _annotationDragTotalDelta = const Point2D(0, 0);
@@ -95,17 +104,35 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
   List<Point2D>? _wireDragBasePoints;
   Point2D _wireDragTotalDelta = const Point2D(0, 0);
 
-  StreamSubscription<EditingSession>? _sessionSub;
-  StreamSubscription<GraphSelection>? _selectionSub;
-  StreamSubscription<ViewState>? _viewStateSub;
-
   /// Captured once (in [initState]) rather than via `ref.read` inside
   /// [dispose] — Riverpod's `ConsumerStatefulElement` marks itself
   /// disposed before delegating to the framework's own `dispose()`
   /// call, so `ref.read`/`ref.watch` throw `StateError` if used there.
   late final FoundationRuntimeNotifier _foundationNotifier;
 
-  EngineeringEngine get engine => _engineHost!.engine;
+  /// This page's own listener on the shared engine's selection stream
+  /// (a broadcast stream — `EngineeringProjectNotifier` has its own,
+  /// independent listener on the same stream, see
+  /// `engineering_project_service.dart`). Exists only to trigger two
+  /// page-local reactions that aren't part of the shared project state
+  /// itself: re-seeding "Edit Route" mode's working points, and pushing
+  /// the newly-selected item into the shared Property Inspector
+  /// (ENGINE-TASK-000110/000122).
+  StreamSubscription<GraphSelection>? _selectionSub;
+
+  /// The current snapshot of the shared, longer-lived Engineering
+  /// Project state (WORK_PACKAGE_025) — always read fresh via
+  /// `ref.read` so every getter below reflects the live engine even
+  /// though this page no longer owns it. `build()` separately calls
+  /// `ref.watch` once so the page rebuilds when this state changes.
+  EngineeringProjectState get _projectState => ref.read(engineeringProjectServiceProvider);
+
+  EngineeringEngine get engine => _projectState.engine!;
+  DiagramDocument get _document => _projectState.document;
+  EditingSession? get _session => _projectState.session;
+  ValidationReport? get _report => _projectState.validationReport;
+  GraphSelection get _selection => _projectState.selection;
+  ViewState get _viewState => _projectState.viewState;
 
   @override
   void initState() {
@@ -115,9 +142,10 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
   }
 
   Future<void> _bootstrap() async {
-    final host = await EngineHost.create();
-    _engineHost = host;
-    _commands = StudioCommandActions(host.engine);
+    final notifier = ref.read(engineeringProjectServiceProvider.notifier);
+    final isFirstStart = ref.read(engineeringProjectServiceProvider).engineHost == null;
+    await notifier.ensureEngineStarted();
+    _commands = StudioCommandActions(engine);
 
     final workspace = await WorkspaceStateStorage.load();
     _showLayerPanel = workspace.showLayerPanel;
@@ -125,51 +153,35 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
     _explorerWidth = workspace.explorerWidth;
     _sidePanelsWidth = workspace.sidePanelsWidth;
 
-    var restored = false;
-    final lastPath = workspace.lastDocumentPath;
-    if (lastPath != null) {
-      try {
-        final opened = await _document.open(lastPath);
-        host.engine.editing.resetSession(
-          EditingSession.initial(opened.graph).copyWith(layout: opened.layout),
-        );
-        restored = true;
-      } catch (_) {
-        // The last-open file may have moved or been deleted — fall back
-        // to a blank document rather than surfacing an error on launch.
+    // Only restore the last-open document on the engine's very first
+    // start in this Studio session — on a later revisit (navigated
+    // away and back) the engine is already running with whatever
+    // document the user was last editing, and re-opening the
+    // last-persisted path here would discard that live state.
+    if (isFirstStart) {
+      final lastPath = workspace.lastDocumentPath;
+      if (lastPath != null) {
+        try {
+          await notifier.openDocument(lastPath);
+          if (workspace.viewState != null) _restoreViewState(workspace.viewState!);
+        } catch (_) {
+          // The last-open file may have moved or been deleted — fall
+          // back to the blank document `ensureEngineStarted` already
+          // began rather than surfacing an error on launch.
+        }
       }
     }
-    if (!restored) {
-      host.engine.beginEditingSession(
-        EngineeringGraph.empty(host.engine.graph.generateId('graph')),
-      );
-      _applyNewDocumentViewStateDefaults();
-    }
 
-    _sessionSub = host.engine.editing.sessionChanges.listen((s) {
-      setState(() {
-        _session = s;
-        _report = host.engine.validate(s.graph);
-      });
-    });
-    _selectionSub = host.engine.registry.selection.changes.listen((s) {
-      setState(() => _selection = s);
+    _selectionSub = engine.registry.selection.changes.listen((s) {
       if (_wireEditModeActive) _reseedWireEditPoints();
       _syncPropertyInspectorSelection();
     });
-    _viewStateSub = host.engine.registry.viewState.changes.listen((v) {
-      setState(() => _viewState = v);
-      _applyViewStateToTransform();
-    });
+    // On a revisit, whatever the Property Inspector was last showing
+    // (from another workspace visited in between) may not match this
+    // page's own already-live selection — sync it once immediately.
+    _syncPropertyInspectorSelection();
 
-    setState(() {
-      _session = host.engine.editing.session;
-      _report = host.engine.validate(_session!.graph);
-      _viewState = host.engine.registry.viewState.current;
-      _loading = false;
-    });
-
-    if (restored && workspace.viewState != null) _restoreViewState(workspace.viewState!);
+    setState(() => _loading = false);
   }
 
   void _restoreViewState(ViewState saved) {
@@ -182,26 +194,43 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
       ..setTheme(saved.theme);
   }
 
-  Future<void> _persistWorkspaceState() {
+  /// [useCached] must be `true` from [dispose] — the ternaries below
+  /// only evaluate one branch, so this is the one safe way to avoid the
+  /// `_document`/`_viewState` getters (which need `ref.read`) ever
+  /// running there. A nullable "override" parameter defaulting via `??`
+  /// would NOT be safe here: a brand-new unsaved document's cached path
+  /// is legitimately `null`, which `??` cannot distinguish from "no
+  /// override provided."
+  Future<void> _persistWorkspaceState({bool useCached = false}) {
+    final documentPath = useCached ? _cachedDocumentPath : _document.path;
+    final viewState = useCached ? _cachedViewState : _viewState;
     return WorkspaceStateStorage.save(DiagramWorkspaceState(
-      lastDocumentPath: _document.path,
+      lastDocumentPath: documentPath,
       showLayerPanel: _showLayerPanel,
       showSearchPanel: _showSearchPanel,
       explorerWidth: _explorerWidth,
       sidePanelsWidth: _sidePanelsWidth,
-      viewState: _viewState,
+      viewState: viewState,
     ));
   }
 
   @override
   void dispose() {
-    unawaited(_persistWorkspaceState());
-    _sessionSub?.cancel();
+    // The Engine now outlives this page (WORK_PACKAGE_025,
+    // ENGINE-TASK-000118) — `engineeringProjectServiceProvider` itself
+    // disposes the engine, only when the provider is torn down, not
+    // when this page unmounts. Uses the cached (not `ref.read`-based)
+    // document path/ViewState — see [_persistWorkspaceState]'s doc
+    // comment for why.
+    unawaited(_persistWorkspaceState(useCached: true));
     _selectionSub?.cancel();
-    _viewStateSub?.cancel();
-    final host = _engineHost;
-    if (host != null) unawaited(host.dispose());
-    _foundationNotifier.clearEngineeringInspectableSelection();
+    // Deferred: Riverpod forbids mutating a provider's state while the
+    // widget tree is still finalizing, which this `dispose()` can run
+    // during (e.g. a GoRouter navigation away from this page). The
+    // clear itself is safe to run a microtask later — the provider
+    // this notifier backs outlives this one page.
+    final foundationNotifier = _foundationNotifier;
+    scheduleMicrotask(foundationNotifier.clearEngineeringInspectableSelection);
     super.dispose();
   }
 
@@ -249,31 +278,17 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
     _foundationNotifier.selectEngineeringInspectable(EngineeringInspectable.layer(layer));
   }
 
-  /// Applies the Diagram Studio Settings page's new-document defaults
-  /// (grid/snap/guides visibility) to the just-created blank session's
-  /// ViewState. Never applied when *opening* an existing document —
-  /// only a brand-new one has no ViewState of its own yet.
-  void _applyNewDocumentViewStateDefaults() {
-    final settings = ref.read(diagramStudioSettingsProvider);
-    final service = _viewStateService;
-    if (service.current.grid.visible != settings.defaultGridVisible) service.toggleGrid();
-    if (service.current.grid.snapEnabled != settings.defaultSnapEnabled) service.toggleSnap();
-    service.setGuidesVisible(settings.defaultGuidesVisible);
-  }
-
   // --- Document (Open/Save/Save As/Close/Dirty State — ENGINE-TASK-000111)
 
   bool get _isDirty => _document.isDirty;
 
   void _markDirty() {
-    if (!_document.isDirty) setState(() => _document.markDirty());
+    ref.read(engineeringProjectServiceProvider.notifier).markDocumentDirty();
   }
 
   Future<void> _newDocument() async {
     if (_isDirty && !await _confirmDiscardChanges()) return;
-    _document.close();
-    engine.beginEditingSession(EngineeringGraph.empty(engine.graph.generateId('graph')));
-    _applyNewDocumentViewStateDefaults();
+    await ref.read(engineeringProjectServiceProvider.notifier).newDocument();
     unawaited(_persistWorkspaceState());
     setState(() {});
   }
@@ -297,8 +312,7 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
     if (_isDirty && !await _confirmDiscardChanges()) return;
     final file = await openFile(acceptedTypeGroups: [_diagramFileTypeGroup]);
     if (file == null) return;
-    final opened = await _document.open(file.path);
-    engine.editing.resetSession(EditingSession.initial(opened.graph).copyWith(layout: opened.layout));
+    await ref.read(engineeringProjectServiceProvider.notifier).openDocument(file.path);
     unawaited(_persistWorkspaceState());
     setState(() {});
   }
@@ -308,7 +322,7 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
       await _saveAsDocument();
       return;
     }
-    await _document.save(_session!.graph, _session!.layout);
+    await ref.read(engineeringProjectServiceProvider.notifier).saveDocument();
     unawaited(_persistWorkspaceState());
     setState(() {});
   }
@@ -316,16 +330,14 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
   Future<void> _saveAsDocument() async {
     final location = await getSaveLocation(acceptedTypeGroups: [_diagramFileTypeGroup], suggestedName: 'diagram.json');
     if (location == null) return;
-    await _document.saveAs(location.path, _session!.graph, _session!.layout);
+    await ref.read(engineeringProjectServiceProvider.notifier).saveDocumentAs(location.path);
     unawaited(_persistWorkspaceState());
     setState(() {});
   }
 
   Future<void> _closeDocument() async {
     if (_isDirty && !await _confirmDiscardChanges()) return;
-    _document.close();
-    engine.beginEditingSession(EngineeringGraph.empty(engine.graph.generateId('graph')));
-    _applyNewDocumentViewStateDefaults();
+    await ref.read(engineeringProjectServiceProvider.notifier).closeDocument();
     unawaited(_persistWorkspaceState());
     setState(() {});
   }
@@ -333,12 +345,6 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
   // --- ViewState / viewport ---------------------------------------------
 
   ViewStateService get _viewStateService => engine.registry.viewState as ViewStateService;
-
-  void _applyViewStateToTransform() {
-    _transformController.value = Matrix4.identity()
-      ..translateByDouble(_viewState.pan.dx, _viewState.pan.dy, 0, 1)
-      ..scaleByDouble(_viewState.zoom, _viewState.zoom, _viewState.zoom, 1);
-  }
 
   void _syncViewStateFromTransform() {
     final matrix = _transformController.value;
@@ -1098,6 +1104,15 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Establishes the rebuild subscription — the getters above use
+    // `ref.read` (safe from any callback), but `build()` itself needs
+    // `ref.watch` so this page rebuilds whenever the shared engine's
+    // session/selection/viewState/validation report changes, including
+    // changes made from *other* routes now that the engine is shared.
+    final watchedProjectState = ref.watch(engineeringProjectServiceProvider);
+    _cachedDocumentPath = watchedProjectState.document.path;
+    _cachedViewState = watchedProjectState.viewState;
+
     if (_loading || _session == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1314,7 +1329,9 @@ class _DiagramStudioPageState extends ConsumerState<DiagramStudioPage> {
                             icon: Icons.fact_check_outlined,
                             child: DiagramValidationPanel(
                               report: _report,
-                              onRevalidate: () => setState(() => _report = engine.validate(currentGraph)),
+                              onRevalidate: () =>
+                                  ref.read(engineeringProjectServiceProvider.notifier).revalidate(),
+                              onFindingTap: (finding) => goToValidationResult(context, ref, finding),
                             ),
                           ),
                         ),

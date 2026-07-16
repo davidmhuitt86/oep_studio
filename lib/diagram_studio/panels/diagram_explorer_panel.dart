@@ -39,19 +39,22 @@ class DiagramExplorerPanel extends StatelessWidget {
       itemBuilder: (context, index) {
         final node = nodes[index];
         final isSelected = selection.containsNode(node.id);
-        return ListTile(
-          dense: true,
-          selected: isSelected,
-          selectedTileColor: StudioColors.selection.withValues(alpha: 0.15),
-          title: Text(
-            node.displayName,
-            style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
+        return Material(
+          color: Colors.transparent,
+          child: ListTile(
+            dense: true,
+            selected: isSelected,
+            selectedTileColor: StudioColors.selection.withValues(alpha: 0.15),
+            title: Text(
+              node.displayName,
+              style: const TextStyle(color: StudioColors.textPrimary, fontSize: 12.5),
+            ),
+            subtitle: Text(
+              node.category.name,
+              style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
+            ),
+            onTap: () => onSelectNode(node.id),
           ),
-          subtitle: Text(
-            node.category.name,
-            style: const TextStyle(color: StudioColors.textSecondary, fontSize: 11),
-          ),
-          onTap: () => onSelectNode(node.id),
         );
       },
     );
