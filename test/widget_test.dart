@@ -59,6 +59,17 @@ void main() {
     expect(find.text('Welcome to OEP Studio'), findsOneWidget);
     expect(find.text('Open Repository'), findsWidgets);
 
+    // WP-PLAT-020 added a 13th Navigation Rail destination (Engineering
+    // Acquisition), pushing 'Settings' — the last rail entry — below the
+    // rail's realized/cache viewport at this test's fixed window size.
+    // The rail is a `ListView` specifically so it can scroll once there
+    // are enough destinations; scroll it into view rather than assuming
+    // every destination is always on-screen. 'Packages' identifies the
+    // rail's own `Scrollable` unambiguously (unlike 'Dashboard', which
+    // also labels the page content itself).
+    final navRailScrollable = find.ancestor(of: find.text('Packages'), matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(find.text('Settings'), 100, scrollable: navRailScrollable);
+    await settle(tester);
     await tester.tap(find.text('Settings').first);
     await settle(tester);
 

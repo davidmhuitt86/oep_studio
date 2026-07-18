@@ -25,6 +25,12 @@ enum StudioDestination {
     Icons.polyline_outlined,
     Icons.polyline,
   ),
+  acquisition(
+    'Engineering Acquisition',
+    '/acquisition',
+    Icons.cloud_download_outlined,
+    Icons.cloud_download,
+  ),
   repository('Repository', '/repository', Icons.folder_outlined, Icons.folder),
   objects('Objects', '/objects', Icons.category_outlined, Icons.category),
   relationships(

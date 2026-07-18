@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../core/routing/studio_destination.dart';
+import '../../core/routing/studio_registry.dart';
 import '../../core/theme/studio_colors.dart';
 
 /// The permanent left Navigation Rail (SDD-003 Primary Navigation).
 ///
 /// Only one destination is ever selected — selecting one changes the
 /// active Primary Workspace (SDD-004); it never opens a floating window.
+/// Renders [StudioRegistry.defaultRegistry]'s destinations (WP-STUDIO-021)
+/// rather than `StudioDestination.values` directly — same order, same
+/// 13 entries, now sourced from the one place routing/settings/search
+/// also read from.
 class StudioNavRail extends StatelessWidget {
   const StudioNavRail({
     required this.selected,
@@ -33,7 +38,7 @@ class StudioNavRail extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                for (final destination in StudioDestination.values)
+                for (final destination in StudioRegistry.defaultRegistry.destinations)
                   _NavRailItem(
                     destination: destination,
                     selected: destination == selected,

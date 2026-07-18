@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:engineering_engine/engineering_engine.dart';
 
+import '../../acquisition/services/acquisition_runtime_service.dart';
 import '../../core/models/recent_history_entry.dart';
 import '../../core/models/unified_search_result.dart';
 import '../../core/routing/studio_destination.dart';
@@ -134,6 +135,19 @@ void goToValidationResult(BuildContext context, WidgetRef ref, ValidationFinding
   _record(ref, id: finding.code, label: finding.message, destination: StudioDestination.validation);
 }
 
+/// Navigates to an EAM Source, Job, or Vault entry (WP-PLAT-020) — EAM
+/// has no cross-references analogous to a diagram node's
+/// `repositoryObjectId`, so unlike [goToKnowledgeObject] this is just a
+/// destination switch plus, for a Job, selecting it (driving the
+/// Pipeline panel), mirroring how [goToDiagramElement] selects a node.
+void goToAcquisitionResult(BuildContext context, WidgetRef ref, UnifiedSearchResult result) {
+  if (result.category == UnifiedSearchResultCategory.acquisitionJob) {
+    ref.read(acquisitionRuntimeServiceProvider.notifier).selectJob(result.id);
+  }
+  context.go(StudioDestination.acquisition.path);
+  _record(ref, id: result.id, label: result.label, destination: StudioDestination.acquisition);
+}
+
 /// Navigates to a unified search result (ENGINE-TASK-000120/000121) —
 /// switches on [UnifiedSearchResult.category] rather than either
 /// wrapped, same-named `SearchResultKind` enum directly (see
@@ -148,6 +162,10 @@ void goToSearchResult(BuildContext context, WidgetRef ref, UnifiedSearchResult r
       goToDiagramElement(context, ref, nodeId: result.id);
     case UnifiedSearchResultCategory.diagramRelationship:
       goToDiagramElement(context, ref, relationshipId: result.id);
+    case UnifiedSearchResultCategory.acquisitionSource:
+    case UnifiedSearchResultCategory.acquisitionJob:
+    case UnifiedSearchResultCategory.acquisitionVaultEntry:
+      goToAcquisitionResult(context, ref, result);
     case UnifiedSearchResultCategory.symbol:
     case UnifiedSearchResultCategory.annotation:
     case UnifiedSearchResultCategory.layer:

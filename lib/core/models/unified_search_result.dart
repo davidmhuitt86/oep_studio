@@ -4,11 +4,15 @@ import 'package:engineering_engine/engineering_engine.dart' as engine;
 import 'search_result.dart' as foundation;
 
 /// Which system a [UnifiedSearchResult] actually came from — needed
-/// because Foundation's `SearchProvider` and the Engineering Engine's
-/// `SearchProvider` (WORK_PACKAGE_025, ENGINE-TASK-000121) are two
-/// entirely separate, unmodified systems being *merged for display*
-/// here, not unified into one search implementation.
-enum UnifiedSearchOrigin { foundation, engine }
+/// because Foundation's `SearchProvider`, the Engineering Engine's
+/// `SearchProvider` (WORK_PACKAGE_025, ENGINE-TASK-000121), and EAM's
+/// own REST-backed lists (WP-PLAT-020) are three entirely separate,
+/// unmodified systems being *merged for display* here, not unified into
+/// one search implementation. EAM has no full-text search endpoint of
+/// its own (see `docs/API_REFERENCE.md`) — its contribution is a
+/// best-effort, client-side filter over already-cached Sources/Jobs/
+/// Vault entries, documented as such in `UnifiedSearchService`.
+enum UnifiedSearchOrigin { foundation, engine, acquisition }
 
 /// What kind of thing a [UnifiedSearchResult] points at, in a form
 /// `unified_navigation.dart` can switch on without importing either
@@ -23,6 +27,9 @@ enum UnifiedSearchResultCategory {
   symbol,
   annotation,
   layer,
+  acquisitionSource,
+  acquisitionJob,
+  acquisitionVaultEntry,
 }
 
 /// A single row in the unified Search page (WORK_PACKAGE_025,
@@ -108,6 +115,29 @@ class UnifiedSearchResult {
     );
   }
 
+  /// Builds a result for one of EAM's Sources/Jobs/Vault entries
+  /// (WP-PLAT-020). Unlike [fromFoundation]/[fromEngine], there is no
+  /// wrapped EAM-native result type to carry — EAM has no search
+  /// concept of its own for this to wrap; [id]/[label] are read
+  /// straight from the already-fetched `AcquisitionServiceState` list
+  /// entry that matched.
+  factory UnifiedSearchResult.fromAcquisition({
+    required UnifiedSearchResultCategory category,
+    required String id,
+    required String label,
+    required String objectTypeLabel,
+  }) {
+    return UnifiedSearchResult._(
+      origin: UnifiedSearchOrigin.acquisition,
+      category: category,
+      id: id,
+      label: label,
+      objectTypeLabel: objectTypeLabel,
+      owningWorkspaceLabel: 'Engineering Acquisition',
+      repositoryLocation: 'Engineering Acquisition',
+    );
+  }
+
   IconData get icon => switch (category) {
         UnifiedSearchResultCategory.knowledgeObject => Icons.category_outlined,
         UnifiedSearchResultCategory.knowledgeRelationship => Icons.hub_outlined,
@@ -116,6 +146,9 @@ class UnifiedSearchResult {
         UnifiedSearchResultCategory.symbol => Icons.category_outlined,
         UnifiedSearchResultCategory.annotation => Icons.sticky_note_2_outlined,
         UnifiedSearchResultCategory.layer => Icons.layers_outlined,
+        UnifiedSearchResultCategory.acquisitionSource => Icons.verified_outlined,
+        UnifiedSearchResultCategory.acquisitionJob => Icons.assignment_outlined,
+        UnifiedSearchResultCategory.acquisitionVaultEntry => Icons.inventory_2_outlined,
       };
 
   static String _engineKindLabel(engine.SearchResultKind kind) {

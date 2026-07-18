@@ -1,11 +1,10 @@
-import '../../diagram_studio/settings/diagram_studio_settings_page.dart';
+import '../../core/routing/studio_registry.dart';
 import '../models/settings_entry.dart';
 import '../pages/about_settings_page.dart';
 import '../pages/ai_settings_page.dart';
 import '../pages/appearance_settings_page.dart';
 import '../pages/diagnostics_settings_page.dart';
 import '../pages/general_settings_page.dart';
-import '../pages/knowledge_studio_settings_page.dart';
 import '../pages/plugins_settings_page.dart';
 import '../pages/repository_settings_page.dart';
 import '../pages/security_settings_page.dart';
@@ -22,6 +21,11 @@ import 'settings_provider.dart';
 /// Plugins register by constructing a new [SettingsRegistry] (or a
 /// future "extend" helper) with their own [SettingsProvider] appended —
 /// the Settings Workspace itself never changes.
+///
+/// The three Studio-owned pages (Knowledge/Diagram/Acquisition) are no
+/// longer constructed here directly (WP-STUDIO-021) — they're read from
+/// [StudioRegistry.defaultRegistry], which is now the one place each
+/// Studio's [SettingsProvider] is registered.
 class SettingsRegistry {
   SettingsRegistry(List<SettingsProvider> providers) : _providers = List.unmodifiable(providers);
 
@@ -52,8 +56,7 @@ class SettingsRegistry {
     const AppearanceSettingsProvider(),
     const WorkspaceSettingsProvider(),
     const RepositorySettingsProvider(),
-    const KnowledgeStudioSettingsProvider(),
-    const DiagramStudioSettingsProvider(),
+    ...StudioRegistry.defaultRegistry.settingsProviders,
     const AiSettingsProvider(),
     const PluginsSettingsProvider(),
     const UpdatesSettingsProvider(),
