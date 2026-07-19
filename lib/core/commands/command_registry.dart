@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../acquisition/services/acquisition_runtime_service.dart';
+import '../../diagram_studio/commands/studio_command_actions.dart';
 import '../routing/studio_destination.dart';
 import '../routing/studio_registry.dart';
 import '../services/engineering_project_service.dart';
+import '../services/foundation_runtime_service.dart';
 
 /// The argument payload passed to a [CommandDescriptor]'s executor
 /// (WP-STUDIO-023 Platform Command Framework).
@@ -259,14 +261,27 @@ class CommandRegistry {
       label: 'Undo',
       description: 'Undoes the most recent editing command on the active diagram.',
       capabilityId: 'diagram.editing',
-      execute: (ref, args) => ref.read(engineeringProjectServiceProvider).engine?.editing.undo(),
+      // Routed through StudioCommandActions (WP-STUDIO-026) rather than
+      // calling `engine.editing.undo()` directly — that's exactly what
+      // Diagram Studio's own toolbar/keyboard-shortcut path already
+      // does, and duplicating the one-liner here was an unnecessary
+      // second definition of "how to undo."
+      execute: (ref, args) {
+        final engine = ref.read(engineeringProjectServiceProvider).engine;
+        if (engine == null) return;
+        StudioCommandActions(engine).undo();
+      },
     ),
     CommandDescriptor(
       id: 'diagram.redo',
       label: 'Redo',
       description: 'Re-applies the most recently undone editing command on the active diagram.',
       capabilityId: 'diagram.editing',
-      execute: (ref, args) => ref.read(engineeringProjectServiceProvider).engine?.editing.redo(),
+      execute: (ref, args) {
+        final engine = ref.read(engineeringProjectServiceProvider).engine;
+        if (engine == null) return;
+        StudioCommandActions(engine).redo();
+      },
     ),
     CommandDescriptor(
       id: 'diagram.revalidate',
@@ -319,19 +334,68 @@ class CommandRegistry {
       execute: (ref, args) => ref.read(acquisitionRuntimeServiceProvider.notifier).publish(args.value!),
     ),
 
-    // --- Knowledge Studio --------------------------------------------
-    // No commands are registered from Knowledge Studio in this Work
-    // Package. Unlike Diagram Studio (`EngineeringProjectNotifier`) and
-    // Acquisition Studio (`AcquisitionRuntimeNotifier`), Knowledge
-    // Studio has no Riverpod Notifier/Connection-Manager owning its
-    // session/candidate-review state — `KnowledgeStudioPage` is a
-    // `StatelessWidget`, and the underlying services
-    // (`KnowledgeSessionService`, `CommitPlanService`, etc.) are called
-    // directly from per-dialog `ConsumerWidget`s, not from one
-    // Platform-reachable owner. Registering a command here would mean
-    // inventing a new ambient provider for Knowledge Studio, which is a
-    // Knowledge Studio change — explicitly out of scope ("Do NOT
-    // redesign any Studio", "Do NOT invent commands"). See this Work
-    // Package's Recommendations for WP-STUDIO-024.
+    // --- Knowledge Studio (WP-STUDIO-025) -----------------------------
+    // WP-STUDIO-023 concluded Knowledge Studio had no Platform-reachable
+    // owner of its session/candidate-review state and registered zero
+    // commands from it. WP-STUDIO-025's architecture review found that
+    // conclusion was incomplete: Knowledge Studio's state and business
+    // logic *are* centralized — in `FoundationRuntimeNotifier`
+    // (`core/services/foundation_runtime_service.dart`), the same
+    // Connection Manager Foundation's own repository/search
+    // capabilities already use. Every Knowledge Studio dialog/panel was
+    // checked and each one already reads/calls this notifier exclusively
+    // (no direct service instantiation exists anywhere under
+    // `lib/knowledge/`) — so no UI refactor was needed to reach parity;
+    // only these commands were actually missing.
+    CommandDescriptor(
+      id: 'knowledge.acceptCandidate',
+      label: 'Accept Knowledge Candidate',
+      description: 'Accepts a Knowledge Candidate during Engineering Review.',
+      capabilityId: 'knowledge.review',
+      requiresArgument: true,
+      execute: (ref, args) => ref.read(foundationRuntimeServiceProvider.notifier).acceptKnowledgeCandidate(args.value!),
+    ),
+    CommandDescriptor(
+      id: 'knowledge.rejectCandidate',
+      label: 'Reject Knowledge Candidate',
+      description: 'Rejects a Knowledge Candidate during Engineering Review.',
+      capabilityId: 'knowledge.review',
+      requiresArgument: true,
+      execute: (ref, args) => ref.read(foundationRuntimeServiceProvider.notifier).rejectKnowledgeCandidate(args.value!),
+    ),
+    CommandDescriptor(
+      id: 'knowledge.deleteCandidate',
+      label: 'Delete Knowledge Candidate',
+      description: 'Deletes a Knowledge Candidate, cascading to its relationships and evidence links.',
+      capabilityId: 'knowledge.review',
+      requiresArgument: true,
+      execute: (ref, args) => ref.read(foundationRuntimeServiceProvider.notifier).deleteKnowledgeCandidate(args.value!),
+    ),
+    CommandDescriptor(
+      id: 'knowledge.acceptAiSuggestion',
+      label: 'Accept AI Suggestion',
+      description: 'Accepts an AI-suggested entity, creating a Knowledge Candidate from it.',
+      capabilityId: 'knowledge.aiAssistance',
+      requiresArgument: true,
+      execute: (ref, args) => ref.read(foundationRuntimeServiceProvider.notifier).acceptAiSuggestion(args.value!),
+    ),
+    CommandDescriptor(
+      id: 'knowledge.rejectAiSuggestion',
+      label: 'Reject AI Suggestion',
+      description: 'Rejects an AI-suggested entity, keeping it available for auditing.',
+      capabilityId: 'knowledge.aiAssistance',
+      requiresArgument: true,
+      execute: (ref, args) => ref.read(foundationRuntimeServiceProvider.notifier).rejectAiSuggestion(args.value!),
+    ),
+
+    // Not registered: `duplicateKnowledgeSession`/`deleteKnowledgeSession`
+    // (both real, both clean `Future<void> Function(String)` methods on
+    // the same notifier) have no capability to attach to — session
+    // lifecycle isn't covered by any of WP-STUDIO-022's four Knowledge
+    // capabilities (sourceIngestion/aiAssistance/evidence/review), all
+    // of which describe what happens *within* a session, not managing
+    // the session itself. Registering them would require either
+    // stretching an existing capability's meaning or adding a new one —
+    // both out of scope here; see this Work Package's Recommendations.
   ]);
 }

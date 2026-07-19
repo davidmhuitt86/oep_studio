@@ -52,8 +52,16 @@ void main() {
       expect(CommandRegistry.defaultRegistry.commandsForStudio(StudioDestination.dashboard), isEmpty);
     });
 
-    test('Knowledge Studio has zero registered commands by design (no ambient Notifier to wrap)', () {
-      expect(CommandRegistry.defaultRegistry.commandsForStudio(StudioDestination.knowledge), isEmpty);
+    test('Knowledge Studio has 5 registered commands (WP-STUDIO-025), '
+        'wrapping FoundationRuntimeNotifier methods', () {
+      final knowledgeCommands = CommandRegistry.defaultRegistry.commandsForStudio(StudioDestination.knowledge);
+      expect(knowledgeCommands.map((c) => c.id).toSet(), {
+        'knowledge.acceptCandidate',
+        'knowledge.rejectCandidate',
+        'knowledge.deleteCandidate',
+        'knowledge.acceptAiSuggestion',
+        'knowledge.rejectAiSuggestion',
+      });
     });
 
     test('every registered command id is unique', () {
